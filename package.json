@@ -1,0 +1,17 @@
+{
+  "name": "claude-workflow",
+  "version": "1.0.0",
+  "description": "6-phase Claude-native development workflow — Research, Ideation, Plan, Execute, Review, Finalize. Multi-model orchestration via ECC agents. Fully resumable across sessions.",
+  "keywords": [
+    "claude-code",
+    "workflow",
+    "agents",
+    "tdd",
+    "ecc",
+    "everything-claude-code"
+  ],
+  "peerDependencies": {
+    "everything-claude-code": ">=2.0.0"
+  },
+  "license": "MIT"
+}
