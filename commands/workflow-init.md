@@ -34,6 +34,8 @@ git status --short --branch
 git remote -v
 test -d claude-workflow && find claude-workflow -maxdepth 3 -type f | sort
 find docs -maxdepth 3 -type f 2>/dev/null | sort
+test -f package.json && node -e "const p=require('./package.json'); console.log('package scripts:', Object.keys(p.scripts||{}).join(', ')||'none')"
+find . -maxdepth 2 \( -name 'Makefile' -o -name 'pyproject.toml' -o -name 'Cargo.toml' -o -name 'go.mod' -o -name 'requirements.txt' \) -print
 ```
 
 If this is not a Git repository, ask before running `git init`. If it is a Git repository without a remote, record that GitHub issue sync is pending until a GitHub remote exists.
@@ -48,61 +50,78 @@ If there is no GitHub remote, or if `gh` is unavailable or unauthenticated, skip
 
 ---
 
-## Step 2 — Update `CLAUDE.md`
+## Step 2 — Synthesize `CLAUDE.md`
 
-Create `CLAUDE.md` if missing. If it exists, preserve all existing content.
+Create `CLAUDE.md` if missing. If it exists, preserve user-authored content and add only missing durable guidance. Do not paste full source files, roadmaps, changelogs, API docs, or long skill text into `CLAUDE.md`.
 
-Append the following sections only when equivalent related content is missing. Treat headings with the same meaning as equivalent; do not duplicate.
+Target size: under 120 lines. Hard limit: if the result would exceed 150 lines, stop and summarize what should move to docs, `.claude/rules/`, skills, or `CLAUDE.local.md`.
 
-Keep this file concise. It is loaded into agent context often, so it should contain durable operating rules and pointers, not long source material.
+Use this policy:
+
+| Section | Required | Purpose |
+|---------|----------|---------|
+| Project Snapshot | yes | What this project is, stack, and main architecture in 2-5 bullets |
+| Commands | yes | Install, test, lint/typecheck/build, dev server commands; use `unknown` when not detected |
+| Non-Negotiable Rules | yes | Stable constraints agents must follow every session |
+| Claude Workflow | yes | Orchestrator, roadmap, compliance, and archive rules in concise form |
+| Project Conventions | optional | Only real detected or user-provided conventions |
+| Known Gotchas | optional | Only repeated hazards that would waste time |
+| Documentation Map | yes | Pointers to docs, not embedded docs |
+| Maintenance | yes | Rules for keeping `CLAUDE.md` short |
+
+Optional content belongs elsewhere unless it must be read in every session:
+- Put path-specific rules in `.claude/rules/*.md`.
+- Put private machine/user notes in `CLAUDE.local.md`.
+- Put long procedures in skills or command files.
+- Put API details, decisions, architecture, and changelog entries in `docs/` and `CHANGELOG.md`.
+- Use plain path references for optional docs. Do not use `@path` imports unless the content must always enter context.
+
+### Compact Template
+
+Append equivalent missing sections only. Treat headings with the same meaning as equivalent; do not duplicate. Replace bracketed placeholders with detected values; do not leave placeholder text in `CLAUDE.md`. Omit optional sections when there is no real content.
 
 ```markdown
-## Karpathy-Style Working Principles
+# Claude Project Instructions
+
+## Project Snapshot
+
+- Purpose: [one sentence from README, package metadata, or user context]
+- Stack: [detected languages/frameworks/tools]
+- Architecture: [2-3 bullets max, or "unknown"]
+
+## Commands
+
+- Install: `[command or unknown]`
+- Test: `[command or unknown]`
+- Lint/typecheck/build: `[commands or unknown]`
+- Dev server: `[command or unknown]`
+
+## Non-Negotiable Rules
 
 - Think before coding: state assumptions, surface ambiguity, and ask when unclear.
 - Keep it simple: solve the requested problem without speculative abstractions.
 - Make surgical changes: touch only what the task requires.
-- Work toward verifiable goals: define success criteria and verify before claiming done.
+- Preserve user changes; never revert unrelated work without explicit request.
+- Verify with the relevant command before claiming completion.
 
-## Claude Workflow Orchestration
+## Claude Workflow
 
 - The main session is the orchestrator for `/claude-workflow`.
 - Keep phase work scoped, resumable, and recorded under `claude-workflow/`.
-- Delegate phase-specific work to ECC agents when useful, while the main session owns integration and final decisions.
+- Delegate phase-specific work to ECC agents only when required or useful; the main session owns integration and final decisions.
 - Use the ECC agent names exactly as Claude Code lists them; prefer short names like `planner` when available, otherwise use the `everything-claude-code:` prefix.
+- GitHub issues are the roadmap source of truth when available; `claude-workflow/ROADMAP.md` is the local active-work mirror.
+- Roadmap/research sessions create or refine issues; `/claude-workflow` sessions implement one selected item and refresh the mirror.
+- After resume or compaction, read the current phase file and compliance ledger before continuing.
+- End each cycle by updating issues, refreshing the roadmap, archiving completed workflow folders, and clearing pending compliance rows.
 
-## Roadmap And Issues
+## Project Conventions
 
-GitHub issues are the roadmap source of truth when a GitHub remote is configured. `claude-workflow/ROADMAP.md` is only the local working mirror.
+[detected or user-provided conventions only; omit this section if none]
 
-Roadmap maintenance roles:
-- Roadmap/research sessions discover future work and create or refine GitHub issues.
-- `/claude-workflow` sessions implement selected issues and keep the local mirror current.
-- Agents must not treat stale local roadmap rows as authoritative if GitHub issue state differs.
+## Known Gotchas
 
-At the start of each `/claude-workflow` cycle:
-- Fetch open GitHub issues with `gh issue list` when available.
-- Mirror active unfinished issues into `claude-workflow/ROADMAP.md`.
-- Select one issue or roadmap item to advance.
-- If work starts from a free-form request, create or link a GitHub issue before implementation when possible.
-- Read the current phase compliance table after resume or compaction and state remaining required gates before continuing.
-
-At the end of each `/claude-workflow` cycle:
-- Update or create GitHub issues for any discovered follow-up work.
-- Comment progress on partially completed issues and leave them open.
-- Close linked issues only after acceptance criteria pass.
-- Refresh `claude-workflow/ROADMAP.md` from current open issue state.
-- Move completed workflow folders to `claude-workflow/archive/`.
-- Leave only active unfinished work in `claude-workflow/ROADMAP.md`.
-- Verify every required agent gate is marked `invoked`, `skipped`, or `N/A` with evidence or a skip reason.
-
-## Context Budget Rules
-
-- Keep `CLAUDE.md` short: principles, links, and operating rules only.
-- Do not paste full external skill files into `CLAUDE.md`; summarize them into durable bullets.
-- Keep `claude-workflow/ROADMAP.md` focused on active unfinished work, not history.
-- Keep phase files concise and archive completed project folders promptly.
-- When invoking agents, pass only the relevant phase file excerpts and task details they need.
+[real repeated hazards only; omit this section if none]
 
 ## Documentation Map
 
@@ -113,9 +132,18 @@ At the end of each `/claude-workflow` cycle:
 - `docs/api.md` — APIs, schemas, events, and external contracts.
 - `docs/conventions.md` — coding, testing, Git, and review rules.
 - `docs/decisions/` — architecture decision records.
+- `claude-workflow/ROADMAP.md` — active implementation roadmap.
+
+## Maintenance
+
+- Keep this file under 120 lines; move detail to docs or skills.
+- Add rules only after repeated mistakes, review feedback, or stable project conventions.
+- Do not use `@path` imports for optional reference material.
 ```
 
-Keep the Karpathy section concise. If the local Karpathy skill file is available, use it only to confirm these four principles; do not paste the long source into `CLAUDE.md`.
+Keep the Karpathy-style principles concise. If the local Karpathy skill file is available, use it only to confirm the short working-principle bullets; do not paste the long source into `CLAUDE.md`.
+
+If an existing `CLAUDE.md` is bloated or duplicates the sections above, do not silently replace it. Add a short `## Maintenance Note` with the proposed consolidation and ask before destructive rewriting.
 
 ---
 
@@ -213,13 +241,15 @@ Document coding style, testing rules, Git practices, naming, and review expectat
 After edits:
 
 1. Run `git status --short --branch`.
-2. Summarize:
+2. Run `wc -l CLAUDE.md` and report whether it is under the 120-line target.
+3. Summarize:
    - whether Git is initialized
    - whether a GitHub remote exists
    - whether `CLAUDE.md` was created or updated
+   - which required `CLAUDE.md` sections are present
    - which docs/roadmap files were created
    - whether GitHub issues were available for sync
-3. Do not commit unless the user explicitly asks.
+4. Do not commit unless the user explicitly asks.
 
 End with the next useful command:
 
