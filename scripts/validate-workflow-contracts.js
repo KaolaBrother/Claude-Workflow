@@ -59,6 +59,7 @@ assertIncludes('commands/claude-workflow-phase6.md', 'Do not repair inline');
 
 assert(exists('hooks/hooks.json'), 'hooks/hooks.json is missing');
 assert(exists('scripts/claude-workflow-compact-context.js'), 'compact context hook script is missing');
+assert(exists('scripts/simulate-workflow-walkthrough.js'), 'workflow walkthrough simulation script is missing');
 assertIncludes('hooks/hooks.json', 'SessionStart');
 assertIncludes('hooks/hooks.json', 'compact');
 assertIncludes('hooks/hooks.json', 'claude-workflow-compact-context.js');

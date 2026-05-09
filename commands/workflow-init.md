@@ -106,7 +106,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 
 ## Claude Workflow
 
-- The main session is the orchestrator for `/claude-workflow`; phase work lives in `/claude-workflow-phase1` through `/claude-workflow-phase6`.
+- Use `/claude-workflow` as the workflow entrypoint and router.
 - Keep phase work scoped, resumable, and recorded under `claude-workflow/`.
 - Maintain `workflow-state.md` for active work; it records current phase, step, pending gates, and next command.
 - Delegate phase-specific work to ECC agents by default; the main session owns orchestration, review, validation, integration, and final decisions.
