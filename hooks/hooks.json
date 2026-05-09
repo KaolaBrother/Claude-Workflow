@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT/scripts/claude-workflow-compact-context.js\"",
+            "timeout": 5
+          }
+        ],
+        "description": "Inject Claude Workflow resume state after context compaction",
+        "id": "claude-workflow:compact-context"
+      }
+    ]
+  }
+}

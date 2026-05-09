@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+removed=0
+
+shopt -s nullglob
 COMMANDS=(
-  "$HOME/.claude/commands/claude-workflow.md"
+  "$HOME/.claude/commands/claude-workflow"*.md
   "$HOME/.claude/commands/workflow-init.md"
 )
-
-removed=0
 
 for dest in "${COMMANDS[@]}"; do
   if [[ -f "$dest" ]]; then

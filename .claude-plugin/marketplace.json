@@ -1,0 +1,15 @@
+{
+  "name": "kaolabrother-claude-workflow",
+  "description": "Marketplace for the Claude Workflow plugin.",
+  "owner": {
+    "name": "KaolaBrother",
+    "url": "https://github.com/KaolaBrother"
+  },
+  "plugins": [
+    {
+      "name": "claude-workflow",
+      "source": "./",
+      "description": "A 6-phase Claude Code workflow with resumable phase artifacts, compaction-aware state, and ECC agent orchestration."
+    }
+  ]
+}

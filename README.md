@@ -48,7 +48,8 @@ From Claude Code:
 
 ```text
 /plugin marketplace add https://github.com/KaolaBrother/Claude-Workflow
-/plugin install claude-workflow
+/plugin install claude-workflow@kaolabrother-claude-workflow
+/reload-plugins
 ```
 
 Then run:
@@ -94,7 +95,16 @@ In any Claude Code session, run:
 /claude-workflow
 ```
 
-The command first checks local/remote Git state, safely fast-forwards clean behind-only branches, and asks before any risky synchronization such as diverged history, dirty worktrees with upstream changes, rebases, merges, stashes, resets, or conflicts. It then scans the project root for existing `claude-workflow/` projects and offers to resume or start a new one.
+The command is a thin router. It first checks local/remote Git state, safely fast-forwards clean behind-only branches, and asks before risky synchronization such as diverged history, dirty worktrees with upstream changes, rebases, merges, stashes, resets, or conflicts. It then scans `claude-workflow/`, reads `workflow-state.md` when present, and routes to the right phase command:
+
+```text
+/claude-workflow-phase1
+/claude-workflow-phase2
+/claude-workflow-phase3
+/claude-workflow-phase4
+/claude-workflow-phase5
+/claude-workflow-phase6
+```
 
 ## GitHub Roadmap Cycle
 
@@ -104,7 +114,7 @@ The local roadmap is a working mirror, not the source of truth. Keep only active
 
 The workflow also enforces context discipline: `CLAUDE.md` targets under 150 lines, the local roadmap should not become history storage, and agent prompts should include only the relevant phase excerpts needed for the delegated task.
 
-Each phase records a required-agent compliance ledger. After resume or compaction, the main session must read that ledger and finish or explicitly skip any pending gates before crossing a phase boundary.
+Each phase records a required-agent compliance ledger. Each active workflow also maintains `workflow-state.md`, which records the current phase, intra-phase step, next command, pending gates, and ownership rules. After resume or compaction, the main session must read that state file and the relevant compliance ledger before continuing.
 
 ## Phases
 
@@ -121,7 +131,9 @@ All phase files are written to `{project-root}/claude-workflow/{project-name}/` 
 
 ## Resuming
 
-Any interrupted session resumes from the last completed phase file. Phase 4 tracks `pending / in_progress / complete` per task in `phase4-progress.md`, so even a mid-task crash is recoverable.
+Any interrupted session resumes from `workflow-state.md` first, then reconstructs from phase files if state is missing or stale. Phase 4 tracks `pending / in_progress / complete` per task in `phase4-progress.md`, and all phases record intra-phase checkpoints in `workflow-state.md`.
+
+When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact resume reminder after context compaction. Manual command install copies slash commands only; use plugin install when you want the compaction resume hook.
 
 ## Updating
 

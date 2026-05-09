@@ -106,8 +106,9 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 
 ## Claude Workflow
 
-- The main session is the orchestrator for `/claude-workflow`.
+- The main session is the orchestrator for `/claude-workflow`; phase work lives in `/claude-workflow-phase1` through `/claude-workflow-phase6`.
 - Keep phase work scoped, resumable, and recorded under `claude-workflow/`.
+- Maintain `workflow-state.md` for active work; it records current phase, step, pending gates, and next command.
 - Delegate phase-specific work to ECC agents by default; the main session owns orchestration, review, validation, integration, and final decisions.
 - Phase boundaries: Phase 1 discovers facts, Phase 2 chooses strategy, Phase 3 creates the executable blueprint.
 - In Phase 1, spawn `code-explorer` for codebase research and `docs-lookup` when external/library/API documentation is needed.
@@ -117,7 +118,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - At `/claude-workflow` startup, fetch remote-tracking refs, classify local/upstream sync state, and ask before any risky synchronization.
 - GitHub issues are the roadmap source of truth when available; `claude-workflow/ROADMAP.md` is the local active-work mirror.
 - Roadmap/research sessions create or refine issues; `/claude-workflow` sessions implement one selected item and refresh the mirror.
-- After resume or compaction, read the current phase file and compliance ledger before continuing.
+- After resume or compaction, read `workflow-state.md`, the current phase file, and the compliance ledger before continuing.
 - End each cycle by updating issues, refreshing the roadmap, archiving completed workflow folders, and clearing pending compliance rows.
 
 ## Project Conventions
