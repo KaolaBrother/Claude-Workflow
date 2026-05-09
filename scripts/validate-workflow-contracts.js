@@ -75,6 +75,7 @@ assert(workflowPlugin, 'marketplace.json must list claude-workflow');
 assert(workflowPlugin.source === './', 'claude-workflow marketplace source must point at the repo root plugin');
 
 const packageJson = JSON.parse(read('package.json'));
+assert(packageJson.version === pluginJson.version, 'package.json and plugin.json versions must match');
 assert(Array.isArray(packageJson.files) && packageJson.files.includes('hooks/'), 'package.json files must include hooks/');
 assert(Array.isArray(packageJson.files) && packageJson.files.includes('scripts/'), 'package.json files must include scripts/');
 
