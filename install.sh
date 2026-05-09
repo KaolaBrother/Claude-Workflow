@@ -3,8 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 COMMANDS_DIR="$HOME/.claude/commands"
-COMMAND_FILE="$SCRIPT_DIR/commands/claude-workflow.md"
-DEST="$COMMANDS_DIR/claude-workflow.md"
+SOURCE_COMMANDS_DIR="$SCRIPT_DIR/commands"
 YES=0
 
 for arg in "$@"; do
@@ -80,18 +79,34 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   echo ""
 fi
 
-# Install the command
-if [[ ! -f "$COMMAND_FILE" ]]; then
-  echo "Command file not found: $COMMAND_FILE" >&2
+# Install commands
+if [[ ! -d "$SOURCE_COMMANDS_DIR" ]]; then
+  echo "Commands directory not found: $SOURCE_COMMANDS_DIR" >&2
   exit 1
 fi
 
 mkdir -p "$COMMANDS_DIR"
-cp "$COMMAND_FILE" "$DEST"
 
-echo "Installed: $DEST"
+installed=0
+for command_file in "$SOURCE_COMMANDS_DIR"/*.md; do
+  if [[ ! -f "$command_file" ]]; then
+    continue
+  fi
+
+  dest="$COMMANDS_DIR/$(basename "$command_file")"
+  cp "$command_file" "$dest"
+  echo "Installed: $dest"
+  installed=$((installed + 1))
+done
+
+if [[ "$installed" -eq 0 ]]; then
+  echo "No command files found in: $SOURCE_COMMANDS_DIR" >&2
+  exit 1
+fi
+
 echo ""
-echo "Open any Claude Code session and run:  /claude-workflow"
+echo "Open any Claude Code session and run:  /workflow-init"
+echo "Then run implementation cycles with:  /claude-workflow"
 echo ""
 echo "For advisor gates, ensure your ~/.claude/settings.json includes:"
 echo '  "advisorModel": "opus"'

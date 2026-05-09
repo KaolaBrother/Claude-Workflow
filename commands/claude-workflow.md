@@ -26,7 +26,28 @@ When invoking ECC agents, use the unqualified name if available (for example, `p
 
 ## Startup — Detect Mode
 
-### Step 1 — Scan for existing projects
+### Step 1 — Sync Roadmap From GitHub Issues
+
+GitHub issues are the source-of-truth roadmap when a GitHub remote is configured. A separate roadmap/research session may create and refine those issues. This workflow consumes that roadmap and advances one implementation item per cycle.
+
+Before selecting work:
+
+1. Detect whether the current directory is a Git repository.
+2. Detect the GitHub remote (`origin` preferred).
+3. If `gh` is available and authenticated, fetch open issues:
+   ```bash
+   gh issue list --limit 100 --json number,title,state,labels,assignees,updatedAt,url
+   ```
+4. Ensure `claude-workflow/ROADMAP.md` exists. If it does not, create it with active work rows from open GitHub issues or a note that GitHub sync is unavailable.
+5. Update `claude-workflow/ROADMAP.md` as a local mirror of active unfinished work:
+   - include open GitHub issues relevant to implementation
+   - keep only active unfinished work
+   - preserve manual local notes under a clearly marked `Local Notes` section
+6. If GitHub issues cannot be fetched, continue from the existing local roadmap and tell the user why GitHub sync was skipped.
+
+When starting new work, prefer selecting from open GitHub issues. If the user provides a free-form task, ask whether to create/link a GitHub issue before Phase 1 when a GitHub remote is available.
+
+### Step 2 — Scan for existing workflow projects
 
 Check if `claude-workflow/` exists in the project root. If it does, list all subdirectories that contain at least one phase file (`phase*.md`). Skip subdirectories with no phase files — these are incomplete Phase 1 attempts; treat them as if they don't exist.
 
@@ -39,7 +60,7 @@ Existing workflow projects:
 Resume an existing project? Enter number, or press Enter to start a new one.
 ```
 
-### Step 2a — Resuming an existing project
+### Step 3a — Resuming an existing project
 
 If user selects an existing project, set `{project-name}` to that directory name. Detect resume point:
 
@@ -56,12 +77,13 @@ phase1-research.md exists → resume at Phase 2
 
 Read all existing phase files as context before proceeding. Tell the user: "Resuming {project-name} at Phase N."
 
-### Step 2b — Starting a new project
+### Step 3b — Starting a new project
 
-Ask the user what they want to build:
+Show active roadmap items from `claude-workflow/ROADMAP.md` and fetched GitHub issues, then ask what to implement:
 
 ```
-What do you want to build?
+What do you want to implement?
+Enter a GitHub issue number, choose a roadmap item, or describe a new task.
 ```
 
 Wait for the user's description. Proceed to Phase 1 with that description as the requirement.
@@ -494,22 +516,7 @@ Read the project root `CLAUDE.md`. Look for a `Documentation Update Checklist` s
 
 Then invoke the **`doc-updater` (Haiku)** ECC subagent to execute it. Confirm every item is completed or marked N/A.
 
-### 6.4 Commit
-
-If `/prp-commit` is available, invoke it to commit all changes with a structured conventional commit message. Otherwise, inspect `git status` and `git diff`, stage only workflow-related changes, and create a conventional commit with `git commit`.
-
-### 6.5 Close GitHub Issue (conditional)
-
-Read `phase1-research.md`. If `GitHub Issue` is set (not "none") and all acceptance criteria in 6.2 are met:
-
-```bash
-gh issue close {number} --repo {owner/repo} \
-  --comment "Resolved in {commit-hash}. All acceptance criteria met."
-```
-
-If any acceptance criterion is not met, do **not** close the issue. Instead, add a note in phase6-summary.md listing which criteria are unmet and why the issue remains open.
-
-### 6.6 Write Phase File
+### 6.4 Write Phase File
 
 Create `claude-workflow/{project-name}/phase6-summary.md`:
 
@@ -529,14 +536,76 @@ Create `claude-workflow/{project-name}/phase6-summary.md`:
 [from phase5-review.md MEDIUM/LOW list]
 
 ## Commit
-[hash and message]
+[hash and message once committed, or "pending commit"]
 
 ## GitHub Issue
 [closed: owner/repo#number — or "none" — or "open: reason criteria not met"]
 
+## Roadmap
+[updated: yes/no; active follow-ups]
+
+## Archive
+[archived to claude-workflow/archive/{project-name} — or "pending archive"]
+
 ## Status
 COMPLETE
 ```
+
+### 6.5 Roadmap And Archive Maintenance
+
+Read `claude-workflow/ROADMAP.md` if it exists. If it does not exist, recommend running `/workflow-init` and create a minimal roadmap before continuing.
+
+Refresh from GitHub issues when available:
+
+```bash
+gh issue list --limit 100 --json number,title,state,labels,assignees,updatedAt,url
+```
+
+Prepare local roadmap state:
+- Mirror currently open implementation issues.
+- Mark the current linked issue as ready to close only if all acceptance criteria pass.
+- Keep only unfinished work in `claude-workflow/ROADMAP.md`.
+- Add active rows for follow-up issues that remain open.
+- Preserve manual local notes only in a `Local Notes` section.
+- If new follow-up work was discovered, create or update GitHub issues for that work before leaving it in the roadmap.
+
+Archive completed workflow records:
+- After `phase6-summary.md` is written, move completed project folders from `claude-workflow/{project-name}/` to `claude-workflow/archive/{project-name}/`.
+- If the archive destination exists, append a timestamp suffix.
+- Do not archive incomplete workflow folders.
+- Leave `claude-workflow/ROADMAP.md` and `claude-workflow/archive/` in place.
+
+Update `phase6-summary.md` with the final roadmap and archive paths after these steps.
+
+### 6.6 Commit
+
+If `/prp-commit` is available, invoke it to commit all changes with a structured conventional commit message. Otherwise, inspect `git status` and `git diff`, stage only workflow-related changes, and create a conventional commit with `git commit`.
+
+Record the resulting commit hash.
+
+### 6.7 GitHub Issue Update
+
+Read `phase1-research.md`. If `GitHub Issue` is set (not "none"):
+
+- If all acceptance criteria in 6.2 pass, comment with the commit hash and close the issue:
+  ```bash
+  gh issue close {number} --repo {owner/repo} \
+    --comment "Resolved in {commit-hash}. All acceptance criteria met."
+  ```
+- If implementation is partial or follow-ups remain, comment with progress and keep the issue open.
+- If new follow-up work was discovered, ensure it exists as GitHub issues and is mirrored in `claude-workflow/ROADMAP.md`.
+
+Refresh `claude-workflow/ROADMAP.md` from current open issue state after issue updates.
+
+### 6.8 Final Metadata
+
+Update `phase6-summary.md` with:
+- final commit hash
+- final GitHub issue state
+- final roadmap state
+- final archive path
+
+If this changes tracked files after the commit, amend the commit or create a small follow-up docs/workflow commit according to project convention.
 
 ---
 
@@ -565,6 +634,8 @@ COMPLETE
         ├── phase4-progress.md        updated after each task (tracks Files Modified)
         ├── phase5-review.md          written end of Phase 5
         └── phase6-summary.md         written end of Phase 6
+    ├── ROADMAP.md                    active unfinished work only
+    └── archive/                      completed workflow project folders
 ```
 
 Any phase that finds its prerequisite file missing will stop and report which phase needs to be completed first.
@@ -582,5 +653,8 @@ To resume: run `/claude-workflow` with no argument — the startup scan will lis
 4. **Main session owns Phase 4 implementation** — `tdd-guide` may write tests; extra helper agents require explicit justification
 5. **Two advisor gates** — Phase 2 and Phase 3 only; conditional at Phase 5
 6. **Security reviewer is conditional** — only when security-sensitive files are touched
-7. **Never accumulate broken state** — fix validation failures immediately before next task
-8. **Scope discipline** — surface plan deviations to user; never silently expand scope
+7. **GitHub issues drive roadmap** — fetch issues at startup and update them at finalization
+8. **Local roadmap mirrors active work** — keep only active unfinished work in `claude-workflow/ROADMAP.md`
+9. **Completed work is archived** — move complete workflow folders under `claude-workflow/archive/`
+10. **Never accumulate broken state** — fix validation failures immediately before next task
+11. **Scope discipline** — surface plan deviations to user; never silently expand scope

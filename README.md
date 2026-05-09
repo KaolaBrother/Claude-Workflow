@@ -48,6 +48,7 @@ From Claude Code:
 Then run:
 
 ```text
+/workflow-init
 /claude-workflow
 ```
 
@@ -73,6 +74,14 @@ Manual command uninstall:
 
 ## Usage
 
+Initialize each project once:
+
+```
+/workflow-init
+```
+
+This creates or updates `CLAUDE.md`, `claude-workflow/ROADMAP.md`, and the baseline documentation map without replacing existing project guidance.
+
 In any Claude Code session, run:
 
 ```
@@ -80,6 +89,12 @@ In any Claude Code session, run:
 ```
 
 The command scans the project root for existing `claude-workflow/` projects and offers to resume or start a new one.
+
+## GitHub Roadmap Cycle
+
+Use a separate research or roadmap session to discover future work and create or refine GitHub issues. `/claude-workflow` is the implementation cycle: it fetches open GitHub issues, mirrors active unfinished work into `claude-workflow/ROADMAP.md`, advances one selected item, then comments on or closes linked issues after validation.
+
+The local roadmap is a working mirror, not the source of truth. Keep only active unfinished work there; completed workflow folders move to `claude-workflow/archive/`.
 
 ## Phases
 
@@ -92,7 +107,7 @@ The command scans the project root for existing `claude-workflow/` projects and 
 | 5 | Review | code-reviewer always; security-reviewer conditional; advisor if CRITICAL | `phase5-review.md` |
 | 6 | Finalize | Full validation, doc update, commit, optional GitHub issue close | `phase6-summary.md` |
 
-All files are written to `{project-root}/claude-workflow/{project-name}/` — never inside `~/.claude`.
+All phase files are written to `{project-root}/claude-workflow/{project-name}/` while active. Completed workflow folders are archived to `{project-root}/claude-workflow/archive/`. Active unfinished work is tracked in `{project-root}/claude-workflow/ROADMAP.md`.
 
 ## Resuming
 
