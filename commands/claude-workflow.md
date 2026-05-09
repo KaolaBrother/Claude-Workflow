@@ -18,7 +18,9 @@ The project name is auto-generated from Phase 1 findings and confirmed with the 
 - **`tdd-guide` (Sonnet)** — test-first enforcement per task in Phase 4
 - **`code-reviewer` (Sonnet)** — quality review in Phase 5
 - **`security-reviewer` (Sonnet)** — conditional on security-sensitive files in Phase 5
-- **advisor() (Opus)** — Phase 2 gate and Phase 3 gate only
+- **Claude Code advisor (Opus)** — Phase 2 gate and Phase 3 gate only; conditional in Phase 5
+
+When invoking ECC agents, use the unqualified name if available (for example, `planner`). If ECC is installed only as a Claude Code plugin and agents are listed with a namespace, use the plugin-qualified form instead (for example, `everything-claude-code:planner`).
 
 ---
 
@@ -180,7 +182,7 @@ Read `phase1-research.md` fully before proceeding.
 
 ### 2.1 Deep Approach Analysis
 
-Spawn **`planner` (Opus)**:
+Invoke the **`planner` (Opus)** ECC subagent:
 
 Provide the full contents of `phase1-research.md` as context.
 
@@ -190,7 +192,7 @@ After planner returns, write its raw output to `claude-workflow/{project-name}/.
 
 ### 2.2 Advisor Gate
 
-Call advisor() — full conversation context includes planner output automatically.
+Consult the configured Claude Code advisor — full conversation context includes planner output automatically. If advisor is unavailable, stop and tell the user to enable an Opus advisor before continuing.
 
 Ask:
 - Any missed approaches?
@@ -224,7 +226,7 @@ Create `claude-workflow/{project-name}/phase2-ideation.md`:
 ...
 
 ## Advisor Findings
-[key points raised by advisor()]
+[key points raised by advisor]
 
 ## Selected Approach
 [name + reason for selection]
@@ -245,7 +247,7 @@ Read `phase1-research.md` and `phase2-ideation.md` fully before proceeding.
 
 ### 3.1 Blueprint Generation
 
-Spawn **`code-architect` (Sonnet)**:
+Invoke the **`code-architect` (Sonnet)** ECC subagent:
 
 Provide full contents of both phase files as context.
 
@@ -261,7 +263,7 @@ After code-architect returns, write its raw output to `claude-workflow/{project-
 
 ### 3.2 Advisor Gate
 
-Call advisor():
+Consult the configured Claude Code advisor:
 - Is the build sequence dependency-safe?
 - Missing files or integration points?
 - Could a developer implement this from the plan alone without searching the codebase?
@@ -355,7 +357,7 @@ For each task in `phase3-plan.md`:
 
 Exemption: for tasks ≤ 10 lines of change or pure config/constant changes, main session may write tests inline without spawning tdd-guide.
 
-Otherwise, spawn **`tdd-guide` (Sonnet)**:
+Otherwise, invoke the **`tdd-guide` (Sonnet)** ECC subagent:
 Provide the task definition from `phase3-plan.md` (including `Test File`) and the test patterns from `phase1-research.md`.
 Task: Write failing tests for this task. Tests must fail before implementation begins.
 
@@ -393,7 +395,7 @@ Read `phase3-plan.md` and `phase4-progress.md` before proceeding.
 
 ### 5.1 Quality Review
 
-Spawn **`code-reviewer` (Sonnet)**:
+Invoke the **`code-reviewer` (Sonnet)** ECC subagent:
 
 Provide the list of modified files from the `Files Modified` column in `phase4-progress.md`.
 Task: Review all modified files. Check: naming, error handling, immutability, function size (<50 lines), file size (<800 lines), test coverage, no debug statements.
@@ -402,7 +404,7 @@ Task: Review all modified files. Check: naming, error handling, immutability, fu
 
 Only if Phase 4 modified files touching auth, payments, user data, file system, or external API calls:
 
-Spawn **`security-reviewer` (Sonnet)**:
+Invoke the **`security-reviewer` (Sonnet)** ECC subagent:
 Task: Check for hardcoded secrets, injection vulnerabilities, unvalidated input, unsafe operations, OWASP Top 10.
 
 ### 5.3 Fix Loop
@@ -411,7 +413,7 @@ Task: Check for hardcoded secrets, injection vulnerabilities, unvalidated input,
 - **HIGH** → fix before Phase 6
 - **MEDIUM/LOW** → log as follow-up, do not block
 
-If CRITICAL issues found, call advisor() to confirm severity and check for anything missed.
+If CRITICAL issues are found, consult the configured Claude Code advisor to confirm severity and check for anything missed.
 
 ### 5.4 Write Phase File
 
@@ -475,7 +477,7 @@ All must pass before continuing.
 
 Read the project root `CLAUDE.md`. Look for a `Documentation Update Checklist` section.
 
-**If found** → spawn **`doc-updater` (Haiku)** to execute every item.
+**If found** → invoke the **`doc-updater` (Haiku)** ECC subagent to execute every item.
 
 **If not found** → create project root `CLAUDE.md` if it doesn't exist, then append:
 
@@ -490,11 +492,11 @@ Read the project root `CLAUDE.md`. Look for a `Documentation Update Checklist` s
 - [ ] Inline comments — update where public interfaces changed
 ```
 
-Then spawn **`doc-updater` (Haiku)** to execute it. Confirm every item is completed or marked N/A.
+Then invoke the **`doc-updater` (Haiku)** ECC subagent to execute it. Confirm every item is completed or marked N/A.
 
 ### 6.4 Commit
 
-Invoke the `prp-commit` skill (via Skill tool) to commit all changes with a structured conventional commit message.
+If `/prp-commit` is available, invoke it to commit all changes with a structured conventional commit message. Otherwise, inspect `git status` and `git diff`, stage only workflow-related changes, and create a conventional commit with `git commit`.
 
 ### 6.5 Close GitHub Issue (conditional)
 
@@ -577,8 +579,8 @@ To resume: run `/claude-workflow` with no argument — the startup scan will lis
 1. **Every phase writes a file** — no phase completes without its artifact on disk
 2. **Every phase reads its prerequisites** — context comes from files, not conversation history
 3. **Phase 4 updates progress after each task** — mid-phase resumption is always possible
-4. **Main session implements in Phase 4** — no subagent spawn unless a task is architecturally complex
-5. **Two advisor() gates** — Phase 2 and Phase 3 only; conditional at Phase 5
+4. **Main session owns Phase 4 implementation** — `tdd-guide` may write tests; extra helper agents require explicit justification
+5. **Two advisor gates** — Phase 2 and Phase 3 only; conditional at Phase 5
 6. **Security reviewer is conditional** — only when security-sensitive files are touched
 7. **Never accumulate broken state** — fix validation failures immediately before next task
 8. **Scope discipline** — surface plan deviations to user; never silently expand scope

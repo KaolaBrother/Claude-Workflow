@@ -2,6 +2,14 @@
   "name": "claude-workflow",
   "version": "1.0.0",
   "description": "6-phase Claude-native development workflow — Research, Ideation, Plan, Execute, Review, Finalize. Multi-model orchestration via ECC agents. Fully resumable across sessions.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KaolaBrother/Claude-Workflow.git"
+  },
+  "homepage": "https://github.com/KaolaBrother/Claude-Workflow#readme",
+  "bugs": {
+    "url": "https://github.com/KaolaBrother/Claude-Workflow/issues"
+  },
   "keywords": [
     "claude-code",
     "workflow",
@@ -10,8 +18,24 @@
     "ecc",
     "everything-claude-code"
   ],
+  "files": [
+    ".claude-plugin/",
+    "commands/",
+    "install.sh",
+    "uninstall.sh",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "bash -n install.sh uninstall.sh && node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8')); JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf8'))\" && claude plugin validate ."
+  },
   "peerDependencies": {
-    "everything-claude-code": ">=2.0.0"
+    "ecc-universal": ">=1.10.0 || >=2.0.0-rc.0"
+  },
+  "peerDependenciesMeta": {
+    "ecc-universal": {
+      "optional": true
+    }
   },
   "license": "MIT"
 }

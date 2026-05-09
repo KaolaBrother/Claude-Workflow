@@ -17,19 +17,55 @@ A 6-phase, Claude-native development workflow with per-phase file artifacts, mul
 > | `security-reviewer` | 5 — Review (conditional) | Sonnet |
 > | `doc-updater` | 6 — Finalize | Haiku |
 >
-> Install ECC first: https://github.com/affaan-m/everything-claude-code
+> Install ECC first:
 >
-> The `advisor()` Opus gate (Phases 2, 3, and conditional Phase 5) requires `"advisorModel": "opus"` in `~/.claude/settings.json`.
+> ```text
+> /plugin marketplace add https://github.com/affaan-m/everything-claude-code
+> /plugin install everything-claude-code@everything-claude-code
+> ```
+>
+> ECC's current npm package name is `ecc-universal`; the older `everything-claude-code`
+> npm package name is not the active install surface.
+>
+> The Opus advisor gates in Phases 2, 3, and conditional Phase 5 require
+> `"advisorModel": "opus"` in `~/.claude/settings.json` or an equivalent
+> Claude Code advisor configuration.
+>
+> If ECC is installed only as a Claude Code plugin, agents may appear with the
+> `everything-claude-code:` prefix. The workflow supports either form.
 
 ## Installation
 
+### As a Claude Code plugin
+
+From Claude Code:
+
+```text
+/plugin marketplace add https://github.com/KaolaBrother/Claude-Workflow
+/plugin install claude-workflow
+```
+
+Then run:
+
+```text
+/claude-workflow
+```
+
+### Manual command install
+
 ```bash
-git clone https://github.com/yourhandle/Claude-Workflow.git
+git clone https://github.com/KaolaBrother/Claude-Workflow.git
 cd Claude-Workflow
 ./install.sh
 ```
 
-To uninstall:
+Plugin uninstall:
+
+```text
+/plugin uninstall claude-workflow
+```
+
+Manual command uninstall:
 
 ```bash
 ./uninstall.sh
@@ -50,8 +86,8 @@ The command scans the project root for existing `claude-workflow/` projects and 
 | # | Phase | What happens | Output file |
 |---|-------|-------------|-------------|
 | 1 | Research | Codebase exploration, requirement parsing, completeness gate | `phase1-research.md` |
-| 2 | Ideation | Planner (Opus) generates 2–3 approaches → advisor() gate → user selects | `phase2-ideation.md` |
-| 3 | Plan | code-architect produces implementation blueprint → advisor() gate | `phase3-plan.md` |
+| 2 | Ideation | Planner (Opus) generates 2–3 approaches → advisor gate → user selects | `phase2-ideation.md` |
+| 3 | Plan | code-architect produces implementation blueprint → advisor gate | `phase3-plan.md` |
 | 4 | Execute | Per-task TDD loop: tdd-guide writes tests → implement → validate → checkpoint | `phase4-progress.md` |
 | 5 | Review | code-reviewer always; security-reviewer conditional; advisor if CRITICAL | `phase5-review.md` |
 | 6 | Finalize | Full validation, doc update, commit, optional GitHub issue close | `phase6-summary.md` |
