@@ -1,6 +1,6 @@
 {
   "name": "claude-workflow",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "6-phase Claude-native development workflow — Research, Ideation, Plan, Execute, Review, Finalize. Multi-model orchestration via ECC agents. Fully resumable across sessions.",
   "repository": {
     "type": "git",

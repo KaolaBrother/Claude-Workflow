@@ -20,7 +20,7 @@ The project name is auto-generated from Phase 1 findings and confirmed with the 
 - **`security-reviewer` (Sonnet)** — conditional on security-sensitive files in Phase 5
 - **Claude Code advisor (Opus)** — Phase 2 gate and Phase 3 gate only; conditional in Phase 5
 
-When invoking ECC agents, use the unqualified name if available (for example, `planner`). If ECC is installed only as a Claude Code plugin and agents are listed with a namespace, use the plugin-qualified form instead (for example, `everything-claude-code:planner`).
+When invoking ECC agents, use the agent names exactly as Claude Code lists them. Prefer short names like `planner` when available; otherwise use the plugin-qualified form such as `everything-claude-code:planner`.
 
 **Context budget discipline:**
 - Keep phase files concise and decision-oriented.
@@ -84,6 +84,17 @@ phase1-research.md exists → resume at Phase 2
 ```
 
 Read all existing phase files as context before proceeding. Tell the user: "Resuming {project-name} at Phase N."
+
+Before doing new work after any resume or context compaction:
+
+1. Read the current phase file and any prior phase prerequisite files.
+2. Read the latest `## Required Agent Compliance` table if present.
+3. State the current phase and the remaining required gates before continuing:
+   ```text
+   Current phase: Phase N
+   Remaining required gates: [gate list]
+   ```
+4. Do not proceed past a phase boundary while any required compliance row is `pending` or missing.
 
 ### Step 3b — Starting a new project
 
@@ -373,6 +384,12 @@ At the start of Phase 4, create `claude-workflow/{project-name}/phase4-progress.
 ## Build Status
 clean
 
+## Required Agent Compliance
+| Requirement | Status | Evidence | Skip Reason |
+|-------------|--------|----------|-------------|
+| tdd-guide task 1 | pending | | |
+| tdd-guide task 2 | pending | | |
+
 ## Last Updated
 [ISO-8601 UTC — e.g. 2026-05-09T10:00:00Z]
 ```
@@ -388,8 +405,14 @@ For each task in `phase3-plan.md`:
 Exemption: for tasks ≤ 10 lines of change or pure config/constant changes, main session may write tests inline without spawning tdd-guide.
 
 Otherwise, invoke the **`tdd-guide` (Sonnet)** ECC subagent:
-Provide the task definition from `phase3-plan.md` (including `Test File`) and the test patterns from `phase1-research.md`.
+Provide the task definition from `phase3-plan.md` (including `Test File`) and the relevant test patterns from `phase1-research.md`.
 Task: Write failing tests for this task. Tests must fail before implementation begins.
+
+Before implementation begins, update the `Required Agent Compliance` row for this task:
+- `invoked` with evidence path, such as `.cache/tdd-task-1.md`, if `tdd-guide` was used
+- `skipped` only when the exemption applies: `task <=10 lines`, `pure config/constant`, or a Phase 3 plan entry explicitly marks the task as no-behavior/no-testable-change
+
+Never silently bypass `tdd-guide`. If the main session writes tests directly under an exemption, record that exemption before continuing.
 
 Verify tests fail. If they pass immediately, the test is wrong — fix it before continuing.
 
@@ -412,6 +435,8 @@ Mark the task `complete` in `phase4-progress.md`. Record modified files in the `
 ### Resuming Mid-Phase
 
 If Phase 4 is resumed, read `phase4-progress.md` to find the first task with status `pending` or `in_progress`. For `in_progress` tasks, re-validate the current file state before continuing — the prior session may have partially written the implementation.
+
+Also read the `Required Agent Compliance` table. If any completed or in-progress task has a pending `tdd-guide` row, stop and either invoke `tdd-guide` or record an explicit skip reason before continuing.
 
 ---
 
@@ -465,6 +490,13 @@ Create `claude-workflow/{project-name}/phase5-review.md`:
 ### Findings
 [list or "none"]
 
+## Required Agent Compliance
+| Requirement | Status | Evidence | Skip Reason |
+|-------------|--------|----------|-------------|
+| code-reviewer | invoked | .cache/code-reviewer.md | |
+| security-reviewer | invoked/skipped/N/A | .cache/security-reviewer.md or file-risk scan | [reason if skipped/N/A] |
+| advisor critical gate | invoked/skipped/N/A | advisor notes or review findings | [reason if skipped/N/A] |
+
 ## Fixes Applied
 [list of fixes made]
 
@@ -507,6 +539,8 @@ All must pass before continuing.
 
 Read the project root `CLAUDE.md`. Look for a `Documentation Update Checklist` section.
 
+This is a required documentation gate. It must end with `doc-updater` marked `invoked` or `skipped` in `phase6-summary.md`; silent omission is not allowed.
+
 **If found** → invoke the **`doc-updater` (Haiku)** ECC subagent to execute every item.
 
 **If not found** → create project root `CLAUDE.md` if it doesn't exist, then append:
@@ -523,6 +557,8 @@ Read the project root `CLAUDE.md`. Look for a `Documentation Update Checklist` s
 ```
 
 Then invoke the **`doc-updater` (Haiku)** ECC subagent to execute it. Confirm every item is completed or marked N/A.
+
+If no documentation update is needed, skip `doc-updater` only after recording an explicit reason and evidence, such as `no public behavior, API, setup, architecture, roadmap, or docs impact`. Prefer invoking `doc-updater` with changed-file and checklist excerpts when uncertain.
 
 ### 6.4 Write Phase File
 
@@ -554,6 +590,13 @@ Create `claude-workflow/{project-name}/phase6-summary.md`:
 
 ## Archive
 [archived to claude-workflow/archive/{project-name} — or "pending archive"]
+
+## Required Agent Compliance
+| Requirement | Status | Evidence | Skip Reason |
+|-------------|--------|----------|-------------|
+| doc-updater | invoked/skipped | .cache/doc-updater.md or docs-impact check | [reason if skipped] |
+| roadmap refresh | invoked | claude-workflow/ROADMAP.md | |
+| archive completed folder | pending | | |
 
 ## Status
 COMPLETE
@@ -612,8 +655,11 @@ Update `phase6-summary.md` with:
 - final GitHub issue state
 - final roadmap state
 - final archive path
+- final compliance table, with no `pending` rows
 
 If this changes tracked files after the commit, amend the commit or create a small follow-up docs/workflow commit according to project convention.
+
+Before declaring the workflow complete, verify every `Required Agent Compliance` row across current phase files is `invoked`, `skipped`, or `N/A` with evidence or skip reason. If any row is missing or `pending`, stop and complete that gate.
 
 ---
 
@@ -664,5 +710,7 @@ To resume: run `/claude-workflow` with no argument — the startup scan will lis
 7. **GitHub issues drive roadmap** — fetch issues at startup and update them at finalization
 8. **Local roadmap mirrors active work** — keep only active unfinished work in `claude-workflow/ROADMAP.md`
 9. **Completed work is archived** — move complete workflow folders under `claude-workflow/archive/`
-10. **Never accumulate broken state** — fix validation failures immediately before next task
-11. **Scope discipline** — surface plan deviations to user; never silently expand scope
+10. **Compliance ledger is mandatory** — required agents must be `invoked`, `skipped`, or `N/A` with evidence
+11. **No silent deviations** — every skipped agent gate needs an explicit reason before proceeding
+12. **Never accumulate broken state** — fix validation failures immediately before next task
+13. **Scope discipline** — surface plan deviations to user; never silently expand scope

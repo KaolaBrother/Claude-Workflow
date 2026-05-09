@@ -69,7 +69,7 @@ Keep this file concise. It is loaded into agent context often, so it should cont
 - The main session is the orchestrator for `/claude-workflow`.
 - Keep phase work scoped, resumable, and recorded under `claude-workflow/`.
 - Delegate phase-specific work to ECC agents when useful, while the main session owns integration and final decisions.
-- Use the unqualified ECC agent name when available; otherwise use the `everything-claude-code:` prefix.
+- Use the ECC agent names exactly as Claude Code lists them; prefer short names like `planner` when available, otherwise use the `everything-claude-code:` prefix.
 
 ## Roadmap And Issues
 
@@ -85,6 +85,7 @@ At the start of each `/claude-workflow` cycle:
 - Mirror active unfinished issues into `claude-workflow/ROADMAP.md`.
 - Select one issue or roadmap item to advance.
 - If work starts from a free-form request, create or link a GitHub issue before implementation when possible.
+- Read the current phase compliance table after resume or compaction and state remaining required gates before continuing.
 
 At the end of each `/claude-workflow` cycle:
 - Update or create GitHub issues for any discovered follow-up work.
@@ -93,6 +94,7 @@ At the end of each `/claude-workflow` cycle:
 - Refresh `claude-workflow/ROADMAP.md` from current open issue state.
 - Move completed workflow folders to `claude-workflow/archive/`.
 - Leave only active unfinished work in `claude-workflow/ROADMAP.md`.
+- Verify every required agent gate is marked `invoked`, `skipped`, or `N/A` with evidence or a skip reason.
 
 ## Context Budget Rules
 

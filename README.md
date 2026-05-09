@@ -98,6 +98,8 @@ The local roadmap is a working mirror, not the source of truth. Keep only active
 
 The workflow also enforces context discipline: `CLAUDE.md` should stay short, the local roadmap should not become history storage, and agent prompts should include only the relevant phase excerpts needed for the delegated task.
 
+Each phase records a required-agent compliance ledger. After resume or compaction, the main session must read that ledger and finish or explicitly skip any pending gates before crossing a phase boundary.
+
 ## Phases
 
 | # | Phase | What happens | Output file |
