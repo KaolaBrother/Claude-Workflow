@@ -162,10 +162,25 @@ Append the following sections only when equivalent related content is missing. T
 
 ## Roadmap And Issues
 
-- Use GitHub issues as the roadmap source of truth when a GitHub remote is configured.
-- A separate roadmap/research session may discover future work and create or refine GitHub issues.
-- `/claude-workflow` fetches issues, selects implementation work, mirrors active state in `claude-workflow/ROADMAP.md`, and advances the project one cycle at a time.
-- After each `/claude-workflow` cycle, refresh the roadmap, archive completed workflow folders, and close or comment on linked issues according to acceptance status.
+GitHub issues are the roadmap source of truth when a GitHub remote is configured. `claude-workflow/ROADMAP.md` is only the local working mirror.
+
+Roadmap maintenance roles:
+- Roadmap/research sessions discover future work and create or refine GitHub issues.
+- `/claude-workflow` sessions implement selected issues and keep the local mirror current.
+- Agents must not treat stale local roadmap rows as authoritative if GitHub issue state differs.
+
+At the start of each `/claude-workflow` cycle:
+- Fetch open GitHub issues with `gh issue list` when available.
+- Mirror active unfinished issues into `claude-workflow/ROADMAP.md`.
+- Select one issue or roadmap item to advance.
+- If work starts from a free-form request, create or link a GitHub issue before implementation when possible.
+
+At the end of each `/claude-workflow` cycle:
+- Update or create GitHub issues for any discovered follow-up work.
+- Comment progress on partially completed issues and leave them open.
+- Close linked issues only after acceptance criteria pass.
+- Refresh `claude-workflow/ROADMAP.md` from current open issue state.
+- Move completed workflow folders to `claude-workflow/archive/`.
 - Leave only active unfinished work in `claude-workflow/ROADMAP.md`.
 
 ## Documentation Map
