@@ -94,6 +94,20 @@ Validate the state file:
 
 If valid, use it as authoritative.
 
+Before manual reconstruction, run the state repair helper if available, then
+read `workflow-state.md` again:
+
+```bash
+for helper in \
+  "${CLAUDE_PLUGIN_ROOT:-}/scripts/claude-workflow-repair-state.js" \
+  "$HOME/.claude/claude-workflow/scripts/claude-workflow-repair-state.js" \
+  "./scripts/claude-workflow-repair-state.js"; do
+  [ -f "$helper" ] && { node "$helper" "$ARGUMENTS"; break; }
+done
+```
+
+If the helper writes or validates `workflow-state.md`, route from that state.
+
 If missing or invalid, reconstruct:
 
 ```text

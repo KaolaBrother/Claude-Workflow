@@ -127,7 +127,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - GitHub issues are the roadmap source of truth when available; `claude-workflow/ROADMAP.md` is the local active-work mirror.
 - Roadmap/research sessions create or refine issues; `/claude-workflow` sessions implement one selected item and refresh the mirror.
 - After resume or compaction, read `workflow-state.md`, the current phase file, and the compliance ledger before continuing.
-- State Bootstrap And Repair: if `/claude-workflow` safely reconstructs one next command from phase artifacts, repair `workflow-state.md` before routing.
+- State Bootstrap And Repair: if `/claude-workflow` safely reconstructs one next command from phase artifacts, run the state repair helper and repair `workflow-state.md` before routing.
 - End each cycle by updating issues, refreshing the roadmap, archiving completed workflow folders, and clearing pending compliance rows.
 
 ## Project Conventions

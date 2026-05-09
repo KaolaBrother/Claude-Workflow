@@ -102,9 +102,35 @@ function assertHookOutput(workdir, expectedCommand, expectedStep) {
   assert(output.includes('do not repair inline'), 'hook output missing inline repair guardrail');
 }
 
+function runRepair(workdir, projectArg = project) {
+  return execFileSync(process.execPath, [path.join(root, 'scripts/claude-workflow-repair-state.js'), projectArg], {
+    cwd: workdir,
+    encoding: 'utf8'
+  });
+}
+
+function assertRepair(workdir, expectedCommand, expectedPhase) {
+  const output = runRepair(workdir);
+  assert(output.includes('Workflow state repair: wrote') || output.includes('Workflow state repair: repaired stale'), 'repair output must report a write or stale repair');
+  assert(output.includes(`Current phase: ${expectedPhase}`), `repair output missing phase ${expectedPhase}`);
+  assert(output.includes(`Next command: ${expectedCommand}`), `repair output missing ${expectedCommand}`);
+  assertNext(path.join(workdir, 'claude-workflow', project, 'workflow-state.md'), expectedCommand);
+  assertFileIncludes(path.join(workdir, 'claude-workflow', project, 'workflow-state.md'), 'last_result: state_repaired_from_artifacts');
+}
+
 function main() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-workflow-walkthrough-'));
   try {
+    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-workflow-empty-'));
+    try {
+      fs.mkdirSync(path.join(emptyRoot, 'claude-workflow', project), { recursive: true });
+      const output = runRepair(emptyRoot, project);
+      assert(output.includes('Workflow state repair: skipped - no phase artifacts available for repair'), 'repair must not create state for brand-new work');
+      assert(!fs.existsSync(path.join(emptyRoot, 'claude-workflow', project, 'workflow-state.md')), 'repair created state without phase artifacts');
+    } finally {
+      fs.rmSync(emptyRoot, { recursive: true, force: true });
+    }
+
     const workflowRoot = path.join(tmp, 'claude-workflow');
     const projectRoot = path.join(workflowRoot, project);
     const cache = path.join(projectRoot, '.cache');
@@ -184,6 +210,9 @@ function main() {
     }));
     assertNext(stateFile, `/claude-workflow-phase4 ${project}`);
 
+    fs.rmSync(stateFile, { force: true });
+    assertRepair(tmp, `/claude-workflow-phase4 ${project}`, 4);
+
     write(path.join(projectRoot, 'phase4-progress.md'), [
       '# Phase 4 - Progress: simulated-feature',
       '',
@@ -210,6 +239,9 @@ function main() {
     assertFileIncludes(path.join(projectRoot, 'phase4-progress.md'), '| tdd-guide executor task 1 | invoked | .cache/tdd-task-1.md | |');
     assertFileIncludes(path.join(projectRoot, 'phase4-progress.md'), '| 1 | npm test -- greeting | behavior/test failure | tdd-guide | .cache/tdd-task-1-fix-1.md | routed |');
     write(path.join(cache, 'tdd-task-1.md'), 'RED evidence\nGREEN evidence\n');
+    fs.rmSync(stateFile, { force: true });
+    assertRepair(tmp, `/claude-workflow-phase4 ${project}`, 4);
+    assertFileIncludes(stateFile, 'task: 1');
     write(stateFile, stateContent({
       phase: 4,
       phaseName: 'Execute',
@@ -223,6 +255,7 @@ function main() {
       '| 1 | Add greeting | in_progress | | validation failed |',
       '| 1 | Add greeting | complete | src/greeting.js, test/greeting.test.js | validation passed |'
     ));
+    assertRepair(tmp, `/claude-workflow-phase5 ${project}`, 5);
     write(stateFile, stateContent({
       phase: 4,
       phaseName: 'Execute',
@@ -230,6 +263,9 @@ function main() {
       nextCommand: `/claude-workflow-phase5 ${project}`
     }));
     assertNext(stateFile, `/claude-workflow-phase5 ${project}`);
+
+    fs.rmSync(stateFile, { force: true });
+    assertRepair(tmp, `/claude-workflow-phase5 ${project}`, 5);
 
     write(path.join(cache, 'code-reviewer.md'), 'review passed\n');
     write(path.join(projectRoot, 'phase5-review.md'), phaseFile('Phase 5 - Review', [

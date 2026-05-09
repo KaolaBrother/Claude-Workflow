@@ -45,8 +45,10 @@ assertIncludes('commands/claude-workflow.md', 'next_command');
 assertIncludes('commands/claude-workflow.md', '/claude-workflow-phase4');
 assertIncludes('commands/claude-workflow.md', '## State Bootstrap And Repair');
 assertIncludes('commands/claude-workflow.md', 'write repaired `workflow-state.md`');
+assertIncludes('commands/claude-workflow.md', 'claude-workflow-repair-state.js');
 assertIncludes('commands/claude-workflow.md', 'Do not create `workflow-state.md` for brand-new work');
 assertIncludes('README.md', 'State Bootstrap And Repair');
+assertIncludes('README.md', 'claude-workflow-repair-state.js');
 assertIncludes('commands/workflow-init.md', 'State Bootstrap And Repair');
 
 assertIncludes('commands/claude-workflow-phase1.md', 'temporary Phase 1 capture');
@@ -80,9 +82,12 @@ assertIncludes('README.md', '## ECC Hook Policy');
 assertIncludes('README.md', 'ECC_HOOK_PROFILE=minimal');
 assertIncludes('commands/workflow-init.md', '## ECC Hook Policy');
 assertIncludes('commands/workflow-init.md', 'ECC_HOOK_PROFILE=minimal');
+assertIncludes('install.sh', 'claude-workflow-repair-state.js');
+assertIncludes('uninstall.sh', '.claude/claude-workflow');
 
 assert(exists('hooks/hooks.json'), 'hooks/hooks.json is missing');
 assert(exists('scripts/claude-workflow-compact-context.js'), 'compact context hook script is missing');
+assert(exists('scripts/claude-workflow-repair-state.js'), 'state repair script is missing');
 assert(exists('scripts/simulate-workflow-walkthrough.js'), 'workflow walkthrough simulation script is missing');
 assertIncludes('hooks/hooks.json', 'SessionStart');
 assertIncludes('hooks/hooks.json', 'compact');

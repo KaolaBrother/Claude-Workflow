@@ -17,6 +17,13 @@ for dest in "${COMMANDS[@]}"; do
   fi
 done
 
+SUPPORT_DIR="$HOME/.claude/claude-workflow"
+if [[ -d "$SUPPORT_DIR" ]]; then
+  rm -rf "$SUPPORT_DIR"
+  echo "Removed: $SUPPORT_DIR"
+  removed=$((removed + 1))
+fi
+
 if [[ "$removed" -eq 0 ]]; then
   echo "Not installed — nothing to remove."
 fi

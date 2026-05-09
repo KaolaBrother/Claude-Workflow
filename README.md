@@ -52,6 +52,10 @@ From Claude Code:
 /reload-plugins
 ```
 
+If you previously used the manual installer, remove or update the old
+`~/.claude/commands/claude-workflow.md`; user-level commands can take precedence
+over plugin commands.
+
 Then run:
 
 ```text
@@ -156,9 +160,10 @@ Any interrupted session resumes from `workflow-state.md` first, then reconstruct
 
 When `/claude-workflow` can reconstruct one safe next command from phase
 artifacts, it repairs or creates `claude-workflow/{project}/workflow-state.md`
-before routing. It does not create state for brand-new work, ambiguous active
-projects, contradictory phase files, or unresolved compliance gates that make
-the next command unsafe.
+before routing by running `scripts/claude-workflow-repair-state.js` when the
+helper is available. It does not create state for brand-new work, ambiguous
+active projects, contradictory phase files, or unresolved compliance gates that
+make the next command unsafe.
 
 When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact resume reminder after context compaction. Manual command install copies slash commands only; use plugin install when you want the compaction resume hook.
 
