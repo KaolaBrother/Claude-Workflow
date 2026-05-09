@@ -7,6 +7,8 @@ argument-hint: <project name>
 
 Phase 5 reviews completed Phase 4 work. Review agents review only; do not edit
 files. Fixes are routed to implementation/fix agents and then re-reviewed.
+The main session may run small targeted validation commands for classification,
+but delegates expensive/noisy validation and does not own implementation edits.
 
 ## Prerequisite
 
@@ -45,8 +47,68 @@ If ambiguous, stop and ask.
 - `security-reviewer` must be instructed: review only; do not edit files.
 - `code-reviewer` must be instructed: review only; do not edit files.
 - Review fixes are subagent-executed. Do not apply review fixes inline unless
-  explicit emergency fallback authorization is recorded.
+  the Trivial Inline Edit Exception applies or explicit emergency fallback
+  authorization is recorded.
 - CRITICAL and HIGH findings block Phase 6.
+
+## Validation Delegation Policy
+
+The main session may run small targeted commands by default when they help
+classify or confirm a review finding:
+
+- one focused test file or test case
+- one lint/typecheck command scoped to changed files
+- one quick command that confirms a reviewer finding is real
+
+The main session must delegate expensive or noisy validation by default:
+
+- broad test, lint, typecheck, build, or coverage commands
+- repeated reproduction of an already-classified failure
+- validation after non-trivial review fixes
+
+Delegated validation should use a fresh validation subagent when available, or
+the relevant fix agent (`tdd-guide` for behavior/test findings,
+`build-error-resolver` for build/type/lint/tooling findings). Raw output goes
+to:
+
+```text
+claude-workflow/{project}/.cache/review-validation-{n}.md
+```
+
+The main session records the compact result in `phase5-review.md`: command,
+pass/fail, short failure summary, classification, evidence path, and route.
+
+## Validation De-Duplication
+
+Avoid redundant validation runs.
+
+- Phase 5 does not rerun the whole Phase 4 validation set only because review
+  started.
+- If review finds no blocking issue, cite Phase 4 validation evidence.
+- After a review fix, rerun only the command that proves the fix and any command
+  required by the finding.
+- If the same command already passed against the same relevant file set and no
+  relevant files changed afterward, cite the prior evidence path instead of
+  rerunning it.
+- Leave full fresh validation to Phase 6.
+
+## Trivial Inline Edit Exception
+
+The main session may make a trivial inline edit without emergency fallback only
+when all conditions are true:
+
+- the edit is one line or mechanically obvious
+- no behavior, API, security, architecture, test intent, or design judgment is
+  required
+- it fixes review-record friction, formatting, an unused import, a typo, import
+  ordering, or an obvious generated path/name mistake
+- it stays inside the approved Phase 4 write set
+- it is recorded in `phase5-review.md` or `workflow-state.md`
+- affected validation is rerun or prior valid evidence is cited under
+  Validation De-Duplication
+
+Anything else is routed to `tdd-guide` or `build-error-resolver`, then
+re-reviewed.
 
 ## Step 1 - Quality Review
 
@@ -126,6 +188,9 @@ Write each fix-agent output to:
 claude-workflow/{project}/.cache/review-fix-{n}.md
 ```
 
+Run, delegate, or cite the narrow validation needed for each fix under the
+Validation Delegation Policy and Validation De-Duplication rules.
+
 After three fix-and-re-review iterations without convergence, stop and ask.
 
 ## Step 4 - Write Phase File
@@ -158,6 +223,9 @@ Create `claude-workflow/{project}/phase5-review.md`:
 
 ## Fixes Applied
 [list]
+
+## Validation Evidence
+[commands run/delegated/cited, result, evidence path]
 
 ## Follow-Up Items
 [MEDIUM/LOW deferred]

@@ -116,6 +116,25 @@ The workflow also enforces context discipline: `CLAUDE.md` targets under 150 lin
 
 Each phase records a required-agent compliance ledger. Each active workflow also maintains `workflow-state.md`, which records the current phase, intra-phase step, next command, pending gates, and ownership rules. After resume or compaction, the main session must read that state file and the relevant compliance ledger before continuing.
 
+Avoid redundant validation runs: Phase 4 uses targeted affected checks, Phase 5 validates only review fixes or cites existing evidence, and Phase 6 runs each full final command once against the final candidate state. Small targeted commands may run in the main session, while expensive or noisy test/lint/type/build commands should be delegated and summarized from cache evidence.
+
+## ECC Hook Policy
+
+ECC hooks are background hygiene, not workflow validation. They may format,
+lint, or typecheck edited files automatically, but `/claude-workflow` should not
+rerun the same check unless the phase requires broader validation or relevant
+files changed after the hook ran. Hook output counts as workflow evidence only
+when recorded with command, scope, result, and evidence path.
+
+For heavy Phase 4 implementation bursts or many subagents, use the lighter hook
+profile:
+
+```bash
+ECC_HOOK_PROFILE=minimal claude
+```
+
+Phase 6 still owns the final full relevant validation gate.
+
 ## Phases
 
 | # | Phase | What happens | Output file |
@@ -132,6 +151,14 @@ All phase files are written to `{project-root}/claude-workflow/{project-name}/` 
 ## Resuming
 
 Any interrupted session resumes from `workflow-state.md` first, then reconstructs from phase files if state is missing or stale. Phase 4 tracks `pending / in_progress / complete` per task in `phase4-progress.md`, and all phases record intra-phase checkpoints in `workflow-state.md`.
+
+### State Bootstrap And Repair
+
+When `/claude-workflow` can reconstruct one safe next command from phase
+artifacts, it repairs or creates `claude-workflow/{project}/workflow-state.md`
+before routing. It does not create state for brand-new work, ambiguous active
+projects, contradictory phase files, or unresolved compliance gates that make
+the next command unsafe.
 
 When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact resume reminder after context compaction. Manual command install copies slash commands only; use plugin install when you want the compaction resume hook.
 

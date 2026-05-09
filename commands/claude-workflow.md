@@ -108,6 +108,29 @@ phase1-research.md exists -> /claude-workflow-phase2 {project}
 no phase file -> /claude-workflow-phase1 <task>
 ```
 
+## State Bootstrap And Repair
+
+If `workflow-state.md` is valid, use it as authoritative.
+
+If `workflow-state.md` is missing, stale, or invalid, and reconstruction from
+phase artifacts identifies exactly one safe next command, write repaired `workflow-state.md`
+before routing.
+
+The repaired state must be conservative:
+- `phase`, `phase_name`, and `next_command` match the reconstructed route
+- `step: router-reconstructed`
+- `task: N/A` unless the phase artifact proves a specific task
+- pending gates mirror unresolved `Required Agent Compliance` rows
+- `phase_file` points to the artifact used for reconstruction
+- `last_result: state_repaired_from_artifacts`
+
+Phase commands must refine `step`, `task`, pending gates, and evidence before
+doing phase work.
+
+Do not create `workflow-state.md` for brand-new work, no selected project, no
+phase artifacts, multiple ambiguous active projects, contradictory phase files,
+or unresolved compliance gates that make the next command unsafe.
+
 Phase commands own exact intra-phase step detection. The router must not infer
 more detail than the phase artifacts prove.
 

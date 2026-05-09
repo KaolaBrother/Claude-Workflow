@@ -5,11 +5,13 @@ argument-hint: <project name>
 
 # Claude Workflow Phase 4 - Execute
 
-NO INLINE PHASE 4 FIXES without explicit user authorization.
+NO INLINE PHASE 4 FIXES except the Trivial Inline Edit Exception below, or
+explicit user authorization.
 
 Phase 4 is subagent-executed. The main session is the orchestrator: it updates
-state, starts task agents, verifies results, classifies validation failures, and
-routes fixes. It does not write implementation or test code.
+state, starts task agents, verifies results, classifies validation failures,
+runs small targeted validation when useful, delegates noisy validation, and
+routes fixes. It does not own implementation or test code.
 
 ## Prerequisite
 
@@ -34,16 +36,20 @@ Phase 4 is subagent-executed.
 
 Main session may:
 - inspect diffs
-- run validation
+- run small targeted validation commands
+- delegate expensive or noisy validation
 - classify failures
 - update progress/evidence files
 - delegate follow-up fixes
+- apply the Trivial Inline Edit Exception
 
 Main session must not:
-- write implementation fixes inline
-- write or rewrite tests inline
+- write implementation fixes inline except under the Trivial Inline Edit
+  Exception
+- write or rewrite tests inline except under the Trivial Inline Edit Exception
 - mark a task complete while validation fails
 - silently bypass `tdd-guide`
+- run broad/noisy validation in-session when it can be delegated and summarized
 
 Failure routing:
 - behavior/test failure -> `tdd-guide`
@@ -62,6 +68,66 @@ implementation_owner: tdd-guide
 fix_owner: tdd-guide or build-error-resolver
 inline_emergency_fallback_authorized: no
 ```
+
+## Validation Delegation Policy
+
+The main session is the validation/classification owner, not the long-output
+test runner.
+
+Main session may run small targeted commands by default:
+
+- one focused test file or test case
+- one package/typecheck command scoped to affected files or package
+- one lint/format command scoped to changed files
+- a quick smoke check needed to classify a failure
+
+Main session must delegate expensive or noisy validation by default:
+
+- full `cargo test`, full monorepo test suites, or full build pipelines
+- broad lint/typecheck commands across unrelated packages
+- commands expected to produce long logs
+- repeated failure reproduction after the classification is already clear
+
+Delegated validation should use a fresh validation subagent when available, or
+the relevant fix agent (`tdd-guide` for behavior checks, `build-error-resolver`
+for build/type/lint/tooling checks). Raw output goes to:
+
+```text
+claude-workflow/{project}/.cache/validation-task-{n}.md
+```
+
+The main session records only the command, pass/fail result, short failure
+summary, classification, evidence path, and next route.
+
+## Validation De-Duplication
+
+Avoid redundant validation runs.
+
+- Phase 4 validates affected task scope, not the full project, unless the task
+  plan explicitly requires a full command or the touched surface is high risk.
+- If the same command already passed against the same relevant file set and no
+  relevant files changed afterward, cite the prior evidence path instead of
+  rerunning it.
+- After any routed fix or Trivial Inline Edit Exception edit, rerun only the
+  affected command unless the fix changes shared infrastructure.
+- Reserve full-suite validation for Phase 6 unless Phase 3 lists it as the
+  task-level validation command.
+
+## Trivial Inline Edit Exception
+
+The main session may make a trivial inline edit without emergency fallback only
+when all conditions are true:
+
+- the edit is one line or mechanically obvious
+- no behavior, API, architecture, test intent, or design judgment is required
+- it fixes orchestration friction, formatting, an unused import, a typo, import
+  ordering, or an obvious generated path/name mistake
+- it stays inside the task write set
+- it is recorded in `phase4-progress.md` or `workflow-state.md`
+- affected validation is rerun or prior valid evidence is cited under
+  Validation De-Duplication
+
+Anything else is routed to `tdd-guide` or `build-error-resolver`.
 
 ## Resume Detection
 
@@ -92,14 +158,16 @@ Phase 4 is subagent-executed.
 
 Main session may:
 - inspect diffs
-- run validation
+- run small targeted validation commands
+- delegate expensive or noisy validation
 - classify failures
 - update progress/evidence files
 - delegate follow-up fixes
+- apply the Trivial Inline Edit Exception
 
 Main session must not:
-- write implementation fixes inline
-- write or rewrite tests inline
+- write implementation fixes inline except under the Trivial Inline Edit Exception
+- write or rewrite tests inline except under the Trivial Inline Edit Exception
 - mark a task complete while validation fails
 
 Failure routing:
@@ -183,8 +251,14 @@ failure. Do not repair implementation inline.
 
 ### Step 3 - Validate Task
 
-Run the exact affected validation command from `phase3-plan.md`, plus any
-required type/lint command for affected files.
+Run or delegate the exact affected validation command from `phase3-plan.md`,
+plus any required type/lint command for affected files. Keep small targeted
+commands in-session when they are useful for classification. Delegate expensive
+or noisy validation and save raw output to:
+
+```text
+claude-workflow/{project}/.cache/validation-task-{n}.md
+```
 
 If validation fails, add a row to `Failure Routing Ledger` before invoking the
 fix agent.

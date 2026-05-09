@@ -80,6 +80,18 @@ function assertNext(stateFile, expected) {
   assert(actual === expected, `expected next command ${expected}, got ${actual}`);
 }
 
+function assertFileIncludes(file, needle) {
+  const content = read(file);
+  assert(content.includes(needle), `${file} missing ${needle}`);
+}
+
+function assertCommandIncludes(relativePath, needles) {
+  const content = fs.readFileSync(path.join(root, relativePath), 'utf8');
+  for (const needle of needles) {
+    assert(content.includes(needle), `${relativePath} missing ${needle}`);
+  }
+}
+
 function assertHookOutput(workdir, expectedCommand, expectedStep) {
   const output = execFileSync(process.execPath, [path.join(root, 'scripts/claude-workflow-compact-context.js')], {
     cwd: workdir,
@@ -115,6 +127,8 @@ function main() {
       '| code-explorer | invoked | .cache/code-explorer.md | |',
       '| docs-lookup | N/A | .cache/docs-lookup.md | internal patterns sufficient |'
     ]));
+    assertFileIncludes(path.join(projectRoot, 'phase1-research.md'), '| code-explorer | invoked | .cache/code-explorer.md | |');
+    assertFileIncludes(path.join(projectRoot, 'phase1-research.md'), '| docs-lookup | N/A | .cache/docs-lookup.md | internal patterns sufficient |');
     write(stateFile, stateContent({
       phase: 1,
       phaseName: 'Research',
@@ -129,6 +143,8 @@ function main() {
       '| planner | invoked | .cache/planner.md | |',
       '| advisor ideation gate | invoked | .cache/advisor-ideation.md | |'
     ]));
+    assertFileIncludes(path.join(projectRoot, 'phase2-ideation.md'), '| planner | invoked | .cache/planner.md | |');
+    assertFileIncludes(path.join(projectRoot, 'phase2-ideation.md'), '| advisor ideation gate | invoked | .cache/advisor-ideation.md | |');
     write(stateFile, stateContent({
       phase: 2,
       phaseName: 'Ideation',
@@ -158,6 +174,8 @@ function main() {
       '| architect revisions | N/A | .cache/advisor-plan.md | advisor found no gaps |',
       ''
     ].join('\n'));
+    assertFileIncludes(path.join(projectRoot, 'phase3-plan.md'), '| code-architect | invoked | .cache/architect.md | |');
+    assertFileIncludes(path.join(projectRoot, 'phase3-plan.md'), '| advisor plan gate | invoked | .cache/advisor-plan.md | |');
     write(stateFile, stateContent({
       phase: 3,
       phaseName: 'Plan',
@@ -189,6 +207,8 @@ function main() {
       '| tdd-guide executor task 1 | invoked | .cache/tdd-task-1.md | |',
       ''
     ].join('\n'));
+    assertFileIncludes(path.join(projectRoot, 'phase4-progress.md'), '| tdd-guide executor task 1 | invoked | .cache/tdd-task-1.md | |');
+    assertFileIncludes(path.join(projectRoot, 'phase4-progress.md'), '| 1 | npm test -- greeting | behavior/test failure | tdd-guide | .cache/tdd-task-1-fix-1.md | routed |');
     write(path.join(cache, 'tdd-task-1.md'), 'RED evidence\nGREEN evidence\n');
     write(stateFile, stateContent({
       phase: 4,
@@ -218,6 +238,8 @@ function main() {
       '| review-fix executors | N/A | .cache/code-reviewer.md | no blocking findings |',
       '| advisor critical gate | N/A | .cache/code-reviewer.md | no critical findings |'
     ]));
+    assertFileIncludes(path.join(projectRoot, 'phase5-review.md'), '| code-reviewer | invoked | .cache/code-reviewer.md | |');
+    assertFileIncludes(path.join(projectRoot, 'phase5-review.md'), '| security-reviewer | N/A | file-risk scan | no sensitive files touched |');
     write(stateFile, stateContent({
       phase: 5,
       phaseName: 'Review',
@@ -233,6 +255,8 @@ function main() {
       '| roadmap refresh | invoked | claude-workflow/ROADMAP.md | |',
       '| archive completed folder | invoked | claude-workflow/archive/simulated-feature | |'
     ]));
+    assertFileIncludes(path.join(projectRoot, 'phase6-summary.md'), '| doc-updater | invoked | .cache/doc-updater.md | |');
+    assertFileIncludes(path.join(projectRoot, 'phase6-summary.md'), '| final-validation fix executors | N/A | final validation output | no failures |');
     write(stateFile, stateContent({
       phase: 6,
       phaseName: 'Finalize',
@@ -253,6 +277,13 @@ function main() {
       assert(content.includes('Resume Detection'), `${command} missing Resume Detection section`);
       assert(content.includes('workflow-state.md'), `${command} missing workflow-state.md reference`);
     }
+
+    assertCommandIncludes('commands/claude-workflow-phase1.md', ['code-explorer', 'docs-lookup']);
+    assertCommandIncludes('commands/claude-workflow-phase2.md', ['planner', 'advisor']);
+    assertCommandIncludes('commands/claude-workflow-phase3.md', ['code-architect', 'advisor']);
+    assertCommandIncludes('commands/claude-workflow-phase4.md', ['tdd-guide', 'build-error-resolver']);
+    assertCommandIncludes('commands/claude-workflow-phase5.md', ['code-reviewer', 'security-reviewer', 'tdd-guide', 'build-error-resolver']);
+    assertCommandIncludes('commands/claude-workflow-phase6.md', ['doc-updater', 'tdd-guide', 'build-error-resolver']);
 
     console.log('Workflow walkthrough simulation passed');
   } finally {

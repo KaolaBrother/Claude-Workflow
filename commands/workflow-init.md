@@ -63,6 +63,7 @@ Use this policy:
 | Project Snapshot | yes | What this project is, stack, and main architecture in 2-5 bullets |
 | Commands | yes | Install, test, lint/typecheck/build, dev server commands; use `unknown` when not detected |
 | Non-Negotiable Rules | yes | Stable constraints agents must follow every session |
+| ECC Hook Policy | yes | Treat ECC hooks as background hygiene and avoid duplicate validation |
 | Claude Workflow | yes | Orchestrator, roadmap, compliance, and archive rules in concise form |
 | Project Conventions | optional | Only real detected or user-provided conventions |
 | Known Gotchas | optional | Only repeated hazards that would waste time |
@@ -104,6 +105,13 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - Preserve user changes; never revert unrelated work without explicit request.
 - Verify with the relevant command before claiming completion.
 
+## ECC Hook Policy
+
+- ECC hooks are background hygiene, not workflow validation.
+- Do not duplicate hook checks unless the phase requires broader validation or relevant files changed after the hook ran.
+- Record hook output as evidence only with command, scope, result, and evidence path.
+- For heavy Phase 4 implementation bursts or many subagents, prefer `ECC_HOOK_PROFILE=minimal claude`.
+
 ## Claude Workflow
 
 - Use `/claude-workflow` as the workflow entrypoint and router.
@@ -119,6 +127,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - GitHub issues are the roadmap source of truth when available; `claude-workflow/ROADMAP.md` is the local active-work mirror.
 - Roadmap/research sessions create or refine issues; `/claude-workflow` sessions implement one selected item and refresh the mirror.
 - After resume or compaction, read `workflow-state.md`, the current phase file, and the compliance ledger before continuing.
+- State Bootstrap And Repair: if `/claude-workflow` safely reconstructs one next command from phase artifacts, repair `workflow-state.md` before routing.
 - End each cycle by updating issues, refreshing the roadmap, archiving completed workflow folders, and clearing pending compliance rows.
 
 ## Project Conventions

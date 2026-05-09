@@ -43,6 +43,11 @@ for (const file of phaseCommands) {
 assertIncludes('commands/claude-workflow.md', 'thin router');
 assertIncludes('commands/claude-workflow.md', 'next_command');
 assertIncludes('commands/claude-workflow.md', '/claude-workflow-phase4');
+assertIncludes('commands/claude-workflow.md', '## State Bootstrap And Repair');
+assertIncludes('commands/claude-workflow.md', 'write repaired `workflow-state.md`');
+assertIncludes('commands/claude-workflow.md', 'Do not create `workflow-state.md` for brand-new work');
+assertIncludes('README.md', 'State Bootstrap And Repair');
+assertIncludes('commands/workflow-init.md', 'State Bootstrap And Repair');
 
 assertIncludes('commands/claude-workflow-phase1.md', 'temporary Phase 1 capture');
 assertIncludes('commands/claude-workflow-phase2.md', '.cache/advisor-ideation.md');
@@ -52,10 +57,29 @@ assertIncludes('commands/claude-workflow-phase3.md', 'architect-revision');
 assertIncludes('commands/claude-workflow-phase4.md', 'NO INLINE PHASE 4 FIXES');
 assertIncludes('commands/claude-workflow-phase4.md', 'Failure Routing Ledger');
 assertIncludes('commands/claude-workflow-phase4.md', 'inline_emergency_fallback_authorized: no');
+assertIncludes('commands/claude-workflow-phase4.md', '## Validation Delegation Policy');
+assertIncludes('commands/claude-workflow-phase4.md', 'delegate expensive or noisy validation');
+assertIncludes('commands/claude-workflow-phase4.md', '## Validation De-Duplication');
+assertIncludes('commands/claude-workflow-phase4.md', '## Trivial Inline Edit Exception');
+assertIncludes('commands/claude-workflow-phase4.md', 'one line or mechanically obvious');
 
 assertIncludes('commands/claude-workflow-phase5.md', 'review only; do not edit files');
+assertIncludes('commands/claude-workflow-phase5.md', '## Validation Delegation Policy');
+assertIncludes('commands/claude-workflow-phase5.md', '## Validation De-Duplication');
+assertIncludes('commands/claude-workflow-phase5.md', '## Trivial Inline Edit Exception');
+assertIncludes('commands/claude-workflow-phase5.md', 'one line or mechanically obvious');
 assertIncludes('commands/claude-workflow-phase6.md', 'Final Validation Failure Ledger');
 assertIncludes('commands/claude-workflow-phase6.md', 'Do not repair inline');
+assertIncludes('commands/claude-workflow-phase6.md', '## Validation Delegation Policy');
+assertIncludes('commands/claude-workflow-phase6.md', 'delegate expensive or noisy validation');
+assertIncludes('commands/claude-workflow-phase6.md', '## Validation De-Duplication');
+assertIncludes('commands/claude-workflow-phase6.md', '## Trivial Inline Edit Exception');
+assertIncludes('commands/claude-workflow-phase6.md', 'one line or mechanically obvious');
+assertIncludes('README.md', 'Avoid redundant validation runs');
+assertIncludes('README.md', '## ECC Hook Policy');
+assertIncludes('README.md', 'ECC_HOOK_PROFILE=minimal');
+assertIncludes('commands/workflow-init.md', '## ECC Hook Policy');
+assertIncludes('commands/workflow-init.md', 'ECC_HOOK_PROFILE=minimal');
 
 assert(exists('hooks/hooks.json'), 'hooks/hooks.json is missing');
 assert(exists('scripts/claude-workflow-compact-context.js'), 'compact context hook script is missing');

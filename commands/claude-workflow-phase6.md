@@ -6,7 +6,8 @@ argument-hint: <project name>
 # Claude Workflow Phase 6 - Finalize
 
 Phase 6 proves the workflow is complete and records final metadata. Do not
-repair inline when final validation fails.
+repair inline when final validation fails except under the Trivial Inline Edit
+Exception below.
 
 ## Prerequisite
 
@@ -44,13 +45,76 @@ If ambiguous, stop and ask.
 
 ## Operational Guardrails
 
-- Run fresh full validation before claiming completion.
-- Do not repair inline. Final validation failures are routed.
+- Run or delegate fresh full validation before claiming completion.
+- Do not repair inline. Final validation failures are routed unless the Trivial
+  Inline Edit Exception applies.
 - Do not close a GitHub issue until acceptance criteria pass.
 - Do not archive incomplete workflow folders.
 - Do not stage unrelated user changes.
 - If `/prp-commit` is unavailable, stage the approved implementation, docs, and
   workflow artifacts for this project only.
+
+## Validation Delegation Policy
+
+Phase 6 is the final validation gate. The required full relevant project
+commands must pass, but the main session does not need to personally run noisy
+commands in conversation.
+
+Main session may run small targeted commands by default:
+
+- one focused command needed to classify a final failure
+- one quick lint/typecheck/test command after a trivial inline edit
+- a short smoke check for acceptance evidence
+
+Main session must delegate expensive or noisy validation by default:
+
+- full `cargo test`, full monorepo test suites, full builds, or coverage runs
+- broad lint/typecheck commands across unrelated packages
+- commands expected to produce long logs
+- repeated reproduction of an already-classified final failure
+
+Delegated validation should use a fresh validation subagent when available, or
+the relevant fix agent (`tdd-guide` for behavior/regression/coverage checks,
+`build-error-resolver` for build/type/lint/tooling checks). Raw output goes to:
+
+```text
+claude-workflow/{project}/.cache/final-validation.md
+```
+
+The main session records only the command, pass/fail result, short failure
+summary, classification, evidence path, and next route.
+
+## Validation De-Duplication
+
+Avoid redundant validation runs.
+
+- Phase 6 runs each full relevant final command once against the final candidate
+  state.
+- Do not rerun Phase 4 or Phase 5 targeted commands separately when the Phase 6
+  full command already covers them.
+- If a Phase 6 command already passed after the last relevant file change, cite
+  its evidence path instead of rerunning it.
+- After a routed fix or Trivial Inline Edit Exception edit, rerun the failed or
+  affected command. Rerun broader validation only when shared infrastructure,
+  dependencies, build config, or public behavior changed.
+
+## Trivial Inline Edit Exception
+
+The main session may make a trivial inline edit without emergency fallback only
+when all conditions are true:
+
+- the edit is one line or mechanically obvious
+- no behavior, API, security, architecture, test intent, release, or design
+  judgment is required
+- it fixes finalization friction, formatting, an unused import, a typo, import
+  ordering, or an obvious generated path/name mistake
+- it stays inside the approved implementation/docs/workflow artifact scope
+- it is recorded in `phase6-summary.md` or `workflow-state.md`
+- affected validation is rerun or prior valid evidence is cited under
+  Validation De-Duplication
+
+Anything else is routed to `tdd-guide`, `build-error-resolver`, or back to Phase
+5 when review/security behavior is implicated.
 
 ## Step 1 - Final Validation
 
@@ -67,11 +131,17 @@ fix_owner: tdd-guide or build-error-resolver
 inline_emergency_fallback_authorized: no
 ```
 
-Run the full relevant project commands:
+Run or delegate the full relevant project commands:
 
 ```bash
 # full test suite + type check + lint + build
 # coverage command when available; target >= 80%
+```
+
+Save raw delegated output to:
+
+```text
+claude-workflow/{project}/.cache/final-validation.md
 ```
 
 All must pass before continuing.
@@ -150,6 +220,9 @@ Create `claude-workflow/{project}/phase6-summary.md`:
 
 ## Test Coverage
 [% or reason unavailable]
+
+## Final Validation Evidence
+[commands run/delegated/cited, result, evidence path]
 
 ## Final Validation Failure Ledger
 | Failing Command | Classification | Routed To | Evidence | Status |
