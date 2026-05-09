@@ -22,6 +22,13 @@ The project name is auto-generated from Phase 1 findings and confirmed with the 
 
 When invoking ECC agents, use the unqualified name if available (for example, `planner`). If ECC is installed only as a Claude Code plugin and agents are listed with a namespace, use the plugin-qualified form instead (for example, `everything-claude-code:planner`).
 
+**Context budget discipline:**
+- Keep phase files concise and decision-oriented.
+- Keep `claude-workflow/ROADMAP.md` limited to active unfinished work.
+- Do not paste full docs, full skill files, or archived workflow histories into agent prompts.
+- When invoking ECC agents, pass only the relevant phase excerpts and task details they need.
+- Archive completed workflow folders promptly so startup context remains small.
+
 ---
 
 ## Startup — Detect Mode
@@ -39,10 +46,11 @@ Before selecting work:
    gh issue list --limit 100 --json number,title,state,labels,assignees,updatedAt,url
    ```
 4. Ensure `claude-workflow/ROADMAP.md` exists. If it does not, create it with active work rows from open GitHub issues or a note that GitHub sync is unavailable.
-5. Update `claude-workflow/ROADMAP.md` as a local mirror of active unfinished work:
+5. Update `claude-workflow/ROADMAP.md` as a compact local mirror of active unfinished work:
    - include open GitHub issues relevant to implementation
    - keep only active unfinished work
-   - preserve manual local notes under a clearly marked `Local Notes` section
+   - preserve only short manual local notes under a clearly marked `Local Notes` section
+   - avoid copying old closed issue history into the roadmap
 6. If GitHub issues cannot be fetched, continue from the existing local roadmap and tell the user why GitHub sync was skipped.
 
 When starting new work, prefer selecting from open GitHub issues. If the user provides a free-form task, ask whether to create/link a GitHub issue before Phase 1 when a GitHub remote is available.
@@ -206,7 +214,7 @@ Read `phase1-research.md` fully before proceeding.
 
 Invoke the **`planner` (Opus)** ECC subagent:
 
-Provide the full contents of `phase1-research.md` as context.
+Provide only the relevant contents of `phase1-research.md` as context. Include deliverable, affected area, constraints, and key patterns; omit unrelated notes.
 
 Task: Produce 2–3 implementation approaches. For each: summary, pros, cons, risks, complexity (Small/Medium/Large/XL), and architectural fit. Recommend one with justification. Flag anything that should explicitly NOT be built.
 
@@ -271,7 +279,7 @@ Read `phase1-research.md` and `phase2-ideation.md` fully before proceeding.
 
 Invoke the **`code-architect` (Sonnet)** ECC subagent:
 
-Provide full contents of both phase files as context.
+Provide relevant excerpts of both phase files as context. Include the selected approach, affected files, constraints, patterns, and test expectations; omit unrelated notes.
 
 Task: Produce a complete implementation blueprint:
 - Files to create: path, purpose, key interfaces

@@ -96,6 +96,8 @@ Use a separate research or roadmap session to discover future work and create or
 
 The local roadmap is a working mirror, not the source of truth. Keep only active unfinished work there; completed workflow folders move to `claude-workflow/archive/`.
 
+The workflow also enforces context discipline: `CLAUDE.md` should stay short, the local roadmap should not become history storage, and agent prompts should include only the relevant phase excerpts needed for the delegated task.
+
 ## Phases
 
 | # | Phase | What happens | Output file |

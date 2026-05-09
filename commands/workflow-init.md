@@ -44,11 +44,80 @@ If `gh` is available and a GitHub repo can be inferred from `origin`, inspect op
 gh issue list --limit 100
 ```
 
-If `gh` is unavailable or unauthenticated, continue and note that GitHub roadmap sync is pending.
+If there is no GitHub remote, or if `gh` is unavailable or unauthenticated, skip issue fetching immediately and note that GitHub roadmap sync is pending. Do not spend time retrying GitHub calls during init.
 
 ---
 
-## Step 2 — Create Missing Workflow Structure
+## Step 2 — Update `CLAUDE.md`
+
+Create `CLAUDE.md` if missing. If it exists, preserve all existing content.
+
+Append the following sections only when equivalent related content is missing. Treat headings with the same meaning as equivalent; do not duplicate.
+
+Keep this file concise. It is loaded into agent context often, so it should contain durable operating rules and pointers, not long source material.
+
+```markdown
+## Karpathy-Style Working Principles
+
+- Think before coding: state assumptions, surface ambiguity, and ask when unclear.
+- Keep it simple: solve the requested problem without speculative abstractions.
+- Make surgical changes: touch only what the task requires.
+- Work toward verifiable goals: define success criteria and verify before claiming done.
+
+## Claude Workflow Orchestration
+
+- The main session is the orchestrator for `/claude-workflow`.
+- Keep phase work scoped, resumable, and recorded under `claude-workflow/`.
+- Delegate phase-specific work to ECC agents when useful, while the main session owns integration and final decisions.
+- Use the unqualified ECC agent name when available; otherwise use the `everything-claude-code:` prefix.
+
+## Roadmap And Issues
+
+GitHub issues are the roadmap source of truth when a GitHub remote is configured. `claude-workflow/ROADMAP.md` is only the local working mirror.
+
+Roadmap maintenance roles:
+- Roadmap/research sessions discover future work and create or refine GitHub issues.
+- `/claude-workflow` sessions implement selected issues and keep the local mirror current.
+- Agents must not treat stale local roadmap rows as authoritative if GitHub issue state differs.
+
+At the start of each `/claude-workflow` cycle:
+- Fetch open GitHub issues with `gh issue list` when available.
+- Mirror active unfinished issues into `claude-workflow/ROADMAP.md`.
+- Select one issue or roadmap item to advance.
+- If work starts from a free-form request, create or link a GitHub issue before implementation when possible.
+
+At the end of each `/claude-workflow` cycle:
+- Update or create GitHub issues for any discovered follow-up work.
+- Comment progress on partially completed issues and leave them open.
+- Close linked issues only after acceptance criteria pass.
+- Refresh `claude-workflow/ROADMAP.md` from current open issue state.
+- Move completed workflow folders to `claude-workflow/archive/`.
+- Leave only active unfinished work in `claude-workflow/ROADMAP.md`.
+
+## Context Budget Rules
+
+- Keep `CLAUDE.md` short: principles, links, and operating rules only.
+- Do not paste full external skill files into `CLAUDE.md`; summarize them into durable bullets.
+- Keep `claude-workflow/ROADMAP.md` focused on active unfinished work, not history.
+- Keep phase files concise and archive completed project folders promptly.
+- When invoking agents, pass only the relevant phase file excerpts and task details they need.
+
+## Documentation Map
+
+- `README.md` — project overview and usage.
+- `CHANGELOG.md` — user-visible changes.
+- `docs/README.md` — documentation index.
+- `docs/architecture.md` — system structure and data flow.
+- `docs/api.md` — APIs, schemas, events, and external contracts.
+- `docs/conventions.md` — coding, testing, Git, and review rules.
+- `docs/decisions/` — architecture decision records.
+```
+
+Keep the Karpathy section concise. If the local Karpathy skill file is available, use it only to confirm these four principles; do not paste the long source into `CLAUDE.md`.
+
+---
+
+## Step 3 — Create Missing Workflow Structure
 
 Create only missing directories/files. Do not overwrite existing content.
 
@@ -136,67 +205,6 @@ Document coding style, testing rules, Git practices, naming, and review expectat
 
 - Initialized Claude Workflow documentation structure.
 ```
-
----
-
-## Step 3 — Update `CLAUDE.md`
-
-Create `CLAUDE.md` if missing. If it exists, preserve all existing content.
-
-Append the following sections only when equivalent related content is missing. Treat headings with the same meaning as equivalent; do not duplicate.
-
-```markdown
-## Karpathy-Style Working Principles
-
-- Think before coding: state assumptions, surface ambiguity, and ask when unclear.
-- Keep it simple: solve the requested problem without speculative abstractions.
-- Make surgical changes: touch only what the task requires.
-- Work toward verifiable goals: define success criteria and verify before claiming done.
-
-## Claude Workflow Orchestration
-
-- The main session is the orchestrator for `/claude-workflow`.
-- Keep phase work scoped, resumable, and recorded under `claude-workflow/`.
-- Delegate phase-specific work to ECC agents when useful, while the main session owns integration and final decisions.
-- Use the unqualified ECC agent name when available; otherwise use the `everything-claude-code:` prefix.
-
-## Roadmap And Issues
-
-GitHub issues are the roadmap source of truth when a GitHub remote is configured. `claude-workflow/ROADMAP.md` is only the local working mirror.
-
-Roadmap maintenance roles:
-- Roadmap/research sessions discover future work and create or refine GitHub issues.
-- `/claude-workflow` sessions implement selected issues and keep the local mirror current.
-- Agents must not treat stale local roadmap rows as authoritative if GitHub issue state differs.
-
-At the start of each `/claude-workflow` cycle:
-- Fetch open GitHub issues with `gh issue list` when available.
-- Mirror active unfinished issues into `claude-workflow/ROADMAP.md`.
-- Select one issue or roadmap item to advance.
-- If work starts from a free-form request, create or link a GitHub issue before implementation when possible.
-
-At the end of each `/claude-workflow` cycle:
-- Update or create GitHub issues for any discovered follow-up work.
-- Comment progress on partially completed issues and leave them open.
-- Close linked issues only after acceptance criteria pass.
-- Refresh `claude-workflow/ROADMAP.md` from current open issue state.
-- Move completed workflow folders to `claude-workflow/archive/`.
-- Leave only active unfinished work in `claude-workflow/ROADMAP.md`.
-
-## Documentation Map
-
-- `README.md` — project overview and usage.
-- `CHANGELOG.md` — user-visible changes.
-- `docs/README.md` — documentation index.
-- `docs/architecture.md` — system structure and data flow.
-- `docs/api.md` — APIs, schemas, events, and external contracts.
-- `docs/conventions.md` — coding, testing, Git, and review rules.
-- `docs/decisions/` — architecture decision records.
-```
-
-Keep the Karpathy section concise. If the local Karpathy skill file is available, use it only to confirm these four principles; do not paste the long source into `CLAUDE.md`.
-
----
 
 ## Step 4 — Git And Roadmap Summary
 
