@@ -84,6 +84,61 @@ Manual command uninstall:
 ./uninstall.sh
 ```
 
+## Private Codex Workflow Pack
+
+This repository also includes a self-use Codex workflow pack under
+`plugins/codex-workflow/`. It does not modify or replace the Claude workflow.
+It ports the useful workflow contract to Codex-native skills, using
+`codex-workflow/` project artifacts and `AGENTS.md` guidance instead of
+`claude-workflow/` and `CLAUDE.md`.
+
+Install the local marketplace in Codex from this repo root:
+
+```bash
+codex plugin marketplace add /Users/ylpromax5/Workspace/Claude-Workflow
+```
+
+Then enable/install `codex-workflow` from the private `KaolaBrother Private`
+marketplace in Codex. For direct config enablement, add:
+
+```toml
+[plugins."codex-workflow@kaolabrother-private"]
+enabled = true
+```
+
+Restart Codex after changing plugin config.
+
+On another computer, use the GitHub marketplace source after this repo has been
+pushed:
+
+```bash
+codex plugin marketplace add KaolaBrother/Claude-Workflow
+```
+
+If that computer already has a local clone, this also works from the clone path:
+
+```bash
+codex plugin marketplace add /path/to/Claude-Workflow
+```
+
+The primary skills are:
+
+```text
+codex-workflow-init
+codex-workflow-next
+codex-workflow-research
+codex-workflow-ideation
+codex-workflow-plan
+codex-workflow-execute
+codex-workflow-review
+codex-workflow-finalize
+```
+
+The Codex pack keeps the same six-phase shape, state repair, compliance ledger,
+TDD evidence, review, documentation docking, roadmap refresh, archive, and final
+Git gate. It does not depend on ECC agents. Subagents are optional and should be
+used only when explicitly authorized for the current Codex session.
+
 ## Usage
 
 Initialize each project once:

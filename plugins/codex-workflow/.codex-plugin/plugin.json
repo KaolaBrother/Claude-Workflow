@@ -1,0 +1,41 @@
+{
+  "name": "codex-workflow",
+  "version": "0.1.0",
+  "description": "Private Codex workflow pack with resumable phase artifacts, roadmap mirroring, TDD execution, review, and finalization gates.",
+  "author": {
+    "name": "KaolaBrother",
+    "url": "https://github.com/KaolaBrother"
+  },
+  "homepage": "https://github.com/KaolaBrother/Claude-Workflow",
+  "repository": "https://github.com/KaolaBrother/Claude-Workflow",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "workflow",
+    "skills",
+    "agents",
+    "tdd",
+    "review"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Codex Workflow",
+    "shortDescription": "Private six-phase workflow for Codex",
+    "longDescription": "Private Codex workflow skills for project initialization, resumable phase routing, research, ideation, planning, TDD execution, review, documentation docking, and finalization.",
+    "developerName": "KaolaBrother",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/KaolaBrother/Claude-Workflow",
+    "defaultPrompt": [
+      "Use the Codex workflow for this repo.",
+      "Resume the current Codex workflow.",
+      "Initialize this repo for Codex workflow."
+    ],
+    "brandColor": "#0F766E",
+    "screenshots": []
+  }
+}
