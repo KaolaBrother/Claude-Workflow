@@ -86,11 +86,50 @@ assertIncludes(`${pluginRoot}/skills/codex-workflow-finalize/SKILL.md`, 'Commit 
 
 const repairScript = `${pluginRoot}/scripts/codex-workflow-repair-state.js`;
 const simulateScript = `${pluginRoot}/scripts/simulate-codex-workflow-walkthrough.js`;
+const installAgentsScript = `${pluginRoot}/scripts/install-codex-agent-profiles.js`;
 assert(exists(repairScript), `${repairScript} is missing`);
 assert(exists(simulateScript), `${simulateScript} is missing`);
+assert(exists(installAgentsScript), `${installAgentsScript} is missing`);
 assertIncludes(repairScript, 'codex-workflow');
 assertIncludes(repairScript, 'next_skill');
 assertIncludes(simulateScript, 'Codex workflow walkthrough simulation passed');
+assertIncludes(installAgentsScript, 'BEGIN codex-workflow agents');
+
+const codexAgentRoles = [
+  'code-explorer',
+  'docs-lookup',
+  'planner',
+  'code-architect',
+  'tdd-guide',
+  'build-error-resolver',
+  'code-reviewer',
+  'security-reviewer',
+  'doc-updater',
+];
+
+const agentConfigTemplate = `${pluginRoot}/config/agents.toml`;
+assert(exists(agentConfigTemplate), `${agentConfigTemplate} is missing`);
+assertIncludes(agentConfigTemplate, '[features]');
+assertIncludes(agentConfigTemplate, 'multi_agent = true');
+
+for (const role of codexAgentRoles) {
+  const file = `${pluginRoot}/agents/${role}.toml`;
+  assert(exists(file), `${file} is missing`);
+  assertIncludes(file, 'developer_instructions');
+  assertIncludes(file, 'Claude-Workflow for Codex');
+  assertIncludes(agentConfigTemplate, `[agents.${role}]`);
+  assertIncludes(agentConfigTemplate, `config_file = "./agents/codex-workflow/${role}.toml"`);
+}
+
+assertIncludes(`${pluginRoot}/skills/codex-workflow-init/SKILL.md`, 'install-codex-agent-profiles.js');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-research/SKILL.md`, 'code-explorer');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-research/SKILL.md`, 'docs-lookup');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-ideation/SKILL.md`, 'planner');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-plan/SKILL.md`, 'code-architect');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-execute/SKILL.md`, 'tdd-guide');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-execute/SKILL.md`, 'build-error-resolver');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-review/SKILL.md`, 'security-reviewer');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-finalize/SKILL.md`, 'doc-updater');
 
 assertIncludes('package.json', 'validate:codex-workflow');
 

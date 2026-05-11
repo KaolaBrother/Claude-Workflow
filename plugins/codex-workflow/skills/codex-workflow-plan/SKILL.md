@@ -24,7 +24,7 @@ Write `codex-workflow/{project}/phase3-plan.md` with:
 - safe parallel groups only when write sets are disjoint
 - explicit out-of-scope items
 
-Perform a plan self-review and save it to `.cache/advisor-plan.md`. If gaps are found, revise the blueprint before asking the user to approve execution.
+Use the `code-architect` Codex agent role when subagents are available; otherwise produce the same blueprint in the current session. Perform a plan self-review and save it to `.cache/advisor-plan.md`. If gaps are found, revise the blueprint before asking the user to approve execution.
 
 ## Task Template
 
@@ -46,7 +46,7 @@ Perform a plan self-review and save it to `.cache/advisor-plan.md`. If gaps are 
 ```markdown
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| blueprint | invoked | .cache/architect.md | |
+| code-architect | invoked | .cache/architect.md | |
 | advisor plan gate | invoked | .cache/advisor-plan.md | |
 | blueprint revisions | invoked/N/A | .cache/architect-revision-*.md | reason if N/A |
 ```

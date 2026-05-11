@@ -6,6 +6,7 @@ const { execFileSync } = require('child_process');
 
 const pluginRoot = path.resolve(__dirname, '..');
 const repairScript = path.join(pluginRoot, 'scripts', 'codex-workflow-repair-state.js');
+const installAgentsScript = path.join(pluginRoot, 'scripts', 'install-codex-agent-profiles.js');
 const project = 'simulated-feature';
 
 function assert(condition, message) {
@@ -23,6 +24,13 @@ function read(file) {
 
 function runRepair(workdir, projectArg = project) {
   return execFileSync(process.execPath, [repairScript, projectArg], {
+    cwd: workdir,
+    encoding: 'utf8'
+  });
+}
+
+function runInstallAgents(workdir) {
+  return execFileSync(process.execPath, [installAgentsScript, workdir], {
     cwd: workdir,
     encoding: 'utf8'
   });
@@ -63,6 +71,22 @@ function assertRepair(workdir, expectedSkill, expectedPhase) {
 function main() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-workflow-walkthrough-'));
   try {
+    const installRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-workflow-agents-'));
+    try {
+      const firstInstall = runInstallAgents(installRoot);
+      const secondInstall = runInstallAgents(installRoot);
+      const configFile = path.join(installRoot, '.codex', 'config.toml');
+      const config = read(configFile);
+      assert(firstInstall.includes('copied 9 profiles'), 'agent installer must copy all profiles');
+      assert(secondInstall.includes('copied 9 profiles'), 'agent installer must be repeatable');
+      assert(config.includes('[agents.code-explorer]'), 'agent config missing code-explorer role');
+      assert(config.includes('config_file = "./agents/codex-workflow/tdd-guide.toml"'), 'agent config missing tdd-guide file');
+      assert((config.match(/BEGIN codex-workflow agents/g) || []).length === 1, 'agent installer must not duplicate managed block');
+      assert(fs.existsSync(path.join(installRoot, '.codex', 'agents', 'codex-workflow', 'security-reviewer.toml')), 'agent installer missing copied security profile');
+    } finally {
+      fs.rmSync(installRoot, { recursive: true, force: true });
+    }
+
     const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-workflow-empty-'));
     try {
       fs.mkdirSync(path.join(emptyRoot, 'codex-workflow', project), { recursive: true });
@@ -80,18 +104,18 @@ function main() {
     fs.mkdirSync(cache, { recursive: true });
     write(path.join(workflowRoot, 'ROADMAP.md'), '# Codex Workflow Roadmap\n');
 
-    write(path.join(cache, 'research-notes.md'), 'raw research output\n');
-    write(path.join(cache, 'docs-notes.md'), 'N/A - internal patterns sufficient\n');
+    write(path.join(cache, 'code-explorer.md'), 'raw research output\n');
+    write(path.join(cache, 'docs-lookup.md'), 'N/A - internal patterns sufficient\n');
     write(path.join(projectRoot, 'phase1-research.md'), phaseFile('Phase 1 - Research', [
-      '| research evidence | invoked | .cache/research-notes.md | |',
-      '| docs lookup | N/A | .cache/docs-notes.md | internal patterns sufficient |'
+      '| code-explorer | invoked | .cache/code-explorer.md | |',
+      '| docs-lookup | N/A | .cache/docs-lookup.md | internal patterns sufficient |'
     ]));
     assertRepair(tmp, `codex-workflow-ideation ${project}`, 2);
 
     write(path.join(cache, 'planner.md'), 'approach analysis\n');
     write(path.join(cache, 'advisor-ideation.md'), 'advisor gate\n');
     write(path.join(projectRoot, 'phase2-ideation.md'), phaseFile('Phase 2 - Ideation', [
-      '| approach analysis | invoked | .cache/planner.md | |',
+      '| planner | invoked | .cache/planner.md | |',
       '| advisor ideation gate | invoked | .cache/advisor-ideation.md | |'
     ]));
     fs.rmSync(stateFile, { force: true });
@@ -112,7 +136,7 @@ function main() {
       '## Required Agent Compliance',
       '| Requirement | Status | Evidence | Skip Reason |',
       '|-------------|--------|----------|-------------|',
-      '| blueprint | invoked | .cache/architect.md | |',
+      '| code-architect | invoked | .cache/architect.md | |',
       '| advisor plan gate | invoked | .cache/advisor-plan.md | |',
       '| blueprint revisions | N/A | .cache/advisor-plan.md | advisor found no gaps |',
       ''
@@ -131,12 +155,12 @@ function main() {
       '## Failure Routing Ledger',
       '| Task | Failing Command | Classification | Routed To | Evidence | Status |',
       '|------|-----------------|----------------|-----------|----------|--------|',
-      '| 1 | npm test -- greeting | behavior/test failure | current-codex-session | .cache/task-1-fix-1.md | routed |',
+      '| 1 | npm test -- greeting | behavior/test failure | tdd-guide | .cache/tdd-task-1-fix-1.md | routed |',
       '',
       '## Required Agent Compliance',
       '| Requirement | Status | Evidence | Skip Reason |',
       '|-------------|--------|----------|-------------|',
-      '| executor task 1 | invoked | .cache/task-1.md | |',
+      '| tdd-guide executor task 1 | invoked | .cache/tdd-task-1.md | |',
       ''
     ].join('\n'));
     fs.rmSync(stateFile, { force: true });

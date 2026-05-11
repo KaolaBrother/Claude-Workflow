@@ -14,16 +14,17 @@ Read:
 ```text
 codex-workflow/{project}/workflow-state.md
 codex-workflow/{project}/phase1-research.md
-codex-workflow/{project}/.cache/research-notes.md
+codex-workflow/{project}/.cache/code-explorer.md
 ```
 
 ## Steps
 
-1. Evaluate 2-3 grounded approaches from Phase 1 facts.
-2. For each option, record summary, pros, cons, risk, complexity, and what not to build.
-3. Perform a self-review gate: check for missing approaches, hidden risks, and overbuilt scope. Save it to `.cache/advisor-ideation.md`.
-4. Present options and wait for user selection.
-5. Write `phase2-ideation.md` only after selection.
+1. Use the `planner` Codex agent role when subagents are available; otherwise perform the same strategy analysis in the current session.
+2. Evaluate 2-3 grounded approaches from Phase 1 facts.
+3. For each option, record summary, pros, cons, risk, complexity, and what not to build.
+4. Perform a self-review gate: check for missing approaches, hidden risks, and overbuilt scope. Save it to `.cache/advisor-ideation.md`.
+5. Present options and wait for user selection.
+6. Write `phase2-ideation.md` only after selection.
 
 ## Phase File
 
@@ -45,7 +46,7 @@ summary of .cache/advisor-ideation.md
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| approach analysis | invoked | .cache/planner.md | |
+| planner | invoked | .cache/planner.md | |
 | advisor ideation gate | invoked | .cache/advisor-ideation.md | |
 ```
 

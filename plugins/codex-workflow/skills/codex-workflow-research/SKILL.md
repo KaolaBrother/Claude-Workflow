@@ -16,11 +16,12 @@ Phase 1 discovers facts only. Do not choose a solution or edit implementation fi
    - success criteria
    - linked issue, or `none`
 2. Create `codex-workflow/_phase1-pending/` until the project name is confirmed.
-3. Inspect relevant files, tests, config, docs, and issues. Use official docs only when current external behavior matters.
-4. Write raw notes to `.cache/research-notes.md` and `.cache/docs-notes.md` when external docs are used.
-5. Score completeness from 0-10. Stop and ask if below 7.
-6. Confirm a 2-4 word kebab-case project name.
-7. Write `codex-workflow/{project}/phase1-research.md` and update `workflow-state.md`.
+3. Inspect relevant files, tests, config, docs, and issues. Use the `code-explorer` Codex agent role when subagents are available; otherwise perform the same read-only research in the current session.
+4. Use the `docs-lookup` Codex agent role only when current external behavior matters; otherwise record why docs lookup is N/A.
+5. Write raw notes to `.cache/code-explorer.md` and `.cache/docs-lookup.md` when used.
+6. Score completeness from 0-10. Stop and ask if below 7.
+7. Confirm a 2-4 word kebab-case project name.
+8. Write `codex-workflow/{project}/phase1-research.md` and update `workflow-state.md`.
 
 ## Phase File
 
@@ -53,8 +54,8 @@ X/10
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| research evidence | invoked | .cache/research-notes.md | |
-| docs lookup | invoked/N/A | .cache/docs-notes.md or docs-impact check | reason if N/A |
+| code-explorer | invoked | .cache/code-explorer.md | |
+| docs-lookup | invoked/N/A | .cache/docs-lookup.md or docs-impact check | reason if N/A |
 ```
 
 State next pointer: `next_skill: codex-workflow-ideation {project}`.

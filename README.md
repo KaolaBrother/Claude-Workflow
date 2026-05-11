@@ -92,34 +92,56 @@ It ports the useful workflow contract to Codex-native skills, using
 `codex-workflow/` project artifacts and `AGENTS.md` guidance instead of
 `claude-workflow/` and `CLAUDE.md`.
 
-Install the local marketplace in Codex from this repo root:
+### Install On Another Computer
+
+Prerequisites:
+
+- Codex is installed and authenticated on the target computer.
+- The target computer can access this GitHub repository.
+- Restart Codex after adding, upgrading, installing, or enabling the plugin.
+
+Fresh install from GitHub:
 
 ```bash
-codex plugin marketplace add /Users/ylpromax5/Workspace/Claude-Workflow
+codex plugin marketplace add KaolaBrother/Claude-Workflow
+codex
 ```
 
-Then enable/install `codex-workflow` from the private `KaolaBrother Private`
-marketplace in Codex. For direct config enablement, add:
+Then install or enable `codex-workflow` from the `kaolabrother-private`
+marketplace in the Codex plugin directory. For direct config enablement, add:
 
 ```toml
 [plugins."codex-workflow@kaolabrother-private"]
 enabled = true
 ```
 
-Restart Codex after changing plugin config.
+After restarting Codex, open the target project and ask Codex to initialize the
+workflow:
 
-On another computer, use the GitHub marketplace source after this repo has been
-pushed:
-
-```bash
-codex plugin marketplace add KaolaBrother/Claude-Workflow
+```text
+Use Claude-Workflow for Codex in this repo.
+Run workflow-init for Claude-Workflow for Codex.
 ```
 
-If that computer already has a local clone, this also works from the clone path:
+Install from a local clone when working offline or testing local changes:
 
 ```bash
+git clone https://github.com/KaolaBrother/Claude-Workflow.git
 codex plugin marketplace add /path/to/Claude-Workflow
 ```
+
+Update an existing Codex install to the newest marketplace version:
+
+```bash
+codex plugin marketplace upgrade kaolabrother-private
+```
+
+Restart Codex, then rerun `codex-workflow-init` in any project that should
+receive the newest managed agent profiles and project config.
+
+To verify a project was initialized for Codex, check that `.codex/config.toml`
+contains a `# BEGIN codex-workflow agents` managed block and that
+`.codex/agents/codex-workflow/` contains the role profile files.
 
 The primary skills are:
 
@@ -136,8 +158,61 @@ codex-workflow-finalize
 
 The Codex pack keeps the same six-phase shape, state repair, compliance ledger,
 TDD evidence, review, documentation docking, roadmap refresh, archive, and final
-Git gate. It does not depend on ECC agents. Subagents are optional and should be
-used only when explicitly authorized for the current Codex session.
+Git gate. It does not depend on ECC agents. Instead, `codex-workflow-init`
+automatically installs Codex-native role profiles that mirror the ECC workflow
+roles:
+
+```text
+code-explorer
+docs-lookup
+planner
+code-architect
+tdd-guide
+build-error-resolver
+code-reviewer
+security-reviewer
+doc-updater
+```
+
+The managed setup copies role configs into `.codex/agents/codex-workflow/` and
+maintains a `# BEGIN codex-workflow agents` block in `.codex/config.toml` while
+preserving unrelated config. When Codex subagents are available, phases use
+those roles for detached research, planning, execution, repair, review, and
+documentation work; otherwise the current Codex session follows the same role
+contracts locally.
+
+## Release Versioning
+
+Current official release versions:
+
+- `claude-workflow` package and Claude plugin: `2.1.0`
+- `codex-workflow` plugin manifest: `0.2.0`
+
+The root `package.json` version is the official repository and Claude workflow
+release version. The Codex plugin has its own manifest version in
+`plugins/codex-workflow/.codex-plugin/plugin.json`; bump it whenever the Codex
+plugin install surface, skills, agent profiles, or workflow behavior changes.
+
+Use SemVer for both versions:
+
+- `MAJOR`: breaking command, artifact, plugin, or workflow-contract changes.
+- `MINOR`: backward-compatible workflow phases, agent roles, install features,
+  or new automation.
+- `PATCH`: compatible bug fixes, validation fixes, documentation-only updates,
+  or small install clarifications.
+
+Official release checklist:
+
+```bash
+npm test
+git diff --check
+git tag claude-workflow-v2.1.0
+git push origin main --tags
+```
+
+Create a tag only when publishing a tagged release. For normal development
+pushes, update the versions and changelog, run validation, commit, and push the
+branch.
 
 ## Usage
 

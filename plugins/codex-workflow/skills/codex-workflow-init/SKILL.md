@@ -23,7 +23,23 @@ find docs -maxdepth 3 -type f 2>/dev/null | sort
 
 3. Create or update `AGENTS.md` only when needed. Preserve user-authored content.
 4. Do not create or edit CLAUDE.md.
-5. Create only missing scaffold files:
+5. Install or refresh the managed Codex agent role profiles:
+
+```bash
+plugin_root="plugins/codex-workflow"
+if [ ! -f "$plugin_root/scripts/install-codex-agent-profiles.js" ]; then
+  script_path="$(find "$HOME/.codex/plugins/cache" -path '*/codex-workflow/*/scripts/install-codex-agent-profiles.js' -print -quit 2>/dev/null)"
+  plugin_root="$(dirname "$(dirname "$script_path")")"
+fi
+test -f "$plugin_root/scripts/install-codex-agent-profiles.js"
+node "$plugin_root/scripts/install-codex-agent-profiles.js" "$PWD"
+```
+
+This creates or refreshes `.codex/agents/codex-workflow/*.toml` and a managed
+`# BEGIN codex-workflow agents` block in `.codex/config.toml`. Preserve all
+unrelated `.codex/config.toml` content.
+
+6. Create only missing scaffold files:
 
 ```text
 codex-workflow/
@@ -38,7 +54,7 @@ docs/
 CHANGELOG.md
 ```
 
-6. Do not create `codex-workflow/{project}/workflow-state.md` during init. State belongs to an active workflow project.
+7. Do not create `codex-workflow/{project}/workflow-state.md` during init. State belongs to an active workflow project.
 
 ## `AGENTS.md` Addendum
 
@@ -50,6 +66,8 @@ Add a concise `## Codex Workflow` section if none exists:
 - Use GitHub issues as source of truth when available; keep `codex-workflow/ROADMAP.md` as the local active-work mirror.
 - Preserve user changes and avoid destructive Git operations without explicit approval.
 - Verify relevant tests before claiming completion.
+- Codex workflow agent profiles live in `.codex/agents/codex-workflow/` and are
+  wired by the managed block in `.codex/config.toml`.
 
 ## Initial Roadmap Body
 

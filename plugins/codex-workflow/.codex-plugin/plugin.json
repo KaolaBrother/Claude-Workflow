@@ -1,7 +1,7 @@
 {
   "name": "codex-workflow",
-  "version": "0.1.1",
-  "description": "Claude-Workflow for Codex, a public repo-backed workflow pack with resumable phase artifacts, roadmap mirroring, TDD execution, review, and finalization gates.",
+  "version": "0.2.0",
+  "description": "Claude-Workflow for Codex, a public repo-backed workflow pack with resumable phase artifacts, automated Codex agent profiles, roadmap mirroring, TDD execution, review, and finalization gates.",
   "author": {
     "name": "KaolaBrother",
     "url": "https://github.com/KaolaBrother"
@@ -23,7 +23,7 @@
   "interface": {
     "displayName": "Claude-Workflow for Codex",
     "shortDescription": "Public six-phase Claude-Workflow port for Codex",
-    "longDescription": "Claude-Workflow for Codex exposes public repo-backed skills for project initialization, workflow-init, resumable phase routing, research, ideation, planning, TDD execution, review, documentation docking, and finalization.",
+    "longDescription": "Claude-Workflow for Codex exposes public repo-backed skills and Codex-native agent profiles for project initialization, workflow-init, resumable phase routing, research, ideation, planning, TDD execution, review, documentation docking, and finalization.",
     "developerName": "KaolaBrother",
     "category": "Coding",
     "capabilities": [

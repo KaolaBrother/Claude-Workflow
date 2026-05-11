@@ -20,9 +20,9 @@ codex-workflow/{project}/phase4-progress.md
 ## Review Steps
 
 1. Inspect changed files and task evidence.
-2. Use `codex review` when useful for a detached review pass; otherwise perform a review stance locally.
+2. Use the `code-reviewer` Codex agent role or `codex review` when useful for a detached review pass; otherwise perform a review stance locally.
 3. Check correctness, scope, naming, error handling, test coverage, debug statements, and validation evidence.
-4. Run a security-sensitive file scan. If auth, payments, user data, filesystem access, external APIs, or secrets changed, perform a security review.
+4. Run a security-sensitive file scan. If auth, payments, user data, filesystem access, external APIs, or secrets changed, use the `security-reviewer` Codex agent role or perform the same security review locally.
 5. Route CRITICAL/HIGH findings back to implementation before Phase 6. MEDIUM/LOW findings may become follow-ups.
 6. Save raw review output to `.cache/code-reviewer.md` and `.cache/security-reviewer.md` when used.
 

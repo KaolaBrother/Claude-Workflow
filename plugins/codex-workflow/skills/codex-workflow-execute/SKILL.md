@@ -5,14 +5,15 @@ description: Use when Phase 3 plan exists and Claude-Workflow for Codex, also ca
 
 # Codex Workflow Execute
 
-Phase 4 implements the plan. The default executor is the current Codex session. Use subagents only when the user explicitly authorizes delegation.
+Phase 4 implements the plan. Prefer the `tdd-guide` Codex agent role for assigned implementation tasks when subagents are available. Use the current Codex session as the fallback executor when session policy, availability, or user direction prevents delegation.
 
 ## Guardrails
 
 - Stay inside the active task write set.
 - Use RED -> GREEN -> REFACTOR for behavior changes.
 - Do not mark a task complete while validation fails.
-- Route build/type/lint/tooling failures separately from behavior failures.
+- Route behavior/test failures to `tdd-guide`.
+- Route build/type/lint/tooling failures to `build-error-resolver`.
 - Record every command, result, and evidence path.
 
 ## Progress File
@@ -34,7 +35,7 @@ Create or update `codex-workflow/{project}/phase4-progress.md`:
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| executor task 1 | pending | | |
+| tdd-guide executor task 1 | pending | | |
 ```
 
 ## Per-Task Loop
@@ -44,7 +45,13 @@ Create or update `codex-workflow/{project}/phase4-progress.md`:
 3. GREEN: implement the minimal change and run the same test until it passes.
 4. REFACTOR: clean only within scope while tests stay green.
 5. Run the exact validation command from `phase3-plan.md`.
-6. Save raw evidence to `.cache/task-{n}.md`.
+6. Save raw evidence to `.cache/tdd-task-{n}.md`.
 7. Mark the task complete only after validation passes.
+
+If validation fails after GREEN or REFACTOR, classify the failure in the Failure
+Routing Ledger:
+
+- behavior, regression, coverage, or acceptance failure -> `tdd-guide`
+- build, type, lint, dependency, formatting, or tooling failure -> `build-error-resolver`
 
 When all tasks are complete, set `next_skill: codex-workflow-review {project}`.
