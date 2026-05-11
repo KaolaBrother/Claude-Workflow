@@ -36,7 +36,12 @@ Keep `codex-workflow/ROADMAP.md` as a compact mirror of active unfinished work.
 Read `codex-workflow/{project}/workflow-state.md` first. If missing or stale, run:
 
 ```bash
-node plugins/codex-workflow/scripts/codex-workflow-repair-state.js {project-or-empty}
+repair_script="plugins/codex-workflow/scripts/codex-workflow-repair-state.js"
+if [ ! -f "$repair_script" ]; then
+  repair_script="$(find "$HOME/.codex/plugins/cache" -path '*/codex-workflow/*/scripts/codex-workflow-repair-state.js' -print -quit 2>/dev/null)"
+fi
+test -f "$repair_script"
+node "$repair_script" {project-or-empty}
 ```
 
 Use the repaired state only when it identifies exactly one safe `next_skill`.

@@ -77,6 +77,7 @@ assertIncludes(`${pluginRoot}/skills/codex-workflow-init/SKILL.md`, 'AGENTS.md')
 assertIncludes(`${pluginRoot}/skills/codex-workflow-init/SKILL.md`, 'Do not create or edit CLAUDE.md');
 assertIncludes(`${pluginRoot}/skills/codex-workflow-next/SKILL.md`, 'next_skill');
 assertIncludes(`${pluginRoot}/skills/codex-workflow-next/SKILL.md`, 'codex-workflow-repair-state.js');
+assertIncludes(`${pluginRoot}/skills/codex-workflow-next/SKILL.md`, '.codex/plugins/cache');
 assertIncludes(`${pluginRoot}/skills/codex-workflow-execute/SKILL.md`, 'Required Agent Compliance');
 assertIncludes(`${pluginRoot}/skills/codex-workflow-execute/SKILL.md`, 'RED');
 assertIncludes(`${pluginRoot}/skills/codex-workflow-execute/SKILL.md`, 'GREEN');

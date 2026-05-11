@@ -185,8 +185,8 @@ contracts locally.
 
 Current official release versions:
 
-- `claude-workflow` package and Claude plugin: `2.1.0`
-- `codex-workflow` plugin manifest: `0.2.0`
+- `claude-workflow` package and Claude plugin: `2.1.1`
+- `codex-workflow` plugin manifest: `0.2.1`
 
 The root `package.json` version is the official repository and Claude workflow
 release version. The Codex plugin has its own manifest version in
