@@ -1,6 +1,6 @@
 ---
 name: codex-workflow-finalize
-description: Use when reviewed private Codex workflow work needs final validation, documentation docking, issue or roadmap closure, archiving, and Git finalization.
+description: Use when reviewed Claude-Workflow for Codex work, also called claude-workflow, needs final validation, documentation docking, issue or roadmap closure, archiving, and Git finalization.
 ---
 
 # Codex Workflow Finalize

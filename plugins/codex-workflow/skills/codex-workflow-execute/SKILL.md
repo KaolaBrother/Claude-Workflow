@@ -1,6 +1,6 @@
 ---
 name: codex-workflow-execute
-description: Use when Phase 3 plan exists and the private Codex workflow needs TDD implementation, scoped validation, and failure routing.
+description: Use when Phase 3 plan exists and Claude-Workflow for Codex, also called claude-workflow, needs TDD implementation, scoped validation, and failure routing.
 ---
 
 # Codex Workflow Execute

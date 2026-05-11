@@ -1,6 +1,6 @@
 ---
 name: codex-workflow-review
-description: Use when Phase 4 tasks are complete and the private Codex workflow needs quality review, optional security review, and review-fix routing.
+description: Use when Phase 4 tasks are complete and Claude-Workflow for Codex, also called claude-workflow, needs quality review, optional security review, and review-fix routing.
 ---
 
 # Codex Workflow Review

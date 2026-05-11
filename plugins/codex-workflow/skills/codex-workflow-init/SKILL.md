@@ -1,11 +1,11 @@
 ---
 name: codex-workflow-init
-description: Use when setting up a project for the private Codex workflow or refreshing its Codex-specific guidance, roadmap, and documentation scaffold.
+description: Use when setting up a project for Claude-Workflow for Codex, also called claude-workflow or workflow-init, or refreshing its Codex-specific guidance, roadmap, and documentation scaffold.
 ---
 
 # Codex Workflow Init
 
-Bootstrap the current repo for repeated private Codex workflow cycles. Preserve existing project guidance and add only missing Codex-specific structure.
+Bootstrap the current repo for repeated Claude-Workflow for Codex cycles. Preserve existing project guidance and add only missing Codex-specific structure.
 
 ## Required Behavior
 

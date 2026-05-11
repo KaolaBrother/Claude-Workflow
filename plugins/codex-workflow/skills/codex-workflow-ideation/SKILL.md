@@ -1,6 +1,6 @@
 ---
 name: codex-workflow-ideation
-description: Use when Phase 1 facts exist and the private Codex workflow needs approach comparison and user strategy selection.
+description: Use when Phase 1 facts exist and Claude-Workflow for Codex, also called claude-workflow, needs approach comparison and user strategy selection.
 ---
 
 # Codex Workflow Ideation

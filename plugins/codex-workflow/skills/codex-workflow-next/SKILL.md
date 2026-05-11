@@ -1,6 +1,6 @@
 ---
 name: codex-workflow-next
-description: Use when resuming, routing, or starting a private Codex workflow project from codex-workflow state and phase artifacts.
+description: Use when resuming, routing, or starting a Claude-Workflow for Codex project, also called claude-workflow, from codex-workflow state and phase artifacts.
 ---
 
 # Codex Workflow Next

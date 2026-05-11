@@ -40,9 +40,12 @@ assert(pluginJson.skills === './skills/', 'Codex plugin must expose ./skills/');
 assert(!Object.prototype.hasOwnProperty.call(pluginJson, 'commands'), 'Codex plugin must not declare Claude commands');
 assert(!JSON.stringify(pluginJson).includes('ECC'), 'Codex plugin must not depend on ECC');
 assert(!JSON.stringify(pluginJson).includes('Claude Code'), 'Codex plugin metadata must stay Codex-only');
+assert(JSON.stringify(pluginJson).includes('Claude-Workflow for Codex'), 'Codex plugin metadata must be discoverable as Claude-Workflow for Codex');
+assert(JSON.stringify(pluginJson).includes('workflow-init'), 'Codex plugin metadata must include workflow-init for app search');
 
 const marketplaceJson = parseJson(marketplacePath);
 assert(marketplaceJson.name === 'kaolabrother-private', 'private marketplace name must stay stable');
+assert(marketplaceJson.interface && marketplaceJson.interface.displayName === 'KaolaBrother Claude-Workflow', 'marketplace display name must identify Claude-Workflow');
 assert(Array.isArray(marketplaceJson.plugins), 'marketplace must define plugins');
 const entry = marketplaceJson.plugins.find(plugin => plugin.name === 'codex-workflow');
 assert(entry, 'marketplace must list codex-workflow');

@@ -1,6 +1,6 @@
 ---
 name: codex-workflow-research
-description: Use when beginning Phase 1 of a private Codex workflow and gathering facts before strategy or implementation.
+description: Use when beginning Phase 1 of Claude-Workflow for Codex, also called claude-workflow, and gathering facts before strategy or implementation.
 ---
 
 # Codex Workflow Research

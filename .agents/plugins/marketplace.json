@@ -1,7 +1,7 @@
 {
   "name": "kaolabrother-private",
   "interface": {
-    "displayName": "KaolaBrother Private"
+    "displayName": "KaolaBrother Claude-Workflow"
   },
   "plugins": [
     {

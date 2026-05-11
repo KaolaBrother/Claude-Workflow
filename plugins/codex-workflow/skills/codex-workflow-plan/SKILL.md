@@ -1,6 +1,6 @@
 ---
 name: codex-workflow-plan
-description: Use when a private Codex workflow has selected an approach and needs an executable implementation blueprint.
+description: Use when Claude-Workflow for Codex, also called claude-workflow, has selected an approach and needs an executable implementation blueprint.
 ---
 
 # Codex Workflow Plan
