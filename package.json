@@ -1,14 +1,14 @@
 {
-  "name": "claude-workflow",
-  "version": "2.1.1",
-  "description": "6-phase Claude-native development workflow — Research, Ideation, Plan, Execute, Review, Finalize. Multi-model orchestration via ECC agents. Fully resumable across sessions.",
+  "name": "kaola-workflow",
+  "version": "3.0.0",
+  "description": "6-phase Kaola-Workflow for Claude Code and Codex — Research, Ideation, Plan, Execute, Review, Finalize. Multi-model orchestration with resumable phase artifacts.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/KaolaBrother/Claude-Workflow.git"
+    "url": "git+https://github.com/KaolaBrother/Kaola-Workflow.git"
   },
-  "homepage": "https://github.com/KaolaBrother/Claude-Workflow#readme",
+  "homepage": "https://github.com/KaolaBrother/Kaola-Workflow#readme",
   "bugs": {
-    "url": "https://github.com/KaolaBrother/Claude-Workflow/issues"
+    "url": "https://github.com/KaolaBrother/Kaola-Workflow/issues"
   },
   "keywords": [
     "claude-code",
@@ -32,9 +32,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "npm run test:claude-workflow && npm run validate:codex-workflow",
-    "test:claude-workflow": "bash -n install.sh uninstall.sh && node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8')); JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf8'))\" && node scripts/validate-workflow-contracts.js && node scripts/simulate-workflow-walkthrough.js && claude plugin validate .",
-    "validate:codex-workflow": "node scripts/validate-codex-workflow-contracts.js && node plugins/codex-workflow/scripts/simulate-codex-workflow-walkthrough.js"
+    "test": "npm run test:kaola-workflow:claude && npm run test:kaola-workflow:codex",
+    "test:kaola-workflow:claude": "bash -n install.sh uninstall.sh && node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8')); JSON.parse(require('fs').readFileSync('.claude-plugin/plugin.json', 'utf8'))\" && node scripts/validate-workflow-contracts.js && node scripts/simulate-workflow-walkthrough.js && claude plugin validate .",
+    "test:kaola-workflow:codex": "node scripts/validate-kaola-workflow-contracts.js && node plugins/kaola-workflow/scripts/simulate-kaola-workflow-walkthrough.js"
   },
   "peerDependencies": {
     "ecc-universal": ">=1.10.0 || >=2.0.0-rc.0"

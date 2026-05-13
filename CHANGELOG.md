@@ -1,10 +1,22 @@
 # Changelog
 
+## 3.0.0 - 2026-05-13
+
+### Changed
+
+- Renamed the project, GitHub repository, Claude Code plugin, Codex plugin,
+  commands, skills, managed agent profiles, and artifact directory to
+  `Kaola-Workflow` / `kaola-workflow`.
+- Updated install docs for the `KaolaBrother/Kaola-Workflow` repository and
+  `kaolabrother-kaola-workflow` marketplaces.
+- Kept state repair and compact-resume compatibility for pre-rename active
+  workflow artifact directories.
+
 ## 2.1.1 - 2026-05-11
 
 ### Fixed
 
-- Made `codex-workflow-next` locate the Codex repair-state script from the
+- Made `kaola-workflow-next` locate the Codex repair-state script from the
   installed Codex plugin cache when the workflow pack is not checked out inside
   the target project.
 
@@ -12,12 +24,12 @@
 
 ### Added
 
-- Added Codex-native agent profile installation for the Codex workflow pack.
+- Added Codex-native agent profile installation for the Kaola-Workflow pack.
 - Added Codex install, update, verification, and release-versioning guidance to
   the README.
 
 ### Changed
 
 - Bumped the root workflow package and Claude plugin manifest to `2.1.0`.
-- Bumped the Codex workflow plugin manifest to `0.2.0` for the new Codex agent
+- Bumped the Kaola-Workflow plugin manifest to `0.2.0` for the new Codex agent
   profile install surface.

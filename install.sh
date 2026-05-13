@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 COMMANDS_DIR="$HOME/.claude/commands"
-SUPPORT_DIR="$HOME/.claude/claude-workflow"
+SUPPORT_DIR="$HOME/.claude/kaola-workflow"
 SUPPORT_SCRIPTS_DIR="$SUPPORT_DIR/scripts"
 SOURCE_COMMANDS_DIR="$SCRIPT_DIR/commands"
 SOURCE_SCRIPTS_DIR="$SCRIPT_DIR/scripts"
@@ -26,7 +26,7 @@ for arg in "$@"; do
   esac
 done
 
-echo "Claude Workflow — installer"
+echo "Kaola-Workflow — installer"
 echo ""
 
 # Check ECC is installed
@@ -108,7 +108,7 @@ if [[ "$installed" -eq 0 ]]; then
 fi
 
 mkdir -p "$SUPPORT_SCRIPTS_DIR"
-for script_file in "$SOURCE_SCRIPTS_DIR"/claude-workflow-repair-state.js; do
+for script_file in "$SOURCE_SCRIPTS_DIR"/kaola-workflow-repair-state.js; do
   if [[ -f "$script_file" ]]; then
     cp "$script_file" "$SUPPORT_SCRIPTS_DIR/$(basename "$script_file")"
     chmod +x "$SUPPORT_SCRIPTS_DIR/$(basename "$script_file")"

@@ -1,13 +1,13 @@
 {
-  "name": "claude-workflow",
-  "version": "2.1.1",
+  "name": "kaola-workflow",
+  "version": "3.0.0",
   "description": "A 6-phase Claude Code workflow with resumable phase artifacts and ECC agent orchestration.",
   "author": {
     "name": "KaolaBrother",
     "url": "https://github.com/KaolaBrother"
   },
-  "homepage": "https://github.com/KaolaBrother/Claude-Workflow",
-  "repository": "https://github.com/KaolaBrother/Claude-Workflow",
+  "homepage": "https://github.com/KaolaBrother/Kaola-Workflow",
+  "repository": "https://github.com/KaolaBrother/Kaola-Workflow",
   "license": "MIT",
   "keywords": [
     "claude-code",

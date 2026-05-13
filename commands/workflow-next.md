@@ -1,5 +1,5 @@
 ---
-description: Workflow Next. Thin router for Claude Workflow. Detects active work, reconstructs resume state, and routes to the correct phase command.
+description: Workflow Next. Thin router for Kaola-Workflow. Detects active work, reconstructs resume state, and routes to the correct phase command.
 argument-hint: (optional project name or task description)
 ---
 
@@ -63,28 +63,28 @@ If a GitHub remote and authenticated `gh` are available, fetch open issues:
 gh issue list --limit 100 --json number,title,state,labels,assignees,updatedAt,url
 ```
 
-Ensure `claude-workflow/ROADMAP.md` exists. Keep it as a compact mirror of
+Ensure `kaola-workflow/ROADMAP.md` exists. Keep it as a compact mirror of
 active unfinished work only. If GitHub is unavailable, continue from the local
 roadmap and say why sync was skipped.
 
 ## Startup Step 3 - Select Project
 
-If `$ARGUMENTS` names an existing `claude-workflow/{project}/` directory, use
+If `$ARGUMENTS` names an existing `kaola-workflow/{project}/` directory, use
 that project.
 
-Otherwise list active workflow folders under `claude-workflow/` that contain at
+Otherwise list active workflow folders under `kaola-workflow/` that contain at
 least one `phase*.md` file. Skip `archive/`.
 
 If no active project is selected, ask the user what to implement. New work starts
 with:
 
 ```text
-/claude-workflow-phase1 <task description or issue>
+/kaola-workflow-phase1 <task description or issue>
 ```
 
 ## Resume Detection
 
-Read `claude-workflow/{project}/workflow-state.md` first if it exists.
+Read `kaola-workflow/{project}/workflow-state.md` first if it exists.
 
 Validate the state file:
 - `current_phase` agrees with the highest completed phase artifact
@@ -99,9 +99,9 @@ read `workflow-state.md` again:
 
 ```bash
 for helper in \
-  "${CLAUDE_PLUGIN_ROOT:-}/scripts/claude-workflow-repair-state.js" \
-  "$HOME/.claude/claude-workflow/scripts/claude-workflow-repair-state.js" \
-  "./scripts/claude-workflow-repair-state.js"; do
+  "${CLAUDE_PLUGIN_ROOT:-}/scripts/kaola-workflow-repair-state.js" \
+  "$HOME/.claude/kaola-workflow/scripts/kaola-workflow-repair-state.js" \
+  "./scripts/kaola-workflow-repair-state.js"; do
   [ -f "$helper" ] && { node "$helper" "$ARGUMENTS"; break; }
 done
 ```
@@ -112,14 +112,14 @@ If missing or invalid, reconstruct:
 
 ```text
 phase6-summary.md exists -> workflow complete; show summary and stop
-phase5-review.md exists -> /claude-workflow-phase6 {project}
+phase5-review.md exists -> /kaola-workflow-phase6 {project}
 phase4-progress.md exists:
-  tasks pending/in_progress -> /claude-workflow-phase4 {project}
-  all tasks complete -> /claude-workflow-phase5 {project}
-phase3-plan.md exists -> /claude-workflow-phase4 {project}
-phase2-ideation.md exists -> /claude-workflow-phase3 {project}
-phase1-research.md exists -> /claude-workflow-phase2 {project}
-no phase file -> /claude-workflow-phase1 <task>
+  tasks pending/in_progress -> /kaola-workflow-phase4 {project}
+  all tasks complete -> /kaola-workflow-phase5 {project}
+phase3-plan.md exists -> /kaola-workflow-phase4 {project}
+phase2-ideation.md exists -> /kaola-workflow-phase3 {project}
+phase1-research.md exists -> /kaola-workflow-phase2 {project}
+no phase file -> /kaola-workflow-phase1 <task>
 ```
 
 ## State Bootstrap And Repair
@@ -166,19 +166,19 @@ printing the next command.
 
 ## Phase Command Index
 
-- `/claude-workflow-phase1` - Research / Discovery
-- `/claude-workflow-phase2` - Ideation
-- `/claude-workflow-phase3` - Plan
-- `/claude-workflow-phase4` - Execute
-- `/claude-workflow-phase5` - Review
-- `/claude-workflow-phase6` - Finalize
+- `/kaola-workflow-phase1` - Research / Discovery
+- `/kaola-workflow-phase2` - Ideation
+- `/kaola-workflow-phase3` - Plan
+- `/kaola-workflow-phase4` - Execute
+- `/kaola-workflow-phase5` - Review
+- `/kaola-workflow-phase6` - Finalize
 
 ## State File Contract
 
 Every phase command maintains:
 
 ```markdown
-# Claude Workflow State
+# Kaola-Workflow State
 
 ## Project
 name: {project-name}
@@ -189,7 +189,7 @@ phase: {1-6}
 phase_name: {name}
 step: {phase-owned step}
 task: {task number or N/A}
-next_command: /claude-workflow-phaseN {project-name}
+next_command: /kaola-workflow-phaseN {project-name}
 
 ## Pending Gates
 - {gate or none}
@@ -201,8 +201,8 @@ fix_owner: {agent or N/A}
 inline_emergency_fallback_authorized: no
 
 ## Last Evidence
-phase_file: claude-workflow/{project-name}/phaseN-*.md
-cache_file: claude-workflow/{project-name}/.cache/{file or N/A}
+phase_file: kaola-workflow/{project-name}/phaseN-*.md
+cache_file: kaola-workflow/{project-name}/.cache/{file or N/A}
 last_command: {command or N/A}
 last_result: {result or N/A}
 

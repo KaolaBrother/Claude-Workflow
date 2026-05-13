@@ -1,6 +1,6 @@
-# Claude Workflow
+# Kaola-Workflow
 
-A 6-phase, Claude-native development workflow with per-phase file artifacts, multi-model orchestration, and full resumability across sessions and context resets.
+A 6-phase development workflow for Claude Code and Codex with per-phase file artifacts, multi-model orchestration, and full resumability across sessions and context resets.
 
 ## Dependency — Everything Claude Code (ECC)
 
@@ -47,14 +47,14 @@ A 6-phase, Claude-native development workflow with per-phase file artifacts, mul
 From Claude Code:
 
 ```text
-/plugin marketplace add https://github.com/KaolaBrother/Claude-Workflow
-/plugin install claude-workflow@kaolabrother-claude-workflow
+/plugin marketplace add https://github.com/KaolaBrother/Kaola-Workflow
+/plugin install kaola-workflow@kaolabrother-kaola-workflow
 /reload-plugins
 ```
 
 If you previously used the manual installer, remove or update user-level command
 files such as `~/.claude/commands/workflow-next.md` or the legacy
-`~/.claude/commands/claude-workflow.md`; user-level commands can take
+`~/.claude/commands/kaola-workflow.md`; user-level commands can take
 precedence over plugin commands.
 
 Then run:
@@ -67,15 +67,15 @@ Then run:
 ### Manual command install
 
 ```bash
-git clone https://github.com/KaolaBrother/Claude-Workflow.git
-cd Claude-Workflow
+git clone https://github.com/KaolaBrother/Kaola-Workflow.git
+cd Kaola-Workflow
 ./install.sh
 ```
 
 Plugin uninstall:
 
 ```text
-/plugin uninstall claude-workflow
+/plugin uninstall kaola-workflow
 ```
 
 Manual command uninstall:
@@ -84,13 +84,12 @@ Manual command uninstall:
 ./uninstall.sh
 ```
 
-## Private Codex Workflow Pack
+## Codex Pack
 
-This repository also includes a self-use Codex workflow pack under
-`plugins/codex-workflow/`. It does not modify or replace the Claude workflow.
-It ports the useful workflow contract to Codex-native skills, using
-`codex-workflow/` project artifacts and `AGENTS.md` guidance instead of
-`claude-workflow/` and `CLAUDE.md`.
+This repository also includes a self-use Codex pack under
+`plugins/kaola-workflow/`. It exposes the same Kaola-Workflow identity through
+Codex-native skills, using `kaola-workflow/` project artifacts and `AGENTS.md`
+guidance rather than Claude Code slash commands and `CLAUDE.md`.
 
 ### Install On Another Computer
 
@@ -103,15 +102,15 @@ Prerequisites:
 Fresh install from GitHub:
 
 ```bash
-codex plugin marketplace add KaolaBrother/Claude-Workflow
+codex plugin marketplace add KaolaBrother/Kaola-Workflow
 codex
 ```
 
-Then install or enable `codex-workflow` from the `kaolabrother-private`
+Then install or enable `kaola-workflow` from the `kaolabrother-kaola-workflow`
 marketplace in the Codex plugin directory. For direct config enablement, add:
 
 ```toml
-[plugins."codex-workflow@kaolabrother-private"]
+[plugins."kaola-workflow@kaolabrother-kaola-workflow"]
 enabled = true
 ```
 
@@ -119,46 +118,46 @@ After restarting Codex, open the target project and ask Codex to initialize the
 workflow:
 
 ```text
-Use Claude-Workflow for Codex in this repo.
-Run workflow-init for Claude-Workflow for Codex.
+Use Kaola-Workflow for Codex in this repo.
+Run workflow-init for Kaola-Workflow for Codex.
 ```
 
 Install from a local clone when working offline or testing local changes:
 
 ```bash
-git clone https://github.com/KaolaBrother/Claude-Workflow.git
-codex plugin marketplace add /path/to/Claude-Workflow
+git clone https://github.com/KaolaBrother/Kaola-Workflow.git
+codex plugin marketplace add /path/to/Kaola-Workflow
 ```
 
 Update an existing Codex install to the newest marketplace version:
 
 ```bash
-codex plugin marketplace upgrade kaolabrother-private
+codex plugin marketplace upgrade kaolabrother-kaola-workflow
 ```
 
-Restart Codex, then rerun `codex-workflow-init` in any project that should
+Restart Codex, then rerun `kaola-workflow-init` in any project that should
 receive the newest managed agent profiles and project config.
 
 To verify a project was initialized for Codex, check that `.codex/config.toml`
-contains a `# BEGIN codex-workflow agents` managed block and that
-`.codex/agents/codex-workflow/` contains the role profile files.
+contains a `# BEGIN kaola-workflow agents` managed block and that
+`.codex/agents/kaola-workflow/` contains the role profile files.
 
 The primary skills are:
 
 ```text
-codex-workflow-init
-codex-workflow-next
-codex-workflow-research
-codex-workflow-ideation
-codex-workflow-plan
-codex-workflow-execute
-codex-workflow-review
-codex-workflow-finalize
+kaola-workflow-init
+kaola-workflow-next
+kaola-workflow-research
+kaola-workflow-ideation
+kaola-workflow-plan
+kaola-workflow-execute
+kaola-workflow-review
+kaola-workflow-finalize
 ```
 
 The Codex pack keeps the same six-phase shape, state repair, compliance ledger,
 TDD evidence, review, documentation docking, roadmap refresh, archive, and final
-Git gate. It does not depend on ECC agents. Instead, `codex-workflow-init`
+Git gate. It does not depend on ECC agents. Instead, `kaola-workflow-init`
 automatically installs Codex-native role profiles that mirror the ECC workflow
 roles:
 
@@ -174,8 +173,8 @@ security-reviewer
 doc-updater
 ```
 
-The managed setup copies role configs into `.codex/agents/codex-workflow/` and
-maintains a `# BEGIN codex-workflow agents` block in `.codex/config.toml` while
+The managed setup copies role configs into `.codex/agents/kaola-workflow/` and
+maintains a `# BEGIN kaola-workflow agents` block in `.codex/config.toml` while
 preserving unrelated config. When Codex subagents are available, phases use
 those roles for detached research, planning, execution, repair, review, and
 documentation work; otherwise the current Codex session follows the same role
@@ -185,12 +184,12 @@ contracts locally.
 
 Current official release versions:
 
-- `claude-workflow` package and Claude plugin: `2.1.1`
-- `codex-workflow` plugin manifest: `0.2.1`
+- Claude Code `kaola-workflow` package/plugin: `3.0.0`
+- Codex `kaola-workflow` plugin manifest: `1.0.0`
 
-The root `package.json` version is the official repository and Claude workflow
+The root `package.json` version is the official repository and Claude Code
 release version. The Codex plugin has its own manifest version in
-`plugins/codex-workflow/.codex-plugin/plugin.json`; bump it whenever the Codex
+`plugins/kaola-workflow/.codex-plugin/plugin.json`; bump it whenever the Codex
 plugin install surface, skills, agent profiles, or workflow behavior changes.
 
 Use SemVer for both versions:
@@ -206,7 +205,7 @@ Official release checklist:
 ```bash
 npm test
 git diff --check
-git tag claude-workflow-v2.1.0
+git tag kaola-workflow-v3.0.0
 git push origin main --tags
 ```
 
@@ -222,7 +221,7 @@ Initialize each project once:
 /workflow-init
 ```
 
-This creates or updates a compact `CLAUDE.md`, `claude-workflow/ROADMAP.md`, and the baseline documentation map without replacing existing project guidance. The generated `CLAUDE.md` keeps commands, hard rules, workflow pointers, and documentation links in root memory while leaving long details in docs or skills.
+This creates or updates a compact `CLAUDE.md`, `kaola-workflow/ROADMAP.md`, and the baseline documentation map without replacing existing project guidance. The generated `CLAUDE.md` keeps commands, hard rules, workflow pointers, and documentation links in root memory while leaving long details in docs or skills.
 
 In any Claude Code session, run:
 
@@ -230,22 +229,22 @@ In any Claude Code session, run:
 /workflow-next
 ```
 
-The command is a thin router. It first checks local/remote Git state, safely fast-forwards clean behind-only branches, and asks before risky synchronization such as diverged history, dirty worktrees with upstream changes, rebases, merges, stashes, resets, or conflicts. It then scans `claude-workflow/`, reads `workflow-state.md` when present, and routes to the right phase command:
+The command is a thin router. It first checks local/remote Git state, safely fast-forwards clean behind-only branches, and asks before risky synchronization such as diverged history, dirty worktrees with upstream changes, rebases, merges, stashes, resets, or conflicts. It then scans `kaola-workflow/`, reads `workflow-state.md` when present, and routes to the right phase command:
 
 ```text
-/claude-workflow-phase1
-/claude-workflow-phase2
-/claude-workflow-phase3
-/claude-workflow-phase4
-/claude-workflow-phase5
-/claude-workflow-phase6
+/kaola-workflow-phase1
+/kaola-workflow-phase2
+/kaola-workflow-phase3
+/kaola-workflow-phase4
+/kaola-workflow-phase5
+/kaola-workflow-phase6
 ```
 
 ## GitHub Roadmap Cycle
 
-Use a separate research or roadmap session to discover future work and create or refine GitHub issues. `/workflow-next` is the implementation cycle: it fetches open GitHub issues, mirrors active unfinished work into `claude-workflow/ROADMAP.md`, advances one selected item, then comments on or closes linked issues after validation.
+Use a separate research or roadmap session to discover future work and create or refine GitHub issues. `/workflow-next` is the implementation cycle: it fetches open GitHub issues, mirrors active unfinished work into `kaola-workflow/ROADMAP.md`, advances one selected item, then comments on or closes linked issues after validation.
 
-The local roadmap is a working mirror, not the source of truth. Keep only active unfinished work there; completed workflow folders move to `claude-workflow/archive/`.
+The local roadmap is a working mirror, not the source of truth. Keep only active unfinished work there; completed workflow folders move to `kaola-workflow/archive/`.
 
 The workflow also enforces context discipline: `CLAUDE.md` targets under 200 lines, the local roadmap should not become history storage, and agent prompts should include only the relevant phase excerpts needed for the delegated task.
 
@@ -284,7 +283,7 @@ remain, and leaves commit and push as the final clean/synced workspace step.
 | 5 | Review | code-reviewer always; security-reviewer conditional; review fixes delegated to tdd-guide/build-error-resolver | `phase5-review.md` |
 | 6 | Finalize | Full validation with delegated repair if needed, documentation docking, closure decisions, issue/roadmap/archive updates, final commit and push | `phase6-summary.md` |
 
-All phase files are written to `{project-root}/claude-workflow/{project-name}/` while active. Completed workflow folders are archived to `{project-root}/claude-workflow/archive/`. Active unfinished work is tracked in `{project-root}/claude-workflow/ROADMAP.md`.
+All phase files are written to `{project-root}/kaola-workflow/{project-name}/` while active. Completed workflow folders are archived to `{project-root}/kaola-workflow/archive/`. Active unfinished work is tracked in `{project-root}/kaola-workflow/ROADMAP.md`.
 
 ## Resuming
 
@@ -293,8 +292,8 @@ Any interrupted session resumes from `workflow-state.md` first, then reconstruct
 ### State Bootstrap And Repair
 
 When `/workflow-next` can reconstruct one safe next command from phase
-artifacts, it repairs or creates `claude-workflow/{project}/workflow-state.md`
-before routing by running `scripts/claude-workflow-repair-state.js` when the
+artifacts, it repairs or creates `kaola-workflow/{project}/workflow-state.md`
+before routing by running `scripts/kaola-workflow-repair-state.js` when the
 helper is available. It does not create state for brand-new work, ambiguous
 active projects, contradictory phase files, or unresolved compliance gates that
 make the next command unsafe.
@@ -304,7 +303,7 @@ When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact res
 ## Updating
 
 ```bash
-cd Claude-Workflow
+cd Kaola-Workflow
 git pull
 ./install.sh
 ```

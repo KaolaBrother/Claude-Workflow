@@ -1,5 +1,5 @@
 ---
-description: Initialize a project for Claude Workflow with CLAUDE.md guidance, roadmap tracking, docs structure, and Git/GitHub issue conventions.
+description: Initialize a project for Kaola-Workflow with CLAUDE.md guidance, roadmap tracking, docs structure, and Git/GitHub issue conventions.
 argument-hint: (optional project context)
 ---
 
@@ -32,7 +32,7 @@ test -f CLAUDE.md && echo "CLAUDE.md exists" || echo "CLAUDE.md missing"
 git rev-parse --is-inside-work-tree
 git status --short --branch
 git remote -v
-test -d claude-workflow && find claude-workflow -maxdepth 3 -type f | sort
+test -d kaola-workflow && find kaola-workflow -maxdepth 3 -type f | sort
 find docs -maxdepth 3 -type f 2>/dev/null | sort
 test -f package.json && node -e "const p=require('./package.json'); console.log('package scripts:', Object.keys(p.scripts||{}).join(', ')||'none')"
 find . -maxdepth 2 \( -name 'Makefile' -o -name 'pyproject.toml' -o -name 'Cargo.toml' -o -name 'go.mod' -o -name 'requirements.txt' \) -print
@@ -64,7 +64,7 @@ Use this policy:
 | Commands | yes | Install, test, lint/typecheck/build, dev server commands; use `unknown` when not detected |
 | Non-Negotiable Rules | yes | Stable constraints agents must follow every session |
 | ECC Hook Policy | yes | Treat ECC hooks as background hygiene and avoid duplicate validation |
-| Claude Workflow | yes | Orchestrator, roadmap, compliance, and archive rules in concise form |
+| Kaola-Workflow | yes | Orchestrator, roadmap, compliance, and archive rules in concise form |
 | Project Conventions | optional | Only real detected or user-provided conventions |
 | Known Gotchas | optional | Only repeated hazards that would waste time |
 | Documentation Map | yes | Pointers to docs, not embedded docs |
@@ -112,10 +112,10 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - Record hook output as evidence only with command, scope, result, and evidence path.
 - For heavy Phase 4 implementation bursts or many subagents, prefer `ECC_HOOK_PROFILE=minimal claude`.
 
-## Claude Workflow
+## Kaola-Workflow
 
 - Use `/workflow-next` as the workflow entrypoint and router.
-- Keep phase work scoped, resumable, and recorded under `claude-workflow/`.
+- Keep phase work scoped, resumable, and recorded under `kaola-workflow/`.
 - Maintain `workflow-state.md` for active work; it records current phase, step, pending gates, and next command.
 - Delegate phase-specific work to ECC agents by default; the main session owns orchestration, review, validation, integration, and final decisions.
 - Phase boundaries: Phase 1 discovers facts, Phase 2 chooses strategy, Phase 3 creates the executable blueprint.
@@ -124,7 +124,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - Route build/type/lint validation failures to `build-error-resolver`; route behavior or coverage failures back to `tdd-guide`.
 - Use the ECC agent names exactly as Claude Code lists them; prefer short names like `planner` when available, otherwise use the `everything-claude-code:` prefix.
 - At `/workflow-next` startup, fetch remote-tracking refs, classify local/upstream sync state, and ask before any risky synchronization.
-- GitHub issues are the roadmap source of truth when available; `claude-workflow/ROADMAP.md` is the local active-work mirror.
+- GitHub issues are the roadmap source of truth when available; `kaola-workflow/ROADMAP.md` is the local active-work mirror.
 - Roadmap/research sessions create or refine issues; `/workflow-next` sessions implement one selected item and refresh the mirror.
 - After resume or compaction, read `workflow-state.md`, the current phase file, and the compliance ledger before continuing.
 - State Bootstrap And Repair: if `/workflow-next` safely reconstructs one next command from phase artifacts, run the state repair helper and repair `workflow-state.md` before routing.
@@ -147,7 +147,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - `docs/api.md` — APIs, schemas, events, and external contracts.
 - `docs/conventions.md` — coding, testing, Git, and review rules.
 - `docs/decisions/` — architecture decision records.
-- `claude-workflow/ROADMAP.md` — active implementation roadmap.
+- `kaola-workflow/ROADMAP.md` — active implementation roadmap.
 
 ## Maintenance
 
@@ -169,7 +169,7 @@ Create only missing directories/files. Do not overwrite existing content.
 Required structure:
 
 ```text
-claude-workflow/
+kaola-workflow/
   ROADMAP.md
   archive/
 docs/
@@ -183,10 +183,10 @@ CHANGELOG.md
 
 Use these initial file bodies when a file is missing.
 
-### `claude-workflow/ROADMAP.md`
+### `kaola-workflow/ROADMAP.md`
 
 ```markdown
-# Claude Workflow Roadmap
+# Kaola-Workflow Roadmap
 
 This file mirrors active unfinished work. GitHub issues are the source of truth when available.
 
@@ -201,7 +201,7 @@ This file mirrors active unfinished work. GitHub issues are the source of truth 
 - A separate roadmap/research session owns discovering and adding future work to GitHub issues.
 - `/workflow-next` fetches GitHub issues, mirrors active implementation work here, and advances one item per cycle.
 - After each `/workflow-next` cycle, refresh this file from issue state.
-- Move completed workflow project folders to `claude-workflow/archive/`.
+- Move completed workflow project folders to `kaola-workflow/archive/`.
 - Close linked GitHub issues only after acceptance criteria pass.
 - Keep commit and push as the final Phase 6 step after docs, issues, roadmap,
   archive, and metadata are complete.
@@ -250,7 +250,7 @@ Document coding style, testing rules, Git practices, naming, and review expectat
 
 ## Unreleased
 
-- Initialized Claude Workflow documentation structure.
+- Initialized Kaola-Workflow documentation structure.
 ```
 
 ## Step 4 — Git And Roadmap Summary

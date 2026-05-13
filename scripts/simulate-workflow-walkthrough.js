@@ -24,7 +24,7 @@ function read(file) {
 
 function stateContent({ phase, phaseName, step, task = 'N/A', nextCommand, fallback = 'no' }) {
   return [
-    '# Claude Workflow State',
+    '# Kaola-Workflow State',
     '',
     '## Project',
     `name: ${project}`,
@@ -47,7 +47,7 @@ function stateContent({ phase, phaseName, step, task = 'N/A', nextCommand, fallb
     `inline_emergency_fallback_authorized: ${fallback}`,
     '',
     '## Last Evidence',
-    `phase_file: claude-workflow/${project}/phase${phase}.md`,
+    `phase_file: kaola-workflow/${project}/phase${phase}.md`,
     'cache_file: N/A',
     'last_command: N/A',
     'last_result: N/A',
@@ -93,7 +93,7 @@ function assertCommandIncludes(relativePath, needles) {
 }
 
 function assertHookOutput(workdir, expectedCommand, expectedStep) {
-  const output = execFileSync(process.execPath, [path.join(root, 'scripts/claude-workflow-compact-context.js')], {
+  const output = execFileSync(process.execPath, [path.join(root, 'scripts/kaola-workflow-compact-context.js')], {
     cwd: workdir,
     encoding: 'utf8'
   });
@@ -103,7 +103,7 @@ function assertHookOutput(workdir, expectedCommand, expectedStep) {
 }
 
 function runRepair(workdir, projectArg = project) {
-  return execFileSync(process.execPath, [path.join(root, 'scripts/claude-workflow-repair-state.js'), projectArg], {
+  return execFileSync(process.execPath, [path.join(root, 'scripts/kaola-workflow-repair-state.js'), projectArg], {
     cwd: workdir,
     encoding: 'utf8'
   });
@@ -114,24 +114,24 @@ function assertRepair(workdir, expectedCommand, expectedPhase) {
   assert(output.includes('Workflow state repair: wrote') || output.includes('Workflow state repair: repaired stale'), 'repair output must report a write or stale repair');
   assert(output.includes(`Current phase: ${expectedPhase}`), `repair output missing phase ${expectedPhase}`);
   assert(output.includes(`Next command: ${expectedCommand}`), `repair output missing ${expectedCommand}`);
-  assertNext(path.join(workdir, 'claude-workflow', project, 'workflow-state.md'), expectedCommand);
-  assertFileIncludes(path.join(workdir, 'claude-workflow', project, 'workflow-state.md'), 'last_result: state_repaired_from_artifacts');
+  assertNext(path.join(workdir, 'kaola-workflow', project, 'workflow-state.md'), expectedCommand);
+  assertFileIncludes(path.join(workdir, 'kaola-workflow', project, 'workflow-state.md'), 'last_result: state_repaired_from_artifacts');
 }
 
 function main() {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-workflow-walkthrough-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-walkthrough-'));
   try {
-    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-workflow-empty-'));
+    const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-empty-'));
     try {
-      fs.mkdirSync(path.join(emptyRoot, 'claude-workflow', project), { recursive: true });
+      fs.mkdirSync(path.join(emptyRoot, 'kaola-workflow', project), { recursive: true });
       const output = runRepair(emptyRoot, project);
       assert(output.includes('Workflow state repair: skipped - no phase artifacts available for repair'), 'repair must not create state for brand-new work');
-      assert(!fs.existsSync(path.join(emptyRoot, 'claude-workflow', project, 'workflow-state.md')), 'repair created state without phase artifacts');
+      assert(!fs.existsSync(path.join(emptyRoot, 'kaola-workflow', project, 'workflow-state.md')), 'repair created state without phase artifacts');
     } finally {
       fs.rmSync(emptyRoot, { recursive: true, force: true });
     }
 
-    const workflowRoot = path.join(tmp, 'claude-workflow');
+    const workflowRoot = path.join(tmp, 'kaola-workflow');
     const projectRoot = path.join(workflowRoot, project);
     const cache = path.join(projectRoot, '.cache');
     const stateFile = path.join(projectRoot, 'workflow-state.md');
@@ -143,9 +143,9 @@ function main() {
       phase: 1,
       phaseName: 'Research',
       step: 'requirement-parsing',
-      nextCommand: `/claude-workflow-phase1 ${project}`
+      nextCommand: `/kaola-workflow-phase1 ${project}`
     }));
-    assertNext(stateFile, `/claude-workflow-phase1 ${project}`);
+    assertNext(stateFile, `/kaola-workflow-phase1 ${project}`);
 
     write(path.join(cache, 'code-explorer.md'), 'raw explorer output\n');
     write(path.join(cache, 'docs-lookup.md'), 'N/A - internal patterns sufficient\n');
@@ -159,9 +159,9 @@ function main() {
       phase: 1,
       phaseName: 'Research',
       step: 'complete',
-      nextCommand: `/claude-workflow-phase2 ${project}`
+      nextCommand: `/kaola-workflow-phase2 ${project}`
     }));
-    assertNext(stateFile, `/claude-workflow-phase2 ${project}`);
+    assertNext(stateFile, `/kaola-workflow-phase2 ${project}`);
 
     write(path.join(cache, 'planner.md'), 'raw planner output\n');
     write(path.join(cache, 'advisor-ideation.md'), 'advisor ideation output\n');
@@ -175,9 +175,9 @@ function main() {
       phase: 2,
       phaseName: 'Ideation',
       step: 'complete',
-      nextCommand: `/claude-workflow-phase3 ${project}`
+      nextCommand: `/kaola-workflow-phase3 ${project}`
     }));
-    assertNext(stateFile, `/claude-workflow-phase3 ${project}`);
+    assertNext(stateFile, `/kaola-workflow-phase3 ${project}`);
 
     write(path.join(cache, 'architect.md'), 'raw architect output\n');
     write(path.join(cache, 'advisor-plan.md'), 'advisor plan output\n');
@@ -206,12 +206,12 @@ function main() {
       phase: 3,
       phaseName: 'Plan',
       step: 'complete',
-      nextCommand: `/claude-workflow-phase4 ${project}`
+      nextCommand: `/kaola-workflow-phase4 ${project}`
     }));
-    assertNext(stateFile, `/claude-workflow-phase4 ${project}`);
+    assertNext(stateFile, `/kaola-workflow-phase4 ${project}`);
 
     fs.rmSync(stateFile, { force: true });
-    assertRepair(tmp, `/claude-workflow-phase4 ${project}`, 4);
+    assertRepair(tmp, `/kaola-workflow-phase4 ${project}`, 4);
 
     write(path.join(projectRoot, 'phase4-progress.md'), [
       '# Phase 4 - Progress: simulated-feature',
@@ -240,32 +240,32 @@ function main() {
     assertFileIncludes(path.join(projectRoot, 'phase4-progress.md'), '| 1 | npm test -- greeting | behavior/test failure | tdd-guide | .cache/tdd-task-1-fix-1.md | routed |');
     write(path.join(cache, 'tdd-task-1.md'), 'RED evidence\nGREEN evidence\n');
     fs.rmSync(stateFile, { force: true });
-    assertRepair(tmp, `/claude-workflow-phase4 ${project}`, 4);
+    assertRepair(tmp, `/kaola-workflow-phase4 ${project}`, 4);
     assertFileIncludes(stateFile, 'task: 1');
     write(stateFile, stateContent({
       phase: 4,
       phaseName: 'Execute',
       step: 'route-failure',
       task: '1',
-      nextCommand: `/claude-workflow-phase4 ${project}`
+      nextCommand: `/kaola-workflow-phase4 ${project}`
     }));
-    assertHookOutput(tmp, `/claude-workflow-phase4 ${project}`, 'route-failure');
+    assertHookOutput(tmp, `/kaola-workflow-phase4 ${project}`, 'route-failure');
 
     write(path.join(projectRoot, 'phase4-progress.md'), read(path.join(projectRoot, 'phase4-progress.md')).replace(
       '| 1 | Add greeting | in_progress | | validation failed |',
       '| 1 | Add greeting | complete | src/greeting.js, test/greeting.test.js | validation passed |'
     ));
-    assertRepair(tmp, `/claude-workflow-phase5 ${project}`, 5);
+    assertRepair(tmp, `/kaola-workflow-phase5 ${project}`, 5);
     write(stateFile, stateContent({
       phase: 4,
       phaseName: 'Execute',
       step: 'complete',
-      nextCommand: `/claude-workflow-phase5 ${project}`
+      nextCommand: `/kaola-workflow-phase5 ${project}`
     }));
-    assertNext(stateFile, `/claude-workflow-phase5 ${project}`);
+    assertNext(stateFile, `/kaola-workflow-phase5 ${project}`);
 
     fs.rmSync(stateFile, { force: true });
-    assertRepair(tmp, `/claude-workflow-phase5 ${project}`, 5);
+    assertRepair(tmp, `/kaola-workflow-phase5 ${project}`, 5);
 
     write(path.join(cache, 'code-reviewer.md'), 'review passed\n');
     write(path.join(projectRoot, 'phase5-review.md'), phaseFile('Phase 5 - Review', [
@@ -280,9 +280,9 @@ function main() {
       phase: 5,
       phaseName: 'Review',
       step: 'complete',
-      nextCommand: `/claude-workflow-phase6 ${project}`
+      nextCommand: `/kaola-workflow-phase6 ${project}`
     }));
-    assertNext(stateFile, `/claude-workflow-phase6 ${project}`);
+    assertNext(stateFile, `/kaola-workflow-phase6 ${project}`);
 
     write(path.join(cache, 'doc-updater.md'), 'docs updated\n');
     write(path.join(projectRoot, 'phase6-summary.md'), phaseFile('Phase 6 - Summary', [
@@ -290,8 +290,8 @@ function main() {
       '| documentation docking | invoked | .cache/doc-docking.md | |',
       '| closure advisor gate | N/A | closure scan | no deferred/conflict/user-decision items |',
       '| final-validation fix executors | N/A | final validation output | no failures |',
-      '| roadmap refresh | invoked | claude-workflow/ROADMAP.md | |',
-      '| archive completed folder | invoked | claude-workflow/archive/simulated-feature | |',
+      '| roadmap refresh | invoked | kaola-workflow/ROADMAP.md | |',
+      '| archive completed folder | invoked | kaola-workflow/archive/simulated-feature | |',
       '| final commit and push | invoked | git status --short --branch | clean and synced |'
     ]));
     assertFileIncludes(path.join(projectRoot, 'phase6-summary.md'), '| doc-updater | invoked | .cache/doc-updater.md | |');
@@ -302,16 +302,16 @@ function main() {
       phase: 6,
       phaseName: 'Finalize',
       step: 'complete',
-      nextCommand: `/claude-workflow-phase6 ${project}`
+      nextCommand: `/kaola-workflow-phase6 ${project}`
     }));
 
     const phaseCommands = [
-      'commands/claude-workflow-phase1.md',
-      'commands/claude-workflow-phase2.md',
-      'commands/claude-workflow-phase3.md',
-      'commands/claude-workflow-phase4.md',
-      'commands/claude-workflow-phase5.md',
-      'commands/claude-workflow-phase6.md'
+      'commands/kaola-workflow-phase1.md',
+      'commands/kaola-workflow-phase2.md',
+      'commands/kaola-workflow-phase3.md',
+      'commands/kaola-workflow-phase4.md',
+      'commands/kaola-workflow-phase5.md',
+      'commands/kaola-workflow-phase6.md'
     ];
     for (const command of phaseCommands) {
       const content = fs.readFileSync(path.join(root, command), 'utf8');
@@ -319,12 +319,12 @@ function main() {
       assert(content.includes('workflow-state.md'), `${command} missing workflow-state.md reference`);
     }
 
-    assertCommandIncludes('commands/claude-workflow-phase1.md', ['code-explorer', 'docs-lookup']);
-    assertCommandIncludes('commands/claude-workflow-phase2.md', ['planner', 'advisor']);
-    assertCommandIncludes('commands/claude-workflow-phase3.md', ['code-architect', 'advisor']);
-    assertCommandIncludes('commands/claude-workflow-phase4.md', ['tdd-guide', 'build-error-resolver']);
-    assertCommandIncludes('commands/claude-workflow-phase5.md', ['code-reviewer', 'security-reviewer', 'tdd-guide', 'build-error-resolver']);
-    assertCommandIncludes('commands/claude-workflow-phase6.md', ['doc-updater', 'tdd-guide', 'build-error-resolver']);
+    assertCommandIncludes('commands/kaola-workflow-phase1.md', ['code-explorer', 'docs-lookup']);
+    assertCommandIncludes('commands/kaola-workflow-phase2.md', ['planner', 'advisor']);
+    assertCommandIncludes('commands/kaola-workflow-phase3.md', ['code-architect', 'advisor']);
+    assertCommandIncludes('commands/kaola-workflow-phase4.md', ['tdd-guide', 'build-error-resolver']);
+    assertCommandIncludes('commands/kaola-workflow-phase5.md', ['code-reviewer', 'security-reviewer', 'tdd-guide', 'build-error-resolver']);
+    assertCommandIncludes('commands/kaola-workflow-phase6.md', ['doc-updater', 'tdd-guide', 'build-error-resolver']);
 
     console.log('Workflow walkthrough simulation passed');
   } finally {

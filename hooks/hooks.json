@@ -7,12 +7,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PLUGIN_ROOT/scripts/claude-workflow-compact-context.js\"",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT/scripts/kaola-workflow-compact-context.js\"",
             "timeout": 5
           }
         ],
-        "description": "Inject Claude Workflow resume state after context compaction",
-        "id": "claude-workflow:compact-context"
+        "description": "Inject Kaola-Workflow resume state after context compaction",
+        "id": "kaola-workflow:compact-context"
       }
     ]
   }

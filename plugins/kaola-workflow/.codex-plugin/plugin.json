@@ -1,0 +1,43 @@
+{
+  "name": "kaola-workflow",
+  "version": "1.0.0",
+  "description": "Kaola-Workflow for Codex, a public repo-backed workflow pack with resumable phase artifacts, automated Codex agent profiles, roadmap mirroring, TDD execution, review, and finalization gates.",
+  "author": {
+    "name": "KaolaBrother",
+    "url": "https://github.com/KaolaBrother"
+  },
+  "homepage": "https://github.com/KaolaBrother/Kaola-Workflow",
+  "repository": "https://github.com/KaolaBrother/Kaola-Workflow",
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "kaola-workflow",
+    "workflow",
+    "workflow-init",
+    "skills",
+    "agents",
+    "tdd",
+    "review"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Kaola-Workflow for Codex",
+    "shortDescription": "Six-phase Kaola-Workflow for Codex",
+    "longDescription": "Kaola-Workflow for Codex exposes repo-backed skills and Codex-native agent profiles for project initialization, workflow-init, resumable phase routing, research, ideation, planning, TDD execution, review, documentation docking, and finalization.",
+    "developerName": "KaolaBrother",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/KaolaBrother/Kaola-Workflow",
+    "defaultPrompt": [
+      "Use Kaola-Workflow for Codex in this repo.",
+      "Resume the current Kaola-Workflow project.",
+      "Run workflow-init for Kaola-Workflow for Codex."
+    ],
+    "brandColor": "#0F766E",
+    "screenshots": []
+  }
+}

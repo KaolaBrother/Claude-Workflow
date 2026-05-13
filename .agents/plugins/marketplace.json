@@ -1,14 +1,14 @@
 {
-  "name": "kaolabrother-private",
+  "name": "kaolabrother-kaola-workflow",
   "interface": {
-    "displayName": "KaolaBrother Claude-Workflow"
+    "displayName": "KaolaBrother Kaola-Workflow"
   },
   "plugins": [
     {
-      "name": "codex-workflow",
+      "name": "kaola-workflow",
       "source": {
         "source": "local",
-        "path": "./plugins/codex-workflow"
+        "path": "./plugins/kaola-workflow"
       },
       "policy": {
         "installation": "AVAILABLE",
