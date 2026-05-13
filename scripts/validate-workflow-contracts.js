@@ -25,6 +25,11 @@ function assertIncludes(file, needle) {
   assert(content.includes(needle), `${file} must include: ${needle}`);
 }
 
+function assertNotIncludes(file, needle) {
+  const content = read(file);
+  assert(!content.includes(needle), `${file} must not include: ${needle}`);
+}
+
 const phaseCommands = [
   'commands/kaola-workflow-phase1.md',
   'commands/kaola-workflow-phase2.md',
@@ -53,7 +58,28 @@ assertIncludes('README.md', 'State Bootstrap And Repair');
 assertIncludes('README.md', 'kaola-workflow-repair-state.js');
 assertIncludes('commands/workflow-init.md', 'State Bootstrap And Repair');
 
-assertIncludes('commands/kaola-workflow-phase1.md', 'temporary Phase 1 capture');
+assertIncludes('README.md', '## Autonomy And Goal Contract');
+assertIncludes('README.md', '/goal');
+assertIncludes('README.md', 'prompt-based Stop-hook');
+assertIncludes('README.md', 'Routine workflow bookkeeping is autonomous');
+assertIncludes('README.md', 'Prompt the user only for true external authorization');
+assertIncludes('commands/workflow-init.md', 'Use `/goal` or equivalent prompt-based Stop-hook wording');
+assertIncludes('commands/workflow-init.md', 'Treat nonessential workflow bookkeeping as autonomous');
+assertIncludes('commands/workflow-next.md', '## Goal-Driven Autonomy');
+assertIncludes('commands/workflow-next.md', 'Use `/goal` or equivalent prompt-based Stop-hook wording');
+assertIncludes('commands/workflow-next.md', 'generated project names');
+assertIncludes('commands/workflow-next.md', 'collision suffixes');
+assertIncludes('commands/workflow-next.md', 'Ask only for true external');
+assertIncludes('commands/kaola-workflow-phase1.md', 'Do not ask the user to confirm generated project/folder names');
+assertIncludes('commands/kaola-workflow-phase1.md', 'append the first available');
+assertIncludes('commands/kaola-workflow-phase1.md', 'Do not ask for confirmation');
+assertNotIncludes('commands/kaola-workflow-phase1.md', 'Confirm? (yes / rename to: ...)');
+assertIncludes('commands/kaola-workflow-phase2.md', '## Step 3 - Internal Selection');
+assertIncludes('commands/kaola-workflow-phase2.md', 'Choose the advisor-reviewed recommended option');
+assertNotIncludes('commands/kaola-workflow-phase2.md', 'Wait for user selection');
+assertIncludes('commands/kaola-workflow-phase3.md', '## Step 5 - Continue To Phase 4');
+assertIncludes('commands/kaola-workflow-phase3.md', 'ask the user to confirm internal workflow execution');
+assertNotIncludes('commands/kaola-workflow-phase3.md', 'user-confirm-phase4');
 assertIncludes('commands/kaola-workflow-phase2.md', '.cache/advisor-ideation.md');
 assertIncludes('commands/kaola-workflow-phase3.md', '.cache/advisor-plan.md');
 assertIncludes('commands/kaola-workflow-phase3.md', 'architect-revision');

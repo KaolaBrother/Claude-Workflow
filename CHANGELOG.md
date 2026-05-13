@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Made routine Kaola-Workflow bookkeeping autonomous, including generated
+  workflow project names, collision suffixes, and internal advisor-backed
+  strategy/plan decisions.
+- Added Claude `/goal` or Stop-hook guidance and equivalent Codex skill goal
+  contracts so workflow phases continue until their objectives are complete.
+
 ## 3.0.0 - 2026-05-13
 
 ### Changed

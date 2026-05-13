@@ -2,6 +2,24 @@
 
 A 6-phase development workflow for Claude Code and Codex with per-phase file artifacts, multi-model orchestration, and full resumability across sessions and context resets.
 
+## Autonomy And Goal Contract
+
+Kaola-Workflow is goal-driven. For Claude Code, use `/goal` or equivalent
+prompt-based Stop-hook wording so a workflow turn continues until the current
+phase objective and completion audit are genuinely satisfied. For Codex, the
+same contract lives in the Kaola-Workflow skills: continue until the phase
+objective, evidence, and `workflow-state.md` next pointer are complete.
+
+Routine workflow bookkeeping is autonomous. Generated project/folder names,
+collision suffixes such as `-2`, cache/artifact paths, and ordering that does
+not affect user intent should be chosen automatically and recorded. Essential
+technical decisions should consult the configured expert internally, then apply
+and record the chosen answer: Claude Code uses the advisor/Opus path, while
+Codex uses the strongest available expert model or agent profile for the
+session. Prompt the user only for true external authorization or materially
+user-owned choices, such as risky Git synchronization, destructive rewrites,
+credential or deployment actions, or issue/roadmap reorganization.
+
 ## Dependency — Everything Claude Code (ECC)
 
 > **This plugin requires ECC to be installed.**

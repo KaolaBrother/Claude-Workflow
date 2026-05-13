@@ -124,6 +124,10 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - Route build/type/lint validation failures to `build-error-resolver`; route behavior or coverage failures back to `tdd-guide`.
 - Use the ECC agent names exactly as Claude Code lists them; prefer short names like `planner` when available, otherwise use the `everything-claude-code:` prefix.
 - At `/workflow-next` startup, fetch remote-tracking refs, classify local/upstream sync state, and ask before any risky synchronization.
+- Use `/goal` or equivalent prompt-based Stop-hook wording so each phase continues until its objective and completion audit are satisfied.
+- Treat nonessential workflow bookkeeping as autonomous: generated project names, collision suffixes like `-2`, cache/artifact paths, and harmless ordering choices are selected automatically and recorded.
+- For essential technical decisions, consult the configured advisor internally, apply the selected answer, and record the evidence under `.cache/` or the phase artifact.
+- Prompt the user only for true external authorization or materially user-owned choices, including risky Git synchronization, destructive rewrites, deployment/credential actions, and issue or roadmap reorganization.
 - GitHub issues are the roadmap source of truth when available; `kaola-workflow/ROADMAP.md` is the local active-work mirror.
 - Roadmap/research sessions create or refine issues; `/workflow-next` sessions implement one selected item and refresh the mirror.
 - After resume or compaction, read `workflow-state.md`, the current phase file, and the compliance ledger before continuing.

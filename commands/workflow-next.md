@@ -31,6 +31,17 @@ Use `$ARGUMENTS` as either:
   phase command content if available in this session, or print the exact command
   the user must run.
 
+## Goal-Driven Autonomy
+
+Use `/goal` or equivalent prompt-based Stop-hook wording so the router and each
+phase keep going until the active phase objective and completion audit pass.
+Treat nonessential workflow bookkeeping as autonomous: issue selection when
+there is one unambiguous open issue, generated project names, collision suffixes
+like `-2`, cache paths, and harmless ordering choices. Consult the configured
+advisor internally for essential technical decisions, apply the chosen answer,
+and record it under `.cache/` or the phase artifact. Ask only for true external
+authorization or materially user-owned choices.
+
 ## Startup Step 1 - Git Freshness
 
 Before selecting work, classify local/remote state:
@@ -75,8 +86,9 @@ that project.
 Otherwise list active workflow folders under `kaola-workflow/` that contain at
 least one `phase*.md` file. Skip `archive/`.
 
-If no active project is selected, ask the user what to implement. New work starts
-with:
+If no active project is selected, choose one unambiguous open GitHub issue or
+provided task automatically. If there are multiple plausible issues/tasks or no
+task is available, ask the user what to implement. New work starts with:
 
 ```text
 /kaola-workflow-phase1 <task description or issue>
@@ -163,15 +175,6 @@ Next command: {next_command}
 If nested slash-command execution is supported in the current Claude Code
 environment, continue by applying the matching command. Otherwise stop after
 printing the next command.
-
-## Phase Command Index
-
-- `/kaola-workflow-phase1` - Research / Discovery
-- `/kaola-workflow-phase2` - Ideation
-- `/kaola-workflow-phase3` - Plan
-- `/kaola-workflow-phase4` - Execute
-- `/kaola-workflow-phase5` - Review
-- `/kaola-workflow-phase6` - Finalize
 
 ## State File Contract
 

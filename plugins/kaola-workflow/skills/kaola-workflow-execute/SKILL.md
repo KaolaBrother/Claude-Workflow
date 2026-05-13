@@ -7,6 +7,14 @@ description: Use when Phase 3 plan exists and Kaola-Workflow for Codex, also cal
 
 Phase 4 implements the plan. Prefer the `tdd-guide` Codex agent role for assigned implementation tasks when subagents are available. Use the current Codex session as the fallback executor when session policy, availability, or user direction prevents delegation.
 
+## Goal Contract
+
+Continue until all Phase 3 tasks are complete, validation evidence is recorded
+for each task, failure routing is resolved, and `workflow-state.md` points to
+`next_skill: kaola-workflow-review {project}`. Stop only for true external
+authorization, materially user-owned choices, or ambiguity that blocks
+correctness.
+
 ## Guardrails
 
 - Stay inside the active task write set.

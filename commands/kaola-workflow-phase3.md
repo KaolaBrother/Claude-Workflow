@@ -37,7 +37,7 @@ Otherwise detect:
 - `.cache/advisor-plan.md` missing -> `advisor-gate`
 - advisor found gaps and `.cache/architect-revision-N.md` missing -> `architect-revision`
 - phase file missing -> `write-phase-file`
-- user has not confirmed Phase 4 -> `user-confirm-phase4`
+- advisor-reviewed plan complete -> `phase4-ready`
 
 ## Hard Gates
 
@@ -47,7 +47,8 @@ Otherwise detect:
   `code-architect`; the main session may synthesize but must not become the
   architect.
 - Save every advisor and architect revision output under `.cache/`.
-- Confirm with the user before Phase 4.
+- Continue to Phase 4 after the advisor-reviewed blueprint is complete. Ask the
+  user only for true external authorization or materially user-owned choices.
 
 ## Step 1 - Code Architect
 
@@ -169,10 +170,10 @@ Create `kaola-workflow/{project}/phase3-plan.md`:
 | architect revisions | invoked/N/A | .cache/architect-revision-*.md | [reason if N/A] |
 ```
 
-## Step 5 - Confirm Phase 4
+## Step 5 - Continue To Phase 4
 
-Show the task list and validation commands. Ask the user to confirm before
-execution.
+Record the task list and validation commands, then continue to Phase 4. Do not
+ask the user to confirm internal workflow execution.
 
 Update `workflow-state.md`:
 

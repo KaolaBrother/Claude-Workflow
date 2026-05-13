@@ -7,6 +7,14 @@ description: Use when Kaola-Workflow for Codex, also called kaola-workflow, has 
 
 Phase 3 turns the selected strategy into a dependency-safe plan. Do not edit product code in this phase.
 
+## Goal Contract
+
+Continue until Phase 3 has a dependency-safe blueprint, expert review evidence,
+any required revisions, `phase3-plan.md`, and `workflow-state.md` pointing to
+`next_skill: kaola-workflow-execute {project}`. Stop only for true external
+authorization, materially user-owned choices, or ambiguity that blocks
+correctness.
+
 ## Prerequisite
 
 Read `workflow-state.md`, `phase1-research.md`, and `phase2-ideation.md`.
@@ -24,7 +32,7 @@ Write `kaola-workflow/{project}/phase3-plan.md` with:
 - safe parallel groups only when write sets are disjoint
 - explicit out-of-scope items
 
-Use the `code-architect` Codex agent role when subagents are available; otherwise produce the same blueprint in the current session. Perform a plan self-review and save it to `.cache/advisor-plan.md`. If gaps are found, revise the blueprint before asking the user to approve execution.
+Use the `code-architect` Codex agent role when subagents are available; otherwise produce the same blueprint in the current session. Consult the strongest available expert model/profile for the session or perform the same plan self-review locally, then save it to `.cache/advisor-plan.md`. If gaps are found, revise the blueprint before execution.
 
 ## Task Template
 
@@ -51,4 +59,4 @@ Use the `code-architect` Codex agent role when subagents are available; otherwis
 | blueprint revisions | invoked/N/A | .cache/architect-revision-*.md | reason if N/A |
 ```
 
-Update `workflow-state.md` with `next_skill: kaola-workflow-execute {project}` after user approval.
+Update `workflow-state.md` with `next_skill: kaola-workflow-execute {project}` after the advisor-reviewed plan is complete. Do not ask the user to approve routine internal workflow execution.

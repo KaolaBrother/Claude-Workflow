@@ -1,0 +1,17 @@
+# Kaola-Workflow Roadmap
+
+This file mirrors active unfinished work. GitHub issues are the source of truth when available.
+
+## Active Work
+
+| Issue | Title | Status | Workflow Project | Next Step |
+|-------|-------|--------|------------------|-----------|
+| none | No active unfinished work | closed | none | Fetch open GitHub issues with `workflow-next` |
+
+## Rules
+
+- A separate roadmap/research session owns discovering and adding future work to GitHub issues.
+- `workflow-next` fetches GitHub issues, mirrors active implementation work here, and advances one item per cycle.
+- After each workflow cycle, refresh this file from issue state.
+- Move completed workflow project folders to `kaola-workflow/archive/`.
+- Close linked GitHub issues only after acceptance criteria pass.

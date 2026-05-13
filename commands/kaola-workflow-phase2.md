@@ -38,7 +38,7 @@ Otherwise detect the step:
 
 - `.cache/planner.md` missing -> `planner`
 - `.cache/advisor-ideation.md` missing -> `advisor-gate`
-- selected approach missing -> `user-selection`
+- selected approach missing -> `internal-selection`
 - phase file missing -> `write-phase-file`
 
 Update `workflow-state.md` before continuing.
@@ -51,7 +51,10 @@ Update `workflow-state.md` before continuing.
 - Use `planner` for deep approach analysis.
 - Save advisor output to `.cache/advisor-ideation.md`; do not keep it only in
   conversation memory.
-- Wait for user selection before writing the final Phase 2 file.
+- Do not stop for routine strategy selection. After planner/advisor review,
+  choose the recommended approach internally, apply it, and record the rationale.
+- Ask the user only when the choice is materially user-owned or the advisor
+  identifies ambiguity that blocks a correct technical decision.
 
 ## Step 1 - Planner
 
@@ -101,10 +104,11 @@ Write the advisor response to:
 kaola-workflow/{project}/.cache/advisor-ideation.md
 ```
 
-## Step 3 - User Selection
+## Step 3 - Internal Selection
 
-Present refined options concisely. Wait for the user to select one. Do not write
-`phase2-ideation.md` until the user confirms.
+Choose the advisor-reviewed recommended option. Record the selected approach,
+rationale, and any rejected alternatives in `phase2-ideation.md`. Do not ask the
+user to approve the strategy unless the decision is materially user-owned.
 
 ## Step 4 - Write Phase File
 

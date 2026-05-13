@@ -23,6 +23,11 @@ function assertIncludes(file, needle) {
   assert(content.includes(needle), `${file} must include: ${needle}`);
 }
 
+function assertNotIncludes(file, needle) {
+  const content = read(file);
+  assert(!content.includes(needle), `${file} must not include: ${needle}`);
+}
+
 function parseJson(file) {
   return JSON.parse(read(file));
 }
@@ -76,8 +81,30 @@ for (const skill of skills) {
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'AGENTS.md');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'Do not create or edit CLAUDE.md');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'next_skill');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '## Goal Contract');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '## Autonomy Policy');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'generated project names');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'strongest available expert model/profile');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'kaola-workflow-repair-state.js');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '.codex/plugins/cache');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, '## Goal Contract');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, 'collision suffix');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, 'do not ask the user');
+assertNotIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, '_phase1-pending');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-ideation/SKILL.md`, 'autonomous strategy selection');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-ideation/SKILL.md`, 'Select the advisor-reviewed recommended approach internally');
+assertNotIncludes(`${pluginRoot}/skills/kaola-workflow-ideation/SKILL.md`, 'wait for user selection');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-plan/SKILL.md`, 'Do not ask the user to approve routine internal workflow execution');
+for (const phaseSkill of [
+  'kaola-workflow-research',
+  'kaola-workflow-ideation',
+  'kaola-workflow-plan',
+  'kaola-workflow-execute',
+  'kaola-workflow-review',
+  'kaola-workflow-finalize',
+]) {
+  assertIncludes(`${pluginRoot}/skills/${phaseSkill}/SKILL.md`, '## Goal Contract');
+}
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, 'Required Agent Compliance');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, 'RED');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, 'GREEN');

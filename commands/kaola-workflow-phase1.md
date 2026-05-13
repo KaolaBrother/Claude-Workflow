@@ -18,6 +18,8 @@ architecture, or write implementation code.
   needed; otherwise record it as `N/A` with evidence.
 - Persist raw agent outputs. Do not rely on conversation memory.
 - Maintain `workflow-state.md` before and after every gate.
+- Do not ask the user to confirm generated project/folder names. Routine naming
+  is nonessential workflow bookkeeping and is chosen autonomously.
 
 ## Resume Detection
 
@@ -36,17 +38,8 @@ complete. Route to:
 /kaola-workflow-phase2 {project}
 ```
 
-If the project name has not been confirmed yet, use the temporary Phase 1
-capture directory:
-
-```text
-kaola-workflow/_phase1-pending/
-kaola-workflow/_phase1-pending/.cache/
-kaola-workflow/_phase1-pending/workflow-state.md
-```
-
-Move those captured files into `kaola-workflow/{project-name}/` immediately
-after the user confirms the project name.
+For new work, generate the project name before writing artifacts and create the
+final `kaola-workflow/{project-name}/` directory directly.
 
 ## Step 1 - Parse Requirement
 
@@ -58,13 +51,31 @@ Extract:
 - Success criteria: how completion will be judged
 - GitHub issue: `owner/repo#number` or `none`
 
-Update `workflow-state.md`:
+Generate a 2-4 word kebab-case name that describes the deliverable. Check for
+existing `kaola-workflow/{name}/`; if it exists, append the first available
+numeric suffix, for example `{name}-2`, `{name}-3`, and so on. Name generation
+must be deterministic enough to resume safely: derive it from the issue title
+or task description, normalize to lowercase alphanumeric words joined by
+hyphens, and preserve the recorded name in `workflow-state.md`.
+
+Do not ask for confirmation. Create:
+
+```text
+kaola-workflow/{project-name}/
+kaola-workflow/{project-name}/.cache/
+```
+
+Ask only if the input does not contain enough information to produce a safe
+name, or if multiple unrelated issues/tasks are competing for the same workflow
+cycle.
+
+Create or update `kaola-workflow/{project-name}/workflow-state.md`:
 
 ```markdown
 phase: 1
 phase_name: Research
 step: requirement-parsing
-next_command: /kaola-workflow-phase1 {task-or-project}
+next_command: /kaola-workflow-phase1 {project-name}
 main_session_role: orchestrator
 implementation_owner: N/A
 fix_owner: N/A
@@ -87,7 +98,7 @@ suspected affected area. Ask it to return:
 Write raw output to:
 
 ```text
-kaola-workflow/{project-or-_phase1-pending}/.cache/code-explorer.md
+kaola-workflow/{project-name}/.cache/code-explorer.md
 ```
 
 Update `workflow-state.md` before invoking and after writing the cache file.
@@ -103,7 +114,7 @@ implementation approaches.
 Write raw output to:
 
 ```text
-kaola-workflow/{project-or-_phase1-pending}/.cache/docs-lookup.md
+kaola-workflow/{project-name}/.cache/docs-lookup.md
 ```
 
 If not needed, record:
@@ -121,33 +132,10 @@ Score 0-10:
 - Scope boundaries: 0-2
 - Constraints: 0-2
 
-If score is below 7, stop and ask. Do not proceed to project naming.
+If score is below 7, stop and ask. Do not write the phase file or route to Phase
+2 until the missing information is resolved.
 
-## Step 5 - Name Project
-
-Generate a 2-4 word kebab-case name that describes the deliverable. Check for
-existing `kaola-workflow/{name}/`; if it exists, propose `{name}-2`.
-
-Ask:
-
-```text
-Proposed project name: {generated-name}
-All workflow files will be saved to: kaola-workflow/{generated-name}/
-
-Confirm? (yes / rename to: ...)
-```
-
-After confirmation, create:
-
-```text
-kaola-workflow/{project-name}/
-kaola-workflow/{project-name}/.cache/
-```
-
-Move temporary Phase 1 capture files into the project directory if they were
-created before naming.
-
-## Step 6 - Write Phase File
+## Step 5 - Write Phase File
 
 Create `kaola-workflow/{project-name}/phase1-research.md`:
 
@@ -203,4 +191,4 @@ step: complete
 next_command: /kaola-workflow-phase2 {project-name}
 ```
 
-Confirm with the user before Phase 2.
+Continue to Phase 2 when Phase 1 evidence and compliance rows are complete.

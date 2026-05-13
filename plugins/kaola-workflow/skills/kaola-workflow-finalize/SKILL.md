@@ -7,6 +7,14 @@ description: Use when reviewed Kaola-Workflow for Codex work, also called kaola-
 
 Phase 6 proves the work is complete and records closure metadata.
 
+## Goal Contract
+
+Continue until final validation, acceptance audit, documentation docking,
+roadmap refresh, archive decision, and Git finalization evidence are complete.
+Before declaring completion, audit every explicit requirement against concrete
+evidence. Stop only for true external authorization, materially user-owned
+choices, or ambiguity that blocks correctness.
+
 ## Guardrails
 
 - Run or cite fresh final validation before claiming completion.

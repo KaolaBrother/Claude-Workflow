@@ -7,6 +7,23 @@ description: Use when resuming, routing, or starting a Kaola-Workflow for Codex 
 
 This is the thin router. It owns startup checks, roadmap freshness, active project selection, state repair, and phase routing. It does not perform phase work directly unless it routes into the next skill.
 
+## Goal Contract
+
+Continue until the selected workflow phase objective is satisfied, evidence is
+recorded, and `workflow-state.md` points to the correct `next_skill`. Do not
+stop after routine substeps. Stop only for true external authorization,
+destructive or risky Git operations, materially user-owned choices, or ambiguity
+that blocks correctness.
+
+## Autonomy Policy
+
+Treat nonessential workflow bookkeeping as autonomous: generated project names,
+collision suffixes such as `-2`, cache/artifact paths, and harmless ordering
+choices are selected automatically and recorded. For essential technical
+decisions, consult the strongest available expert model/profile for the session,
+apply the chosen answer directly, and record it under `.cache/` or the phase
+artifact.
+
 ## Startup
 
 Classify local and remote Git state:
@@ -45,6 +62,8 @@ node "$repair_script" {project-or-empty}
 ```
 
 Use the repaired state only when it identifies exactly one safe `next_skill`.
+If there is one unambiguous open GitHub issue and no active project, select it
+without asking the user to confirm the generated workflow folder name.
 
 Manual reconstruction order:
 

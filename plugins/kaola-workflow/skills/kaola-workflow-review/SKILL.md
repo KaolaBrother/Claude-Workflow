@@ -7,6 +7,14 @@ description: Use when Phase 4 tasks are complete and Kaola-Workflow for Codex, a
 
 Phase 5 reviews completed work. Review findings come first; fixes are implemented only after classification.
 
+## Goal Contract
+
+Continue until quality review, conditional security review, review-fix routing,
+and `phase5-review.md` are complete, then update `workflow-state.md` with
+`next_skill: kaola-workflow-finalize {project}`. Stop only for true external
+authorization, materially user-owned choices, or ambiguity that blocks
+correctness.
+
 ## Inputs
 
 Read:
