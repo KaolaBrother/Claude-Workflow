@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+No unreleased changes.
+
+## 3.1.0 - 2026-05-13
+
 ### Changed
 
 - Made routine Kaola-Workflow bookkeeping autonomous, including generated

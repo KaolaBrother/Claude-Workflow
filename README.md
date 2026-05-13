@@ -202,8 +202,8 @@ contracts locally.
 
 Current official release versions:
 
-- Claude Code `kaola-workflow` package/plugin: `3.0.0`
-- Codex `kaola-workflow` plugin manifest: `1.0.0`
+- Claude Code `kaola-workflow` package/plugin: `3.1.0`
+- Codex `kaola-workflow` plugin manifest: `1.1.0`
 
 The root `package.json` version is the official repository and Claude Code
 release version. The Codex plugin has its own manifest version in
@@ -223,7 +223,7 @@ Official release checklist:
 ```bash
 npm test
 git diff --check
-git tag kaola-workflow-v3.0.0
+git tag kaola-workflow-v3.1.0
 git push origin main --tags
 ```
 
