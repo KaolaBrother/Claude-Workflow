@@ -407,6 +407,157 @@ function main() {
       fs.rmSync(epicTmp, { recursive: true, force: true });
     }
 
+    // Epic Case 2: sink-merge OFFLINE fast-path (alreadyUpToDate = true)
+    const epic2Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic2-'));
+    try {
+      const remoteDir = path.join(epic2Tmp, 'remote.git');
+      const workDir = path.join(epic2Tmp, 'work');
+      execFileSync('git', ['init', '--bare', remoteDir], { encoding: 'utf8' });
+      execFileSync('git', ['init', workDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'README.md'), 'init\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      // Cut feature branch at same HEAD as origin/main — alreadyUpToDate will be true
+      execFileSync('git', ['checkout', '-b', 'workflow/issue-99-epic2'], { cwd: workDir, encoding: 'utf8' });
+      let epic2ExitCode = 0;
+      try {
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-sink-merge.js'),
+          '--branch', 'workflow/issue-99-epic2', '--issue', '99', '--project', 'epic2'
+        ], { cwd: workDir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      } catch (e) {
+        epic2ExitCode = e.status || 1;
+      }
+      assert(epic2ExitCode === 0, 'Epic Case 2: sink-merge must exit 0 on fast-path, got ' + epic2ExitCode);
+      const currentBranch2 = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+        { cwd: workDir, encoding: 'utf8' }).trim();
+      assert(currentBranch2 === 'main', 'Epic Case 2: worktree must be on main after merge, got ' + currentBranch2);
+      let branchExists2 = true;
+      try {
+        execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/workflow/issue-99-epic2'],
+          { cwd: workDir, encoding: 'utf8' });
+      } catch (_) { branchExists2 = false; }
+      assert(!branchExists2, 'Epic Case 2: feature branch must be deleted after merge');
+    } finally {
+      fs.rmSync(epic2Tmp, { recursive: true, force: true });
+    }
+
+    // Epic Case 3: sink-merge rebase path (real rebase + ff-merge)
+    const epic3Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic3-'));
+    try {
+      const remoteDir = path.join(epic3Tmp, 'remote.git');
+      const workDir = path.join(epic3Tmp, 'work');
+      const siblingDir = path.join(epic3Tmp, 'sibling');
+      execFileSync('git', ['init', '--bare', remoteDir], { encoding: 'utf8' });
+      execFileSync('git', ['init', workDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'README.md'), 'init\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      // Sibling advances origin/main
+      execFileSync('git', ['clone', remoteDir, siblingDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'sibling@test.com'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Sibling'], { cwd: siblingDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(siblingDir, 'sibling.txt'), 'sibling\n');
+      execFileSync('git', ['add', 'sibling.txt'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'sibling commit'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'main'], { cwd: siblingDir, encoding: 'utf8' });
+      // workDir fetches updated origin/main
+      execFileSync('git', ['fetch', 'origin'], { cwd: workDir, encoding: 'utf8' });
+      // Cut feature branch at original main (before sibling), add feature commit
+      execFileSync('git', ['checkout', '-b', 'workflow/issue-100-epic3'], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'feature.txt'), 'feature\n');
+      execFileSync('git', ['add', 'feature.txt'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'feature commit'], { cwd: workDir, encoding: 'utf8' });
+      // Run sink-merge OFFLINE=1 (local origin/main ref is fresh from fetch above)
+      let epic3ExitCode = 0;
+      try {
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-sink-merge.js'),
+          '--branch', 'workflow/issue-100-epic3', '--issue', '100', '--project', 'epic3'
+        ], { cwd: workDir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      } catch (e) {
+        epic3ExitCode = e.status || 1;
+      }
+      assert(epic3ExitCode === 0, 'Epic Case 3: sink-merge must exit 0 after rebase, got ' + epic3ExitCode);
+      const currentBranch3 = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+        { cwd: workDir, encoding: 'utf8' }).trim();
+      assert(currentBranch3 === 'main', 'Epic Case 3: worktree must be on main, got ' + currentBranch3);
+      let branchExists3 = true;
+      try {
+        execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/workflow/issue-100-epic3'],
+          { cwd: workDir, encoding: 'utf8' });
+      } catch (_) { branchExists3 = false; }
+      assert(!branchExists3, 'Epic Case 3: feature branch must be deleted after merge');
+    } finally {
+      fs.rmSync(epic3Tmp, { recursive: true, force: true });
+    }
+
+    // Epic Case 4: FF race retry exhaustion (FORCE_FF_FAIL=3 == MAX_AUTOMERGE_RETRIES)
+    const epic4Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic4-'));
+    try {
+      const remoteDir = path.join(epic4Tmp, 'remote.git');
+      const workDir = path.join(epic4Tmp, 'work');
+      const siblingDir = path.join(epic4Tmp, 'sibling');
+      execFileSync('git', ['init', '--bare', remoteDir], { encoding: 'utf8' });
+      execFileSync('git', ['init', workDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'README.md'), 'init\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      // Sibling advances origin/main (same setup as Case 3)
+      execFileSync('git', ['clone', remoteDir, siblingDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'sibling@test.com'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Sibling'], { cwd: siblingDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(siblingDir, 'sibling.txt'), 'sibling\n');
+      execFileSync('git', ['add', 'sibling.txt'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'sibling commit'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'main'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['fetch', 'origin'], { cwd: workDir, encoding: 'utf8' });
+      // Cut feature branch, add feature commit (rebase needed)
+      execFileSync('git', ['checkout', '-b', 'workflow/issue-101-epic4'], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'feature4.txt'), 'feature4\n');
+      execFileSync('git', ['add', 'feature4.txt'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'feature commit epic4'], { cwd: workDir, encoding: 'utf8' });
+      // Run sink-merge OFFLINE=1 with FORCE_FF_FAIL=3 — expect exit 2
+      let epic4ExitCode = 0;
+      try {
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-sink-merge.js'),
+          '--branch', 'workflow/issue-101-epic4', '--issue', '101', '--project', 'epic4'
+        ], { cwd: workDir, encoding: 'utf8', env: {
+          ...process.env,
+          KAOLA_WORKFLOW_OFFLINE: '1',
+          KAOLA_WORKFLOW_FORCE_FF_FAIL: '3'
+        }});
+      } catch (e) {
+        epic4ExitCode = e.status || 1;
+      }
+      assert(epic4ExitCode === 2,
+        'Epic Case 4: sink-merge must exit 2 on FF race exhaustion, got ' + epic4ExitCode);
+      // Feature branch must NOT be deleted (cleanup step skipped)
+      let branchStillExists4 = false;
+      try {
+        execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/workflow/issue-101-epic4'],
+          { cwd: workDir, encoding: 'utf8' });
+        branchStillExists4 = true;
+      } catch (_) { branchStillExists4 = false; }
+      assert(branchStillExists4,
+        'Epic Case 4: feature branch must NOT be deleted when FF race exhausted');
+    } finally {
+      fs.rmSync(epic4Tmp, { recursive: true, force: true });
+    }
+
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

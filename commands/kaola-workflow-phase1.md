@@ -201,3 +201,71 @@ next_command: /kaola-workflow-phase2 {project-name}
 ```
 
 Continue to Phase 2 when Phase 1 evidence and compliance rows are complete.
+
+## Step 6 - Cut Feature Branch
+
+If a claim session is active (`KAOLA_SESSION_ID` is set) and `workflow-state.md`
+contains a `## Sink` block, cut the feature branch now.
+
+Read the branch name from the Sink block:
+
+```bash
+SINK_BRANCH=$(grep '^branch:' kaola-workflow/{project}/workflow-state.md | awk '{print $2}')
+```
+
+If `SINK_BRANCH` is empty or `TBD`, skip this step — no session is active or
+the branch name is not yet resolved.
+
+**Worktree precondition** — run before any git branch operation:
+
+```bash
+git status --porcelain
+```
+
+If the output is non-empty (dirty worktree), stop immediately with:
+
+```text
+ERROR: Worktree is dirty. Commit or discard your changes before cutting the
+feature branch. Do NOT auto-stash. Resolve manually, then re-run Phase 1.
+```
+
+Do not stash automatically.
+
+**Branch creation (idempotent):**
+
+```bash
+if git show-ref --verify --quiet refs/heads/"$SINK_BRANCH"; then
+  # Branch already exists — resume case
+  git checkout "$SINK_BRANCH"
+else
+  git checkout -b "$SINK_BRANCH"
+fi
+```
+
+**Stage 1 migration** — if the Sink block showed `branch: TBD` before the
+branch name was resolved, call `patch-branch` to backfill the lock file, Sink
+block, and GitHub claim comment:
+
+```bash
+# Only if the stored branch was TBD (legacy lease)
+if [ "$(grep '^branch:' kaola-workflow/{project}/workflow-state.md | awk '{print $2}')" = "TBD" ]; then
+  node "${CLAUDE_PLUGIN_ROOT:-$HOME/.claude/kaola-workflow}/scripts/kaola-workflow-claim.js" \
+    patch-branch \
+    --project {project} \
+    --session "$KAOLA_SESSION_ID" \
+    --branch "$SINK_BRANCH"
+fi
+```
+
+After this step the worktree is on `{branch}`. Phase 4 implementation work
+begins on this branch.
+
+Update `workflow-state.md`:
+
+```text
+phase: 1
+step: complete
+next_command: /kaola-workflow-phase2 {project-name}
+```
+
+Continue to Phase 2 when Phase 1 evidence and compliance rows are complete.

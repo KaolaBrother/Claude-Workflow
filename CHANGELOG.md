@@ -12,6 +12,18 @@
   available in `workflow-init` and `workflow-next`, with heartbeat renewal at
   each phase entry to keep the lease fresh. Support files are installed to
   `~/.claude/kaola-workflow/` by `install.sh`.
+- `scripts/kaola-workflow-sink-merge.js`: branch-per-issue auto-merge sink — 10-step rebase-then-ff-merge sequence with merge-base skip-check, FF retry loop (MAX_AUTOMERGE_RETRIES=3), exit codes 0/1/2, and OFFLINE support via `KAOLA_WORKFLOW_OFFLINE=1`.
+- `cmdPatchBranch` subcommand in `kaola-workflow-claim.js`: backfills branch name in lock file, Sink block, and GitHub claim comment for Stage 1 migration.
+- Phase 1 Step 6: Cut Feature Branch — worktree-clean check, idempotent `git checkout -b`, and Stage 1 migration support.
+- `Branch:` line in `workflow-next.md` Required Output Before Routing block for explicit branch tracking.
+
+### Changed
+
+- `kaola-workflow-claim.js`: `updateSinkLease` now writes real branch name at claim time (was always `TBD`).
+- `kaola-workflow-phase6.md`: Step 8 is now Sink Merge (invokes `kaola-workflow-sink-merge.js`) instead of manual `git commit` and `git push`.
+- `install.sh`: `kaola-workflow-sink-merge.js` added to script copy loop.
+- `simulate-workflow-walkthrough.js`: Epic Cases 2 (OFFLINE fast-path), 3 (rebase path), and 4 (FF race exhaustion) added for sink-merge integration testing.
+- `validate-workflow-contracts.js`: stale assertions replaced; 10 new `assertIncludes` checks added for sink-merge contract validation.
 
 ## Codex plugin 1.1.1 - 2026-05-14
 

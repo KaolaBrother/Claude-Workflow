@@ -185,6 +185,7 @@ Workflow project: {project}
 Current phase: {phase or unknown}
 Current step: {step from workflow-state.md or reconstructed}
 Pending gates: {list or none}
+Branch: {branch from Sink block in workflow-state.md, or TBD if not yet claimed}
 Next command: {next_command}
 ```
 

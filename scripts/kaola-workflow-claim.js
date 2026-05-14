@@ -52,6 +52,7 @@ function parseArgs(argv) {
     if (argv[i] === '--session' && argv[i + 1]) { args.session = argv[++i]; continue; }
     if (argv[i] === '--project' && argv[i + 1]) { args.project = argv[++i]; continue; }
     if (argv[i] === '--issue' && argv[i + 1]) { args.issue = parseInt(argv[++i], 10); continue; }
+    if (argv[i] === '--branch' && argv[i + 1]) { args.branch = argv[++i]; continue; }
   }
   return args;
 }
@@ -96,9 +97,13 @@ function updateSinkLease(stateFile, lockData) {
   if (!fs.existsSync(stateFile)) return;
   const content = fs.readFileSync(stateFile, 'utf8');
 
+  const branchName = lockData.issue_number != null
+    ? 'workflow/issue-' + lockData.issue_number + '-' + lockData.project
+    : 'workflow/' + lockData.project;
+
   const sinkBlock = [
     '\n## Sink',
-    'branch: TBD',
+    'branch: ' + branchName,
     'issue_number: ' + (lockData.issue_number != null ? lockData.issue_number : 'unset'),
     'claimed_at: ' + lockData.claimed_at
   ].join('\n');
@@ -117,10 +122,8 @@ function updateSinkLease(stateFile, lockData) {
   }
 
   // Update in-place
-  let updated = content.replace(
-    /^## Lease[\s\S]*?(?=\n##|\s*$)/m,
-    leaseBlock.slice(1)
-  );
+  let updated = content.replace(/^branch:.*$/m, () => 'branch: ' + branchName);
+  updated = updated.replace(/(?:^|\n)(## Lease[\s\S]*?)(?=\n##|[\s]*$)/, '\n' + leaseBlock.slice(1));
   fs.writeFileSync(stateFile, updated);
 }
 
@@ -339,14 +342,50 @@ function cmdStatus() {
   process.stdout.write(JSON.stringify(results, null, 2) + '\n');
 }
 
+function cmdPatchBranch() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(args.project, '--project required for patch-branch');
+  assert(args.session, '--session required for patch-branch');
+  assert(args.branch, '--branch required for patch-branch');
+  assert(isSafeName(args.project), '--project must be a simple folder name');
+  assert(isSafeName(args.session), '--session must be a simple UUID');
+  assert(typeof args.branch === 'string' && args.branch.length > 0
+    && !args.branch.includes('\0') && args.branch !== '.' && args.branch !== '..', '--branch is invalid');
+
+  const root = getRoot();
+  const lp = lockPath(root, args.project);
+  assert(fs.existsSync(lp), 'no lock file for project: ' + args.project);
+  const lock = JSON.parse(fs.readFileSync(lp, 'utf8'));
+  assert(lock.session_id === args.session, 'session mismatch: lock belongs to ' + lock.session_id);
+
+  const updatedLock = Object.assign({}, lock, { branch: args.branch });
+  fs.writeFileSync(lp, JSON.stringify(updatedLock, null, 2) + '\n');
+
+  const stateFile = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
+  if (fs.existsSync(stateFile)) {
+    const content = fs.readFileSync(stateFile, 'utf8');
+    const patched = content.replace(/^branch:.*$/m, () => 'branch: ' + args.branch);
+    fs.writeFileSync(stateFile, patched);
+  }
+
+  const safeCommentId = /^\d+$/.test(lock.claim_comment_id) ? lock.claim_comment_id : null;
+  if (!OFFLINE && safeCommentId) {
+    try {
+      ghExec(['issue', 'comment', '--edit', safeCommentId,
+        '--body', 'Branch: ' + args.branch]);
+    } catch (_) {}
+  }
+}
+
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|sweep|status>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|sweep|status|patch-branch>');
   if (sub === 'claim') return cmdClaim();
   if (sub === 'release') return cmdRelease();
   if (sub === 'heartbeat') return cmdHeartbeat();
   if (sub === 'sweep') return cmdSweep();
   if (sub === 'status') return cmdStatus();
+  if (sub === 'patch-branch') return cmdPatchBranch();
   throw new Error('unknown subcommand: ' + sub);
 }
 

@@ -402,27 +402,29 @@ Before the final Git gate, verify every other `Required Agent Compliance` row
 across phase files is `invoked`, `skipped`, or `N/A` with evidence or skip
 reason.
 
-## Step 8 - Commit And Push
+## Step 8 - Sink Merge
 
-If `/prp-commit` is available, use it.
+Read the `## Sink` block from `kaola-workflow/{project}/workflow-state.md`:
 
-Otherwise:
+```bash
+# Extract values from Sink block
+SINK_BRANCH=$(grep '^branch:' kaola-workflow/{project}/workflow-state.md | awk '{print $2}')
+SINK_ISSUE=$(grep '^issue_number:' kaola-workflow/{project}/workflow-state.md | awk '{print $2}')
+```
 
-- inspect `git status` and `git diff`
-- stage only approved implementation, docs, and workflow artifacts for this
-  project
-- do not stage unrelated user changes
-- create a conventional commit
-- record the commit hash in the final response and in the GitHub issue comment
-  only when that comment does not require another tracked file edit
-- run `git push` to the configured upstream
-- run `git status --short --branch`
-- confirm the worktree is clean and synced with upstream
+If `SINK_ISSUE` is `unset`, omit `--issue`. The bash template below already implements this conditional, so no manual step is needed:
 
-If the branch has no upstream, use `git push -u origin HEAD` when `origin`
-exists and policy allows creating/updating that remote branch. Otherwise stop
-and ask the user which remote/branch to use.
+```bash
+SINK_ISSUE_FLAG=""
+[ "$SINK_ISSUE" != "unset" ] && SINK_ISSUE_FLAG="--issue $SINK_ISSUE"
 
-If push is rejected or the branch is not clean and synced after push, stop with
-the exact Git status and next safe command. Do not amend, rebase, merge, stash,
-reset, or create a second cleanup commit unless the user explicitly approves it.
+node ~/.claude/kaola-workflow/scripts/kaola-workflow-sink-merge.js \
+  --branch "$SINK_BRANCH" \
+  $SINK_ISSUE_FLAG \
+  --project {project}
+```
+
+Exit codes:
+- Exit 0: branch merged onto main, issue closed (online), local branch deleted. Confirm worktree is on main with `git status --short --branch`.
+- Exit 1: conflict or fatal error. Rebase conflict remediation printed to stderr with exact commands. Re-run after resolving.
+- Exit 2: FF race exhausted after MAX_AUTOMERGE_RETRIES retries. Follow printed remediation instructions (ensure no concurrent pushes to main, then re-run sink-merge).
