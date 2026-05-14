@@ -7,11 +7,11 @@ This file mirrors active unfinished work. GitHub issues are the source of truth 
 
 | Issue | Title | Status | Workflow Project | Next Step |
 |-------|-------|--------|------------------|-----------|
-| #10 | multi-session substrate: hardening pass | open | — | after #4/#5 |
+| #10 | multi-session substrate: hardening pass | open | — | ready (unblocked) |
 | #9 | Multi-session: cross-machine hardening (tiebreaker, ticker, remote sweeper) | open | — | ready (unblocked) |
-| #8 | Multi-session: Codex parity via shared scripts | open | — | blocked by #4 |
-| #7 | Multi-session: PR sink + /workflow-next-pr + merge watcher | open | — | blocked by #4 |
-| #6 | Multi-session: parallelizability classifier + auto candidate selection | open | — | blocked by #5 |
+| #8 | Multi-session: Codex parity via shared scripts | open | — | ready (unblocked) |
+| #7 | Multi-session: PR sink + /workflow-next-pr + merge watcher | open | — | ready (unblocked) |
+| #6 | Multi-session: parallelizability classifier + auto candidate selection | open | — | ready (unblocked) |
 | #2 | Multi-session co-work scheme for Kaola-Workflow (epic) | open | — | close when #4-10 done |
 
 ## Rules
