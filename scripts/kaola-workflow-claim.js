@@ -115,12 +115,13 @@ function updateSinkLease(stateFile, lockData) {
   const content = fs.readFileSync(stateFile, 'utf8');
 
   const sinkBlock = '\n' + buildSinkBlock(lockData);
+  const safeCommentId = /^\d+$/.test(lockData.claim_comment_id) ? lockData.claim_comment_id : 'N/A';
   const leaseBlock = [
     '\n## Lease',
     'session_id: ' + lockData.session_id,
     'expires: ' + lockData.expires,
     'last_heartbeat: ' + lockData.last_heartbeat,
-    'claim_comment_id: ' + (lockData.claim_comment_id || 'N/A')
+    'claim_comment_id: ' + safeCommentId
   ].join('\n');
 
   if (!/^## Sink\s*$/m.test(content)) {
@@ -140,7 +141,7 @@ function updateSinkLease(stateFile, lockData) {
 function updateLeaseInPlace(stateFile, lockData) {
   if (!fs.existsSync(stateFile)) return;
   const content = fs.readFileSync(stateFile, 'utf8');
-  if (!/^## Lease\s*$/m.test(content)) return;
+  if (!/^## Lease\s*$/m.test(content)) { process.stderr.write('updateLeaseInPlace: ## Lease section missing in ' + stateFile + '\n'); return; }
 
   const updated = content
     .replace(/^expires:.*$/m, 'expires: ' + lockData.expires)
@@ -150,7 +151,7 @@ function updateLeaseInPlace(stateFile, lockData) {
 }
 
 function writeLockFile(lp, lockData) {
-  const fd = fs.openSync(lp, 'wx');
+  const fd = fs.openSync(lp, 'wx', 0o600);
   try {
     fs.writeSync(fd, JSON.stringify(lockData, null, 2) + '\n');
     fs.fsyncSync(fd);
@@ -168,7 +169,7 @@ function writeSessionFile(root, sessionId, machineId) {
     pid: process.pid,
     started: new Date().toISOString()
   };
-  fs.writeFileSync(sessionPath(root, sessionId), JSON.stringify(sess, null, 2) + '\n');
+  fs.writeFileSync(sessionPath(root, sessionId), JSON.stringify(sess, null, 2) + '\n', { mode: 0o600 });
 }
 
 function postGitHubClaim(issueNum, sessionId) {
@@ -228,7 +229,7 @@ function cmdClaim() {
     : lockData;
 
   if (commentId !== null) {
-    fs.writeFileSync(lp, JSON.stringify(finalLock, null, 2) + '\n');
+    fs.writeFileSync(lp, JSON.stringify(finalLock, null, 2) + '\n', { mode: 0o600 });
   }
 
   const stateFile = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
@@ -327,6 +328,9 @@ function cmdStatus() {
     : locks;
 
   const results = filtered.map(lock => {
+    if (!isSafeName(lock.session_id)) {
+      return { session: null, lock, remote: { assignee: null, has_label: null, sentinel_comment_id: null }, consistent: false, drift: ['session_id unsafe'] };
+    }
     const session = readSessionFile(root, lock.session_id);
 
     let remote = { assignee: null, has_label: null, sentinel_comment_id: null };
@@ -365,7 +369,8 @@ function cmdPatchBranch() {
   assert(isSafeName(args.project), '--project must be a simple folder name');
   assert(isSafeName(args.session), '--session must be a simple UUID');
   assert(typeof args.branch === 'string' && args.branch.length > 0
-    && !args.branch.includes('\0') && args.branch !== '.' && args.branch !== '..', '--branch is invalid');
+    && !args.branch.includes('\0') && !args.branch.includes('\n') && !args.branch.includes('\r')
+    && args.branch !== '.' && args.branch !== '..', '--branch is invalid');
 
   const root = getRoot();
   const lp = lockPath(root, args.project);

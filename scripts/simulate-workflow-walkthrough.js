@@ -2,7 +2,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const project = 'simulated-feature';
@@ -1049,6 +1049,216 @@ exit 0
 
       } finally {
         fs.rmSync(epic7Tmp, { recursive: true, force: true });
+      }
+    }
+
+    // Epic Case 8: claim hardening (8A–8E)
+    {
+      const epic8Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic8-'));
+      try {
+        const claimScript = path.join(root, 'scripts/kaola-workflow-claim.js');
+
+        function runClaim(workdir, sessionId, issue, claimProject) {
+          execFileSync(process.execPath, [
+            claimScript, 'claim',
+            '--session', sessionId,
+            '--project', claimProject,
+            '--issue', String(issue)
+          ], {
+            cwd: workdir,
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: { ...process.env, HOME: workdir, KAOLA_WORKFLOW_OFFLINE: '1' }
+          });
+          return {
+            lockPath: path.join(workdir, 'kaola-workflow', '.locks', claimProject + '.lock'),
+            statePath: path.join(workdir, 'kaola-workflow', claimProject, 'workflow-state.md')
+          };
+        }
+
+        // 8A: lock and session files must be created with mode 0o600
+        if (process.platform !== 'win32') {
+          const sessId8a = 'sess-8a-' + Date.now();
+          const { lockPath: lp8a } = runClaim(epic8Tmp, sessId8a, 3, 'epic8-proj');
+          const sessionFile8a = path.join(epic8Tmp, 'kaola-workflow', '.sessions', sessId8a + '.json');
+          assert((fs.statSync(lp8a).mode & 0o777) === 0o600, '8A: lock file mode must be 0o600');
+          assert((fs.statSync(sessionFile8a).mode & 0o777) === 0o600, '8A: session file mode must be 0o600');
+        }
+
+        // 8D: cmdStatus must skip (or drift-flag) a lock whose session_id contains path separators
+        {
+          const epic8dTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic8d-'));
+          try {
+            const locksDir8d = path.join(epic8dTmp, 'kaola-workflow', '.locks');
+            fs.mkdirSync(locksDir8d, { recursive: true });
+            const now8d = new Date();
+            fs.writeFileSync(
+              path.join(locksDir8d, 'epic8d.lock'),
+              JSON.stringify({
+                project: 'epic8d',
+                session_id: '../../../etc/passwd',
+                expires: new Date(now8d.getTime() + 30 * 60 * 1000).toISOString(),
+                last_heartbeat: now8d.toISOString(),
+                claimed_at: now8d.toISOString()
+              }, null, 2) + '\n'
+            );
+            const r8d = spawnSync(process.execPath, [claimScript, 'status', '--json'], {
+              cwd: epic8dTmp, encoding: 'utf8',
+              env: { ...process.env, HOME: epic8dTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8d.status === 0, '8D: status exits 0 even with unsafe session_id in lock');
+            const results8d = JSON.parse(r8d.stdout);
+            const entry8d = results8d.find(e => e.lock && e.lock.project === 'epic8d');
+            assert(
+              entry8d == null || (entry8d.drift && entry8d.drift.includes('session_id unsafe')),
+              '8D: unsafe session_id entry must be absent or have drift ["session_id unsafe"]'
+            );
+          } finally {
+            fs.rmSync(epic8dTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8B: heartbeat must warn on stderr when ## Lease section is missing
+        {
+          const epic8bTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic8b-'));
+          try {
+            const locksDir8b = path.join(epic8bTmp, 'kaola-workflow', '.locks');
+            const projDir8b = path.join(epic8bTmp, 'kaola-workflow', 'epic8b');
+            fs.mkdirSync(locksDir8b, { recursive: true });
+            fs.mkdirSync(projDir8b, { recursive: true });
+            const now8b = new Date();
+            fs.writeFileSync(
+              path.join(locksDir8b, 'epic8b.lock'),
+              JSON.stringify({
+                project: 'epic8b',
+                session_id: 'sess-8b',
+                expires: new Date(now8b.getTime() + 30 * 60 * 1000).toISOString(),
+                last_heartbeat: now8b.toISOString(),
+                claimed_at: now8b.toISOString()
+              }, null, 2) + '\n'
+            );
+            // workflow-state.md has Project and Current Position but deliberately NO ## Lease section
+            fs.writeFileSync(
+              path.join(projDir8b, 'workflow-state.md'),
+              '# Kaola-Workflow State\n\n## Project\nname: epic8b\nstatus: active\n\n## Current Position\nphase: 4\n'
+            );
+            const r8b = spawnSync(process.execPath, [claimScript, 'heartbeat', '--session', 'sess-8b'], {
+              cwd: epic8bTmp, encoding: 'utf8',
+              env: { ...process.env, HOME: epic8bTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8b.status === 0, '8B: heartbeat exits 0 even when Lease section missing');
+            assert(
+              r8b.stderr.includes('updateLeaseInPlace: ## Lease section missing in'),
+              '8B: heartbeat must warn when Lease section missing, got stderr: ' + r8b.stderr
+            );
+          } finally {
+            fs.rmSync(epic8bTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8C: claim_comment_id must render as 'N/A' in offline mode (regression guard)
+        {
+          const epic8cTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic8c-'));
+          try {
+            const projDir8c = path.join(epic8cTmp, 'kaola-workflow', 'epic8c');
+            fs.mkdirSync(projDir8c, { recursive: true });
+            fs.writeFileSync(
+              path.join(projDir8c, 'workflow-state.md'),
+              '# Kaola-Workflow State\n\n## Project\nname: epic8c\nstatus: active\n\n## Last Updated\n2026-01-01T00:00:00Z\n'
+            );
+            const sessId8c = 'sess-8c-' + Date.now();
+            const { statePath: sp8c } = runClaim(epic8cTmp, sessId8c, 3, 'epic8c');
+            const state8c = fs.readFileSync(sp8c, 'utf8');
+            const m8c = state8c.match(/^claim_comment_id:\s*(.+)$/m);
+            assert(m8c != null, '8C: workflow-state.md must contain claim_comment_id line');
+            assert(m8c[1].trim() === 'N/A', '8C: claim_comment_id must be N/A in offline mode, got: ' + m8c[1]);
+          } finally {
+            fs.rmSync(epic8cTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8E: re-claim must refresh issue_number and claimed_at (M1 probe)
+        {
+          const epic8eTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic8e-'));
+          try {
+            const projDir8e = path.join(epic8eTmp, 'kaola-workflow', 'epic8e');
+            fs.mkdirSync(projDir8e, { recursive: true });
+            // Standard state file with no Sink/Lease
+            fs.writeFileSync(
+              path.join(projDir8e, 'workflow-state.md'),
+              [
+                '# Kaola-Workflow State',
+                '',
+                '## Project',
+                'name: epic8e',
+                'status: active',
+                '',
+                '## Current Position',
+                'phase: 3',
+                'phase_name: Plan',
+                '',
+                '## Pending Gates',
+                '- none',
+                '',
+                '## Ownership Rules',
+                'main_session_role: orchestrator',
+                '',
+                '## Last Evidence',
+                'phase_file: kaola-workflow/epic8e/phase3-plan.md',
+                '',
+                '## Last Updated',
+                '2026-01-01T00:00:00Z',
+              ].join('\n') + '\n'
+            );
+
+            // Claim #3 with sessA → "Sink doesn't exist" branch appends Sink+Lease at end
+            runClaim(epic8eTmp, 'sess-8e-a', 3, 'epic8e');
+
+            // Release sessA
+            spawnSync(process.execPath, [claimScript, 'release', '--session', 'sess-8e-a'], {
+              cwd: epic8eTmp, encoding: 'utf8',
+              env: { ...process.env, HOME: epic8eTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+
+            // Claim #4 with sessB → "Sink already exists" branch: re-claim regex replace path
+            runClaim(epic8eTmp, 'sess-8e-b', 4, 'epic8e');
+
+            const content8e = fs.readFileSync(path.join(projDir8e, 'workflow-state.md'), 'utf8');
+            assert(content8e.includes('issue_number: 4'), '8E: issue_number must be refreshed to 4');
+            assert(/^claimed_at:\s*.+$/m.test(content8e), '8E: claimed_at must be present');
+            assert(content8e.includes('## Project'), '8E: ## Project section must be preserved');
+            assert(content8e.includes('## Current Position'), '8E: ## Current Position section must be preserved');
+            assert((content8e.match(/^## Sink\s*$/mg) || []).length === 1, '8E: exactly one ## Sink');
+            assert((content8e.match(/^## Lease\s*$/mg) || []).length === 1, '8E: exactly one ## Lease');
+          } finally {
+            fs.rmSync(epic8eTmp, { recursive: true, force: true });
+          }
+        }
+
+        // Test 8F — cmdPatchBranch rejects branch names containing newline (H1 fix)
+        {
+          const epic8fTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8f-'));
+          try {
+            runClaim(epic8fTmp, 'sess-8f', 3, 'epic8f');
+
+            const r8f = spawnSync(process.execPath, [
+              claimScript, 'patch-branch',
+              '--session', 'sess-8f',
+              '--project', 'epic8f',
+              '--branch', 'main\n## Lease\nsession_id: injected'
+            ], {
+              cwd: epic8fTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8fTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8f.status !== 0, '8F: patch-branch must reject branch names containing newline');
+          } finally {
+            fs.rmSync(epic8fTmp, { recursive: true, force: true });
+          }
+        }
+
+      } finally {
+        fs.rmSync(epic8Tmp, { recursive: true, force: true });
       }
     }
 
