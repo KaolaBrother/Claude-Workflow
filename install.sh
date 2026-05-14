@@ -7,6 +7,8 @@ SUPPORT_DIR="$HOME/.claude/kaola-workflow"
 SUPPORT_SCRIPTS_DIR="$SUPPORT_DIR/scripts"
 SOURCE_COMMANDS_DIR="$SCRIPT_DIR/commands"
 SOURCE_SCRIPTS_DIR="$SCRIPT_DIR/scripts"
+SUPPORT_HOOKS_DIR="$SUPPORT_DIR/hooks"
+SOURCE_HOOKS_DIR="$SCRIPT_DIR/hooks"
 YES=0
 
 for arg in "$@"; do
@@ -108,11 +110,22 @@ if [[ "$installed" -eq 0 ]]; then
 fi
 
 mkdir -p "$SUPPORT_SCRIPTS_DIR"
-for script_file in "$SOURCE_SCRIPTS_DIR"/kaola-workflow-repair-state.js; do
+for script_file in \
+  "$SOURCE_SCRIPTS_DIR"/kaola-workflow-repair-state.js \
+  "$SOURCE_SCRIPTS_DIR"/kaola-workflow-claim.js; do
   if [[ -f "$script_file" ]]; then
     cp "$script_file" "$SUPPORT_SCRIPTS_DIR/$(basename "$script_file")"
     chmod +x "$SUPPORT_SCRIPTS_DIR/$(basename "$script_file")"
     echo "Installed support script: $SUPPORT_SCRIPTS_DIR/$(basename "$script_file")"
+  fi
+done
+
+mkdir -p "$SUPPORT_HOOKS_DIR"
+for hook_file in "$SOURCE_HOOKS_DIR"/kaola-workflow-pre-commit.sh; do
+  if [[ -f "$hook_file" ]]; then
+    cp "$hook_file" "$SUPPORT_HOOKS_DIR/$(basename "$hook_file")"
+    chmod +x "$SUPPORT_HOOKS_DIR/$(basename "$hook_file")"
+    echo "Installed support hook: $SUPPORT_HOOKS_DIR/$(basename "$hook_file")"
   fi
 done
 

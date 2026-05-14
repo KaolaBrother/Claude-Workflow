@@ -42,6 +42,18 @@ advisor internally for essential technical decisions, apply the chosen answer,
 and record it under `.cache/` or the phase artifact. Ask only for true external
 authorization or materially user-owned choices.
 
+## Startup Step 0 - Sweep And Claim
+
+If `kaola-workflow-claim.js` is available and `KAOLA_SESSION_ID` is set, run sweep then claim before routing:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" sweep
+node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" claim \
+  --session "$KAOLA_SESSION_ID" --project "{project}" --issue {N}
+```
+
+If `KAOLA_SESSION_ID` is unset or the script is unavailable, skip this step.
+
 ## Startup Step 1 - Git Freshness
 
 Before selecting work, classify local/remote state:
@@ -93,6 +105,10 @@ task is available, ask the user what to implement. New work starts with:
 ```text
 /kaola-workflow-phase1 <task description or issue>
 ```
+
+## Co-active Leases
+
+Multiple sessions may hold leases simultaneously when each targets a distinct project. Session A on `issue-3` and Session B on `issue-4` are coexistent. The pre-commit guard blocks only commits that stage files from a project owned by a different session.
 
 ## Resume Detection
 
@@ -176,42 +192,3 @@ If nested slash-command execution is supported in the current Claude Code
 environment, continue by applying the matching command. Otherwise stop after
 printing the next command.
 
-## State File Contract
-
-Every phase command maintains:
-
-```markdown
-# Kaola-Workflow State
-
-## Project
-name: {project-name}
-status: active
-
-## Current Position
-phase: {1-6}
-phase_name: {name}
-step: {phase-owned step}
-task: {task number or N/A}
-next_command: /kaola-workflow-phaseN {project-name}
-
-## Pending Gates
-- {gate or none}
-
-## Ownership Rules
-main_session_role: orchestrator
-implementation_owner: {agent or N/A}
-fix_owner: {agent or N/A}
-inline_emergency_fallback_authorized: no
-
-## Last Evidence
-phase_file: kaola-workflow/{project-name}/phaseN-*.md
-cache_file: kaola-workflow/{project-name}/.cache/{file or N/A}
-last_command: {command or N/A}
-last_result: {result or N/A}
-
-## Last Updated
-{ISO-8601 UTC}
-```
-
-The `next_command` field is the durable resume pointer used by this router and
-by the compaction hook.

@@ -326,6 +326,87 @@ function main() {
     assertCommandIncludes('commands/kaola-workflow-phase5.md', ['code-reviewer', 'security-reviewer', 'tdd-guide', 'build-error-resolver']);
     assertCommandIncludes('commands/kaola-workflow-phase6.md', ['doc-updater', 'tdd-guide', 'build-error-resolver']);
 
+    // Epic Case 1: claim → heartbeat → status → second-claim-blocked → sweep → release
+    const epicTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic1-'));
+    try {
+      fs.mkdirSync(path.join(epicTmp, 'kaola-workflow', '.locks'), { recursive: true });
+      fs.mkdirSync(path.join(epicTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+      fs.mkdirSync(path.join(epicTmp, 'kaola-workflow', 'epic-test-project'), { recursive: true });
+      fs.writeFileSync(
+        path.join(epicTmp, 'kaola-workflow', 'epic-test-project', 'workflow-state.md'),
+        '# Kaola-Workflow State\n\n## Project\nname: epic-test-project\nstatus: active\n\n## Last Updated\n2026-05-14T00:00:00Z\n'
+      );
+
+      // Step 1 — Claim
+      const sessionId = 'test-session-' + Date.now();
+      const claimResult = execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-claim.js'),
+        'claim', '--session', sessionId, '--project', 'epic-test-project', '--issue', '3'
+      ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+
+      // Step 2 — Verify lock file exists
+      const lockPath = path.join(epicTmp, 'kaola-workflow', '.locks', 'epic-test-project.lock');
+      assert(fs.existsSync(lockPath), 'Epic Case 1: lock file must exist after claim');
+      const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+      assert(lock.session_id === sessionId, 'Epic Case 1: lock.session_id must match');
+      assert(new Date(lock.expires) > new Date(lock.claimed_at), 'Epic Case 1: expires must be after claimed_at');
+
+      // Step 3 — Heartbeat
+      execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-claim.js'),
+        'heartbeat', '--session', sessionId
+      ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      const lockAfterHb = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+      assert(lockAfterHb.last_heartbeat >= lock.last_heartbeat, 'Epic Case 1: heartbeat must update last_heartbeat');
+
+      // Step 4 — Status --json (consistent: true)
+      const statusOut = execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-claim.js'),
+        'status', '--session', sessionId, '--json'
+      ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      const statusArr = JSON.parse(statusOut);
+      assert(Array.isArray(statusArr) && statusArr.length === 1, 'Epic Case 1: status must return 1 entry');
+      assert(statusArr[0].consistent === true, 'Epic Case 1: status must be consistent');
+      assert(Array.isArray(statusArr[0].drift) && statusArr[0].drift.length === 0, 'Epic Case 1: drift must be empty');
+
+      // Step 5 — Second claim on same project must exit 2
+      let secondClaimExitCode = 0;
+      try {
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'other-session-999', '--project', 'epic-test-project', '--issue', '3'
+        ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      } catch (e) {
+        secondClaimExitCode = e.status || 1;
+      }
+      assert(secondClaimExitCode === 2, 'Epic Case 1: second claim on locked project must exit 2, got ' + secondClaimExitCode);
+
+      // Step 6 — Sweep must NOT remove the lock (it's < 24h old)
+      execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-claim.js'),
+        'sweep'
+      ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      assert(fs.existsSync(lockPath), 'Epic Case 1: sweep must not remove a fresh lock');
+
+      // Step 7 — Release
+      execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-claim.js'),
+        'release', '--session', sessionId
+      ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      assert(!fs.existsSync(lockPath), 'Epic Case 1: lock file must be removed after release');
+
+      // Step 8 — Status after release must return empty array
+      const statusAfterRelease = execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-claim.js'),
+        'status', '--json'
+      ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      const statusAfterArr = JSON.parse(statusAfterRelease);
+      assert(Array.isArray(statusAfterArr) && statusAfterArr.length === 0, 'Epic Case 1: status after release must be empty');
+
+    } finally {
+      fs.rmSync(epicTmp, { recursive: true, force: true });
+    }
+
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

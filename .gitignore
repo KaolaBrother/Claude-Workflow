@@ -1,2 +1,4 @@
 .DS_Store
 node_modules/
+kaola-workflow/.locks/
+kaola-workflow/.sessions/

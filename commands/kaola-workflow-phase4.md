@@ -13,6 +13,15 @@ state, starts task agents, verifies results, classifies validation failures,
 runs small targeted validation when useful, delegates noisy validation, and
 routes fixes. It does not own implementation or test code.
 
+## Session Heartbeat
+
+If a claim session is active, update the heartbeat before proceeding:
+
+```bash
+[ -n "${KAOLA_SESSION_ID:-}" ] && \
+  node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" heartbeat --session "$KAOLA_SESSION_ID"
+```
+
 ## Prerequisite
 
 `phase3-plan.md` must exist. If missing, stop:

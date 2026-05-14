@@ -337,6 +337,17 @@ make the next command unsafe.
 
 When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact resume reminder after context compaction. Manual command install copies slash commands only; use plugin install when you want the compaction resume hook.
 
+## Multi-Session Support
+
+Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets a distinct project. Session management is handled by `kaola-workflow-claim.js`:
+
+- Automatic on startup via `/workflow-next` when `KAOLA_SESSION_ID` is set
+- Manual claim/release: `kaola-workflow-claim.js claim --session <id> --project <name> --issue <N>`
+- Heartbeat renewal at each phase to keep the lease active
+- Pre-commit hook blocks commits that stage files from a project owned by a different session
+
+For full details, see `commands/workflow-next.md` "Startup Step 0" and "Co-active Leases".
+
 ## Updating
 
 ```bash

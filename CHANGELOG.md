@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-No unreleased changes.
+### Added
+
+- Multi-session substrate for concurrent Kaola-Workflow sessions. Session leases
+  are managed by `kaola-workflow-claim.js` (claim, release, heartbeat, sweep,
+  status subcommands). A pre-commit hook (`kaola-workflow-pre-commit.sh`) blocks
+  cross-session git commits to prevent merge conflicts when multiple sessions
+  target different workflow projects simultaneously. Session initialization is
+  available in `workflow-init` and `workflow-next`, with heartbeat renewal at
+  each phase entry to keep the lease fresh. Support files are installed to
+  `~/.claude/kaola-workflow/` by `install.sh`.
 
 ## Codex plugin 1.1.1 - 2026-05-14
 

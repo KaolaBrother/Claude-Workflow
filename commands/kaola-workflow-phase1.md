@@ -21,6 +21,15 @@ architecture, or write implementation code.
 - Do not ask the user to confirm generated project/folder names. Routine naming
   is nonessential workflow bookkeeping and is chosen autonomously.
 
+## Session Heartbeat
+
+If a claim session is active, update the heartbeat before proceeding:
+
+```bash
+[ -n "${KAOLA_SESSION_ID:-}" ] && \
+  node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" heartbeat --session "$KAOLA_SESSION_ID"
+```
+
 ## Resume Detection
 
 If `$ARGUMENTS` is an existing project, read:

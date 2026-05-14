@@ -6,7 +6,14 @@ This file mirrors active unfinished work. GitHub issues are the source of truth 
 
 | Issue | Title | Status | Workflow Project | Next Step |
 |-------|-------|--------|------------------|-----------|
-| none | No active unfinished work | closed | none | Fetch open GitHub issues with `workflow-next` |
+| #10 | multi-session substrate: hardening pass | open | — | after #4/#5 |
+| #4 | Multi-session: branch-per-issue + auto-merge sink (rebase-then-validate) | open | — | ready (unblocked) |
+| #5 | Multi-session: roadmap split into per-issue files + regenerator | open | — | ready (unblocked) |
+| #6 | Multi-session: parallelizability classifier + auto candidate selection | open | — | blocked by #5 |
+| #7 | Multi-session: PR sink + /workflow-next-pr + merge watcher | open | — | blocked by #4 |
+| #8 | Multi-session: Codex parity via shared scripts | open | — | blocked by #4 |
+| #9 | Multi-session: cross-machine hardening (tiebreaker, ticker, remote sweeper) | open | — | ready (unblocked) |
+| #2 | Multi-session co-work scheme for Kaola-Workflow (epic) | open | — | close when #4-10 done |
 
 ## Rules
 

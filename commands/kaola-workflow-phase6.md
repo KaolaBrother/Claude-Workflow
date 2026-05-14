@@ -28,6 +28,15 @@ kaola-workflow/{project}/phase4-progress.md
 kaola-workflow/{project}/phase5-review.md
 ```
 
+## Session Heartbeat
+
+If a claim session is active, update the heartbeat before proceeding:
+
+```bash
+[ -n "${KAOLA_SESSION_ID:-}" ] && \
+  node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" heartbeat --session "$KAOLA_SESSION_ID"
+```
+
 ## Resume Detection
 
 - final validation not run -> `final-validation`

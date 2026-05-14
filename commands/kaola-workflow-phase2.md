@@ -25,6 +25,15 @@ kaola-workflow/{project}/.cache/code-explorer.md
 kaola-workflow/{project}/.cache/docs-lookup.md
 ```
 
+## Session Heartbeat
+
+If a claim session is active, update the heartbeat before proceeding:
+
+```bash
+[ -n "${KAOLA_SESSION_ID:-}" ] && \
+  node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" heartbeat --session "$KAOLA_SESSION_ID"
+```
+
 ## Resume Detection
 
 If `phase2-ideation.md` exists and all `Required Agent Compliance` rows are

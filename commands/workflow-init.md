@@ -257,6 +257,22 @@ Document coding style, testing rules, Git practices, naming, and review expectat
 - Initialized Kaola-Workflow documentation structure.
 ```
 
+## Session Initialization
+
+If `KAOLA_SESSION_ID` is not already set, generate a UUID and claim the issue before starting:
+
+```bash
+export KAOLA_SESSION_ID="$(node -e "process.stdout.write(require('crypto').randomUUID())")"
+node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" claim \
+  --session "$KAOLA_SESSION_ID" --project "{project}" --issue {N}
+```
+
+Replace `{project}` with the workflow project folder name (e.g., `multi-session-substrate`) and `{N}` with the GitHub issue number. If the issue number is unknown, omit `--issue`.
+
+If `kaola-workflow-claim.js` is unavailable (manual install without the script), skip this step and proceed without session tracking.
+
+---
+
 ## Step 4 — Git And Roadmap Summary
 
 After edits:

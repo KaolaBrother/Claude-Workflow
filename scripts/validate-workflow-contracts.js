@@ -183,4 +183,17 @@ try {
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+// multi-session-substrate assertions
+assert(exists('scripts/kaola-workflow-claim.js'), 'scripts/kaola-workflow-claim.js is missing');
+assert(exists('hooks/kaola-workflow-pre-commit.sh'), 'hooks/kaola-workflow-pre-commit.sh is missing');
+assertIncludes('.gitignore', 'kaola-workflow/.locks/');
+assertIncludes('.gitignore', 'kaola-workflow/.sessions/');
+assertIncludes('hooks/hooks.json', 'PreToolUse');
+assertIncludes('install.sh', 'kaola-workflow-claim.js');
+assertIncludes('install.sh', 'kaola-workflow-pre-commit.sh');
+assertIncludes('commands/workflow-next.md', 'Startup Step 0');
+for (const file of phaseCommands) {
+  assertIncludes(file, 'Session Heartbeat');
+}
+
 console.log('Workflow contract validation passed');
