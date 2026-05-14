@@ -53,6 +53,7 @@ function parseArgs(argv) {
     if (argv[i] === '--project' && argv[i + 1]) { args.project = argv[++i]; continue; }
     if (argv[i] === '--issue' && argv[i + 1]) { args.issue = parseInt(argv[++i], 10); continue; }
     if (argv[i] === '--branch' && argv[i + 1]) { args.branch = argv[++i]; continue; }
+    if (argv[i] === '--sink' && argv[i + 1]) { args.sink = argv[++i]; continue; }
   }
   return args;
 }
@@ -93,21 +94,27 @@ function shouldSweep(lock) {
     new Date(lock.last_heartbeat).getTime() < cutoff;
 }
 
+function buildSinkBlock(lockData) {
+  const branchName = lockData.issue_number != null
+    ? 'workflow/issue-' + lockData.issue_number + '-' + lockData.project
+    : (lockData.branch || 'workflow/' + lockData.project);
+  const lines = [
+    '## Sink',
+    'branch: ' + branchName,
+    'issue_number: ' + (lockData.issue_number != null ? lockData.issue_number : 'unset'),
+    'claimed_at: ' + lockData.claimed_at,
+    'sink: ' + (lockData.sink || 'merge'),
+  ];
+  if (lockData.pr_url) lines.push('pr_url: ' + lockData.pr_url);
+  if (lockData.pr_number != null && lockData.pr_number !== 0) lines.push('pr_number: ' + lockData.pr_number);
+  return lines.join('\n');
+}
+
 function updateSinkLease(stateFile, lockData) {
   if (!fs.existsSync(stateFile)) return;
   const content = fs.readFileSync(stateFile, 'utf8');
 
-  const branchName = lockData.issue_number != null
-    ? 'workflow/issue-' + lockData.issue_number + '-' + lockData.project
-    : 'workflow/' + lockData.project;
-
-  const sinkBlock = [
-    '\n## Sink',
-    'branch: ' + branchName,
-    'issue_number: ' + (lockData.issue_number != null ? lockData.issue_number : 'unset'),
-    'claimed_at: ' + lockData.claimed_at
-  ].join('\n');
-
+  const sinkBlock = '\n' + buildSinkBlock(lockData);
   const leaseBlock = [
     '\n## Lease',
     'session_id: ' + lockData.session_id,
@@ -121,8 +128,11 @@ function updateSinkLease(stateFile, lockData) {
     return;
   }
 
-  // Update in-place
-  let updated = content.replace(/^branch:.*$/m, () => 'branch: ' + branchName);
+  // Replace entire ## Sink block through end of ## Lease block
+  let updated = content.replace(
+    /\n## Sink[\s\S]*?(?=\n## [^SL]|\n## L|$)/,
+    sinkBlock
+  );
   updated = updated.replace(/(?:^|\n)(## Lease[\s\S]*?)(?=\n##|[\s]*$)/, '\n' + leaseBlock.slice(1));
   fs.writeFileSync(stateFile, updated);
 }
@@ -178,6 +188,7 @@ function cmdClaim() {
   if (args.issue != null) {
     assert(Number.isFinite(args.issue) && args.issue > 0, '--issue must be a positive integer');
   }
+  assert(!args.sink || args.sink === 'merge' || args.sink === 'pr', '--sink must be "merge" or "pr"');
 
   const root = getRoot();
   const machineId = getMachineId();
@@ -194,7 +205,10 @@ function cmdClaim() {
     expires: new Date(now.getTime() + 30 * 60 * 1000).toISOString(),
     last_heartbeat: now.toISOString(),
     issue_number: args.issue != null ? args.issue : null,
-    claim_comment_id: null
+    claim_comment_id: null,
+    sink: (args.sink === 'pr') ? 'pr' : 'merge',
+    pr_url: null,
+    pr_number: null,
   };
 
   for (let i = 0; i < 3; i++) {
@@ -221,17 +235,13 @@ function cmdClaim() {
   updateSinkLease(stateFile, finalLock);
 }
 
-function cmdRelease() {
-  const args = parseArgs(process.argv.slice(3));
-  assert(args.session, '--session <id> required for release');
-
-  const root = getRoot();
+function releaseSession(root, sessionId, reason) {
   const locks = readLockFiles(root);
-  const match = locks.find(l => l.session_id === args.session);
+  const match = locks.find(l => l.session_id === sessionId);
 
   if (!match) {
-    process.stderr.write('release: no lock found for session ' + args.session + '\n');
-    return;
+    process.stderr.write('release: no lock found for session ' + sessionId + (reason ? ' (' + reason + ')' : '') + '\n');
+    return false;
   }
 
   assert(isSafeName(match.project), 'lock file has invalid project field');
@@ -243,10 +253,15 @@ function cmdRelease() {
     } catch (_) {}
   }
 
-  const lp = lockPath(root, match.project);
-  fs.unlinkSync(lp);
+  try { fs.unlinkSync(lockPath(root, match.project)); } catch (_) {}
+  try { fs.unlinkSync(sessionPath(root, sessionId)); } catch (_) {}
+  return true;
+}
 
-  try { fs.unlinkSync(sessionPath(root, args.session)); } catch (_) {}
+function cmdRelease() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(args.session, '--session <id> required for release');
+  releaseSession(getRoot(), args.session);
 }
 
 function cmdHeartbeat() {
@@ -377,15 +392,72 @@ function cmdPatchBranch() {
   }
 }
 
+function cmdWatchPr() {
+  if (OFFLINE) return;
+  const args = parseArgs(process.argv.slice(3));
+  const root = getRoot();
+  const dir = locksDir(root);
+  if (!fs.existsSync(dir)) return;
+
+  const files = fs.readdirSync(dir).filter(f => f.endsWith('.lock'));
+  for (const f of files) {
+    const fp = path.join(dir, f);
+    let lock;
+    try { lock = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { continue; }
+
+    if (lock.sink !== 'pr') continue;
+    if (!lock.pr_url || !lock.pr_url.startsWith('https://')) continue;
+    if (args.issue != null && lock.issue_number !== args.issue) continue;
+    if (!isSafeName(lock.project)) continue;
+    if (!isSafeName(lock.session_id)) continue;
+
+    let prData;
+    try {
+      const raw = ghExec(['pr', 'view', '--', lock.pr_url, '--json', 'state,mergedAt,url,number,closedAt']);
+      if (!raw) continue;
+      prData = JSON.parse(raw);
+    } catch (_) {
+      process.stderr.write('watch-pr: gh pr view failed for ' + lock.pr_url + '\n');
+      continue;
+    }
+
+    const state = (prData.state || '').toUpperCase();
+    const branchName = lock.branch || (lock.issue_number != null
+      ? 'workflow/issue-' + lock.issue_number + '-' + lock.project
+      : 'workflow/' + lock.project);
+
+    if (state === 'MERGED') {
+      releaseSession(root, lock.session_id, 'merged');
+      try {
+        execFileSync('git', ['branch', '-D', '--', branchName], { encoding: 'utf8' });
+      } catch (_) {}
+    } else if (state === 'CLOSED') {
+      releaseSession(root, lock.session_id, 'aborted');
+      // Do NOT delete branch on closed-without-merge
+    } else {
+      // OPEN or unknown: refresh heartbeat + expires
+      const now = new Date();
+      const updated = Object.assign({}, lock, {
+        last_heartbeat: now.toISOString(),
+        expires: new Date(now.getTime() + 30 * 60 * 1000).toISOString()
+      });
+      try { fs.writeFileSync(fp, JSON.stringify(updated, null, 2) + '\n'); } catch (_) {}
+      const stateFile = path.join(root, 'kaola-workflow', lock.project, 'workflow-state.md');
+      updateLeaseInPlace(stateFile, updated);
+    }
+  }
+}
+
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|sweep|status|patch-branch>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|sweep|status|patch-branch|watch-pr>');
   if (sub === 'claim') return cmdClaim();
   if (sub === 'release') return cmdRelease();
   if (sub === 'heartbeat') return cmdHeartbeat();
   if (sub === 'sweep') return cmdSweep();
   if (sub === 'status') return cmdStatus();
   if (sub === 'patch-branch') return cmdPatchBranch();
+  if (sub === 'watch-pr') return cmdWatchPr();
   throw new Error('unknown subcommand: ' + sub);
 }
 

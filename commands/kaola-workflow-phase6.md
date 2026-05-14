@@ -424,29 +424,50 @@ Before the final Git gate, verify every other `Required Agent Compliance` row
 across phase files is `invoked`, `skipped`, or `N/A` with evidence or skip
 reason.
 
-## Step 8 - Sink Merge
+## Step 8 - Sink
 
 Read the `## Sink` block from `kaola-workflow/{project}/workflow-state.md`:
 
 ```bash
-# Extract values from Sink block
 SINK_BRANCH=$(grep '^branch:' kaola-workflow/{project}/workflow-state.md | awk '{print $2}')
 SINK_ISSUE=$(grep '^issue_number:' kaola-workflow/{project}/workflow-state.md | awk '{print $2}')
+SINK_KIND=$(awk '/^## Sink/,0' kaola-workflow/{project}/workflow-state.md | grep '^sink:' | awk '{print $2}')
+SINK_KIND=${SINK_KIND:-merge}
 ```
 
-If `SINK_ISSUE` is `unset`, omit `--issue`. The bash template below already implements this conditional, so no manual step is needed:
+If `SINK_ISSUE` is `unset`, omit `--issue`. Build the issue flag conditionally:
 
 ```bash
 SINK_ISSUE_FLAG=""
 [ "$SINK_ISSUE" != "unset" ] && SINK_ISSUE_FLAG="--issue $SINK_ISSUE"
-
-node ~/.claude/kaola-workflow/scripts/kaola-workflow-sink-merge.js \
-  --branch "$SINK_BRANCH" \
-  $SINK_ISSUE_FLAG \
-  --project {project}
 ```
 
-Exit codes:
+Dispatch based on `SINK_KIND`:
+
+```bash
+case "$SINK_KIND" in
+  pr)
+    node ~/.claude/kaola-workflow/scripts/kaola-workflow-sink-pr.js \
+      --branch "$SINK_BRANCH" \
+      $SINK_ISSUE_FLAG \
+      --project {project}
+    ;;
+  merge|*)
+    node ~/.claude/kaola-workflow/scripts/kaola-workflow-sink-merge.js \
+      --branch "$SINK_BRANCH" \
+      $SINK_ISSUE_FLAG \
+      --project {project}
+    ;;
+esac
+```
+
+`sink-merge.js` exit codes:
 - Exit 0: branch merged onto main, issue closed (online), local branch deleted. Confirm worktree is on main with `git status --short --branch`.
-- Exit 1: conflict or fatal error. Rebase conflict remediation printed to stderr with exact commands. Re-run after resolving.
-- Exit 2: FF race exhausted after MAX_AUTOMERGE_RETRIES retries. Follow printed remediation instructions (ensure no concurrent pushes to main, then re-run sink-merge).
+- Exit 1: conflict or fatal error. Rebase conflict remediation printed to stderr. Re-run after resolving.
+- Exit 2: FF race exhausted after MAX_AUTOMERGE_RETRIES retries. Follow printed remediation instructions.
+
+`sink-pr.js` exit codes:
+- Exit 0: branch pushed, PR opened, URL recorded in lock file and `## Sink` block. If `pr_auto_merge: true` in config, auto-merge was requested.
+- Exit 1: fatal error (push failed or `gh pr create` failed). Error printed to stderr.
+
+After `sink-pr.js` exits 0, the lease remains active. The PR lease releases automatically when `watch-pr` detects the PR is MERGED or CLOSED on the next `/workflow-next` startup.

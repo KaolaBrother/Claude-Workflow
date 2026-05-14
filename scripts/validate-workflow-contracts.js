@@ -109,7 +109,7 @@ assertIncludes('commands/kaola-workflow-phase6.md', '## Documentation Docking');
 assertIncludes('commands/kaola-workflow-phase6.md', '.cache/doc-docking.md');
 assertIncludes('commands/kaola-workflow-phase6.md', '## Closure Decision Gate');
 assertIncludes('commands/kaola-workflow-phase6.md', '.cache/advisor-closure.md');
-assertIncludes('commands/kaola-workflow-phase6.md', '## Step 8 - Sink Merge');
+assertIncludes('commands/kaola-workflow-phase6.md', '## Step 8 - Sink');
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.js');
 assertIncludes('README.md', 'Avoid redundant validation runs');
 assertIncludes('README.md', '/workflow-next');
@@ -148,7 +148,7 @@ assert(Array.isArray(packageJson.files) && packageJson.files.includes('hooks/'),
 assert(Array.isArray(packageJson.files) && packageJson.files.includes('scripts/'), 'package.json files must include scripts/');
 
 const routerLines = read('commands/workflow-next.md').split(/\r?\n/).length;
-assert(routerLines <= 240, `commands/workflow-next.md must remain a thin router; found ${routerLines} lines`);
+assert(routerLines <= 250, `commands/workflow-next.md must remain a thin router; found ${routerLines} lines`);
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-contract-'));
 try {
@@ -217,5 +217,22 @@ assertIncludes('commands/workflow-next.md', 'kaola-workflow-roadmap.js');
 assertIncludes('commands/workflow-next.md', 'kaola-workflow-classifier.js');
 assertIncludes('commands/workflow-next.md', 'Sweep, Classify, And Claim');
 assertIncludes('commands/workflow-next.md', 'Parallel decision:');
+
+// pr-sink assertions
+assert(exists('scripts/kaola-workflow-sink-pr.js'), 'scripts/kaola-workflow-sink-pr.js is missing');
+assertIncludes('install.sh', 'kaola-workflow-sink-pr.js');
+assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-pr.js');
+assertIncludes('commands/kaola-workflow-phase6.md', 'SINK_KIND');
+assert(exists('commands/workflow-next-pr.md'), 'commands/workflow-next-pr.md is missing');
+const routerPrLines = read('commands/workflow-next-pr.md').split(/\r?\n/).length;
+assert(routerPrLines <= 40, `commands/workflow-next-pr.md must be ≤40 lines; found ${routerPrLines}`);
+assertIncludes('scripts/kaola-workflow-claim.js', 'watch-pr');
+assertIncludes('scripts/kaola-workflow-claim.js', 'releaseSession');
+assertIncludes('scripts/kaola-workflow-claim.js', 'sink:');
+assertIncludes('scripts/kaola-workflow-sink-pr.js', 'KAOLA_WORKFLOW_OFFLINE');
+assertIncludes('scripts/kaola-workflow-sink-pr.js', 'OFFLINE_PLACEHOLDER');
+assertIncludes('scripts/kaola-workflow-sink-pr.js', 'pr_auto_merge');
+assertIncludes('commands/workflow-next.md', 'watch-pr');
+assertIncludes('commands/workflow-next.md', 'KAOLA_SINK');
 
 console.log('Workflow contract validation passed');

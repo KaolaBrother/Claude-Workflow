@@ -802,6 +802,256 @@ function main() {
       }
     }
 
+    // Epic Case 7: pr-sink — sub-tests 7G, 7A, 7B, 7C, 7D, 7E, 7F
+    {
+      const claimScript = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+      const sinkPrScript = path.join(root, 'scripts', 'kaola-workflow-sink-pr.js');
+      assert(fs.existsSync(claimScript), 'Epic Case 7: kaola-workflow-claim.js must exist');
+      assert(fs.existsSync(sinkPrScript), 'Epic Case 7: kaola-workflow-sink-pr.js must exist');
+
+      const epic7Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic7-'));
+      try {
+        // Git scaffold: bare remote + work clone
+        const remoteDir = path.join(epic7Tmp, 'remote.git');
+        const workDir = path.join(epic7Tmp, 'work');
+        execFileSync('git', ['init', '--bare', remoteDir]);
+        execFileSync('git', ['init', workDir]);
+        execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: workDir });
+        execFileSync('git', ['config', 'user.name', 'Test'], { cwd: workDir });
+        execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: workDir });
+        fs.writeFileSync(path.join(workDir, '.gitkeep'), '');
+        execFileSync('git', ['add', '.gitkeep'], { cwd: workDir });
+        execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir });
+        execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir });
+
+        // kaola-workflow directories
+        const kwDir = path.join(workDir, 'kaola-workflow');
+        const locksDir = path.join(kwDir, '.locks');
+        const sessionsDir = path.join(kwDir, '.sessions');
+        fs.mkdirSync(locksDir, { recursive: true });
+        fs.mkdirSync(sessionsDir, { recursive: true });
+
+        // gh shim at epic7Tmp/bin/gh
+        const ghShimDir = path.join(epic7Tmp, 'bin');
+        fs.mkdirSync(ghShimDir, { recursive: true });
+        const ghCallLog = path.join(epic7Tmp, 'gh-calls.log');
+        const ghShimPath = path.join(ghShimDir, 'gh');
+        fs.writeFileSync(ghShimPath, `#!/bin/sh
+echo "$@" >> "${ghCallLog}"
+# pr create → return fake URL
+if [ "$1" = "pr" ] && [ "$2" = "create" ]; then
+  echo "https://github.com/test/repo/pull/42"
+  exit 0
+fi
+# pr view → return OPEN JSON (default; override in specific tests using a separate shim)
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  printf '{"state":"OPEN","mergedAt":null,"url":"https://github.com/test/repo/pull/42","number":42,"closedAt":null}'
+  exit 0
+fi
+# pr merge → log and succeed
+if [ "$1" = "pr" ] && [ "$2" = "merge" ]; then
+  exit 0
+fi
+# issue edit → succeed
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
+  exit 0
+fi
+exit 0
+`);
+        fs.chmodSync(ghShimPath, 0o755);
+
+        // Base env: PATH with ghShimDir prepended, HOME isolated to epic7Tmp
+        const baseEnv = {
+          ...process.env,
+          PATH: ghShimDir + path.delimiter + (process.env.PATH || ''),
+          HOME: epic7Tmp,
+          KAOLA_WORKFLOW_OFFLINE: '1'
+        };
+        const onlineEnv = {
+          ...process.env,
+          PATH: ghShimDir + path.delimiter + (process.env.PATH || ''),
+          HOME: epic7Tmp
+        };
+
+        // Config setup (for pr_auto_merge tests)
+        const configDir = path.join(epic7Tmp, '.config', 'kaola-workflow');
+        fs.mkdirSync(configDir, { recursive: true });
+        // Default config (pr_auto_merge: false)
+        fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ pr_auto_merge: false }));
+
+        // 7G: claim --sink pr → lock.sink === 'pr', workflow-state.md Sink block contains 'sink: pr'
+        const projDir7G = path.join(kwDir, 'epic7g');
+        fs.mkdirSync(projDir7G, { recursive: true });
+        fs.writeFileSync(path.join(projDir7G, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\n## Project\nname: epic7g\nstatus: active\n');
+        execFileSync(process.execPath, [claimScript, 'claim', '--session', 'sess-7g', '--project', 'epic7g', '--issue', '42', '--sink', 'pr'],
+          { cwd: workDir, encoding: 'utf8', env: baseEnv });
+        const lock7G = JSON.parse(fs.readFileSync(path.join(locksDir, 'epic7g.lock'), 'utf8'));
+        assert(lock7G.sink === 'pr', '7G: lock.sink must be "pr" when --sink pr passed, got ' + lock7G.sink);
+        const state7G = fs.readFileSync(path.join(projDir7G, 'workflow-state.md'), 'utf8');
+        assert(state7G.includes('sink: pr'), '7G: ## Sink block must contain "sink: pr"');
+        // cleanup for next sub-tests
+        fs.unlinkSync(path.join(locksDir, 'epic7g.lock'));
+
+        // 7A: sink=pr + gh shim → gh pr create called, PR URL written to summary + Sink block + lock
+        const projDir7A = path.join(kwDir, 'epic7a');
+        fs.mkdirSync(projDir7A, { recursive: true });
+        fs.writeFileSync(path.join(projDir7A, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\n## Project\nname: epic7a\nstatus: active\n\n## Sink\nbranch: workflow/issue-42-epic7a\nissue_number: 42\nclaimed_at: 2026-01-01T00:00:00.000Z\nsink: pr\n');
+        // Write lock file (sink-pr.js needs it to patch)
+        const lock7A = { project: 'epic7a', session_id: 'sess-7a', sink: 'pr', pr_url: null, pr_number: null,
+          issue_number: 42, claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 3600000).toISOString(), last_heartbeat: new Date().toISOString() };
+        fs.writeFileSync(path.join(locksDir, 'epic7a.lock'), JSON.stringify(lock7A, null, 2));
+        // Create feature branch in workDir
+        execFileSync('git', ['checkout', '-b', 'workflow/issue-42-epic7a'], { cwd: workDir });
+        execFileSync('git', ['checkout', 'main'], { cwd: workDir });
+        // Create phase6-summary.md
+        fs.writeFileSync(path.join(projDir7A, 'phase6-summary.md'), '# Phase 6 Summary\n\n');
+        // Run sink-pr.js
+        execFileSync(process.execPath, [sinkPrScript, '--branch', 'workflow/issue-42-epic7a', '--issue', '42', '--project', 'epic7a'],
+          { cwd: workDir, encoding: 'utf8', env: onlineEnv });
+        // Assertions
+        const summary7A = fs.readFileSync(path.join(projDir7A, 'phase6-summary.md'), 'utf8');
+        assert(summary7A.includes('https://github.com/test/repo/pull/42'), '7A: phase6-summary.md must contain PR URL');
+        const state7A = fs.readFileSync(path.join(projDir7A, 'workflow-state.md'), 'utf8');
+        assert(state7A.includes('pr_url: https://github.com/test/repo/pull/42'), '7A: ## Sink block must contain pr_url');
+        const lock7AResult = JSON.parse(fs.readFileSync(path.join(locksDir, 'epic7a.lock'), 'utf8'));
+        assert(lock7AResult.pr_url === 'https://github.com/test/repo/pull/42', '7A: lock.pr_url must be set');
+        assert(lock7AResult.pr_number === 42, '7A: lock.pr_number must be 42');
+        // cleanup
+        execFileSync('git', ['branch', '-D', 'workflow/issue-42-epic7a'], { cwd: workDir });
+        fs.unlinkSync(path.join(locksDir, 'epic7a.lock'));
+
+        // 7B: pr_auto_merge: true → gh pr merge called
+        fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ pr_auto_merge: true }));
+        // Reset call log
+        if (fs.existsSync(ghCallLog)) fs.unlinkSync(ghCallLog);
+        const projDir7B = path.join(kwDir, 'epic7b');
+        fs.mkdirSync(projDir7B, { recursive: true });
+        fs.writeFileSync(path.join(projDir7B, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\n## Sink\nbranch: workflow/issue-43-epic7b\nissue_number: 43\nclaimed_at: 2026-01-01T00:00:00.000Z\nsink: pr\n');
+        const lock7B = { project: 'epic7b', session_id: 'sess-7b', sink: 'pr', pr_url: null, pr_number: null,
+          issue_number: 43, claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 3600000).toISOString(), last_heartbeat: new Date().toISOString() };
+        fs.writeFileSync(path.join(locksDir, 'epic7b.lock'), JSON.stringify(lock7B, null, 2));
+        fs.writeFileSync(path.join(projDir7B, 'phase6-summary.md'), '');
+        execFileSync('git', ['checkout', '-b', 'workflow/issue-43-epic7b'], { cwd: workDir });
+        execFileSync('git', ['checkout', 'main'], { cwd: workDir });
+        execFileSync(process.execPath, [sinkPrScript, '--branch', 'workflow/issue-43-epic7b', '--issue', '43', '--project', 'epic7b'],
+          { cwd: workDir, encoding: 'utf8', env: onlineEnv });
+        const ghCalls7B = fs.existsSync(ghCallLog) ? fs.readFileSync(ghCallLog, 'utf8') : '';
+        assert(ghCalls7B.includes('pr merge'), '7B: gh pr merge must be called when pr_auto_merge: true');
+        // reset config
+        fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({ pr_auto_merge: false }));
+        execFileSync('git', ['branch', '-D', 'workflow/issue-43-epic7b'], { cwd: workDir });
+        fs.unlinkSync(path.join(locksDir, 'epic7b.lock'));
+
+        // 7C: watch-pr sees MERGED → releaseSession called, local branch deleted
+        const ghShimMergedPath = path.join(epic7Tmp, 'bin7c');
+        fs.mkdirSync(ghShimMergedPath, { recursive: true });
+        fs.writeFileSync(path.join(ghShimMergedPath, 'gh'), `#!/bin/sh
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  printf '{"state":"MERGED","mergedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/pull/44","number":44,"closedAt":null}'
+  exit 0
+fi
+exit 0
+`);
+        fs.chmodSync(path.join(ghShimMergedPath, 'gh'), 0o755);
+        const mergedEnv = { ...process.env, PATH: ghShimMergedPath + path.delimiter + (process.env.PATH || ''), HOME: epic7Tmp };
+
+        const projDir7C = path.join(kwDir, 'epic7c');
+        fs.mkdirSync(projDir7C, { recursive: true });
+        const branch7C = 'workflow/issue-44-epic7c';
+        execFileSync('git', ['checkout', '-b', branch7C], { cwd: workDir });
+        execFileSync('git', ['checkout', 'main'], { cwd: workDir });
+        const lock7C = { project: 'epic7c', session_id: 'sess-7c', sink: 'pr', pr_url: 'https://github.com/test/repo/pull/44', pr_number: 44,
+          branch: branch7C, issue_number: 44, claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 3600000).toISOString(), last_heartbeat: new Date().toISOString() };
+        fs.writeFileSync(path.join(locksDir, 'epic7c.lock'), JSON.stringify(lock7C, null, 2));
+        fs.writeFileSync(path.join(sessionsDir, 'sess-7c.json'), JSON.stringify({ session_id: 'sess-7c' }));
+        execFileSync(process.execPath, [claimScript, 'watch-pr'],
+          { cwd: workDir, encoding: 'utf8', env: mergedEnv });
+        assert(!fs.existsSync(path.join(locksDir, 'epic7c.lock')), '7C: lock file must be removed after MERGED');
+        assert(!fs.existsSync(path.join(sessionsDir, 'sess-7c.json')), '7C: session file must be removed after MERGED');
+        let branchExists7C = false;
+        try { execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/' + branch7C], { cwd: workDir }); branchExists7C = true; } catch (_) {}
+        assert(!branchExists7C, '7C: local branch must be deleted after MERGED');
+
+        // 7D: watch-pr sees CLOSED (no merge) → releaseSession reason=aborted, branch NOT deleted
+        const ghShimClosedPath = path.join(epic7Tmp, 'bin7d');
+        fs.mkdirSync(ghShimClosedPath, { recursive: true });
+        fs.writeFileSync(path.join(ghShimClosedPath, 'gh'), `#!/bin/sh
+if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
+  printf '{"state":"CLOSED","mergedAt":null,"url":"https://github.com/test/repo/pull/45","number":45,"closedAt":"2026-05-15T00:00:00Z"}'
+  exit 0
+fi
+exit 0
+`);
+        fs.chmodSync(path.join(ghShimClosedPath, 'gh'), 0o755);
+        const closedEnv = { ...process.env, PATH: ghShimClosedPath + path.delimiter + (process.env.PATH || ''), HOME: epic7Tmp };
+
+        const projDir7D = path.join(kwDir, 'epic7d');
+        fs.mkdirSync(projDir7D, { recursive: true });
+        const branch7D = 'workflow/issue-45-epic7d';
+        execFileSync('git', ['checkout', '-b', branch7D], { cwd: workDir });
+        execFileSync('git', ['checkout', 'main'], { cwd: workDir });
+        const lock7D = { project: 'epic7d', session_id: 'sess-7d', sink: 'pr', pr_url: 'https://github.com/test/repo/pull/45', pr_number: 45,
+          branch: branch7D, issue_number: 45, claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 3600000).toISOString(), last_heartbeat: new Date().toISOString() };
+        fs.writeFileSync(path.join(locksDir, 'epic7d.lock'), JSON.stringify(lock7D, null, 2));
+        fs.writeFileSync(path.join(sessionsDir, 'sess-7d.json'), JSON.stringify({ session_id: 'sess-7d' }));
+        execFileSync(process.execPath, [claimScript, 'watch-pr'],
+          { cwd: workDir, encoding: 'utf8', env: closedEnv });
+        assert(!fs.existsSync(path.join(locksDir, 'epic7d.lock')), '7D: lock file must be removed after CLOSED');
+        let branchExists7D = false;
+        try { execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/' + branch7D], { cwd: workDir }); branchExists7D = true; } catch (_) {}
+        assert(branchExists7D, '7D: local branch must NOT be deleted after CLOSED-without-merge');
+        execFileSync('git', ['branch', '-D', branch7D], { cwd: workDir });
+
+        // 7E: watch-pr sees OPEN → last_heartbeat + expires updated; lock retained
+        const projDir7E = path.join(kwDir, 'epic7e');
+        fs.mkdirSync(projDir7E, { recursive: true });
+        const now7E = new Date();
+        const originalExpires7E = new Date(now7E.getTime() - 60000).toISOString(); // 1 minute in the past
+        const lock7E = { project: 'epic7e', session_id: 'sess-7e', sink: 'pr', pr_url: 'https://github.com/test/repo/pull/46', pr_number: 46,
+          branch: 'workflow/issue-46-epic7e', issue_number: 46, claimed_at: now7E.toISOString(),
+          expires: originalExpires7E, last_heartbeat: originalExpires7E };
+        fs.writeFileSync(path.join(locksDir, 'epic7e.lock'), JSON.stringify(lock7E, null, 2));
+        fs.writeFileSync(path.join(sessionsDir, 'sess-7e.json'), JSON.stringify({ session_id: 'sess-7e' }));
+        execFileSync(process.execPath, [claimScript, 'watch-pr'],
+          { cwd: workDir, encoding: 'utf8', env: onlineEnv });
+        assert(fs.existsSync(path.join(locksDir, 'epic7e.lock')), '7E: lock file must still exist for OPEN PR');
+        const lock7EResult = JSON.parse(fs.readFileSync(path.join(locksDir, 'epic7e.lock'), 'utf8'));
+        assert(new Date(lock7EResult.expires) > new Date(originalExpires7E), '7E: expires must be updated for OPEN PR');
+        assert(new Date(lock7EResult.last_heartbeat) >= new Date(originalExpires7E), '7E: last_heartbeat must be updated for OPEN PR');
+        fs.unlinkSync(path.join(locksDir, 'epic7e.lock'));
+
+        // 7F: sink-pr.js OFFLINE → OFFLINE_PLACEHOLDER written, exit 0, no gh calls
+        if (fs.existsSync(ghCallLog)) fs.unlinkSync(ghCallLog);
+        const projDir7F = path.join(kwDir, 'epic7f');
+        fs.mkdirSync(projDir7F, { recursive: true });
+        fs.writeFileSync(path.join(projDir7F, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\n## Sink\nbranch: workflow/issue-47-epic7f\nissue_number: 47\nclaimed_at: 2026-01-01T00:00:00.000Z\nsink: pr\n');
+        const lock7F = { project: 'epic7f', session_id: 'sess-7f', sink: 'pr', pr_url: null, pr_number: null,
+          issue_number: 47, claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 3600000).toISOString(), last_heartbeat: new Date().toISOString() };
+        fs.writeFileSync(path.join(locksDir, 'epic7f.lock'), JSON.stringify(lock7F, null, 2));
+        fs.writeFileSync(path.join(projDir7F, 'phase6-summary.md'), '');
+        execFileSync(process.execPath, [sinkPrScript, '--branch', 'workflow/issue-47-epic7f', '--issue', '47', '--project', 'epic7f'],
+          { cwd: workDir, encoding: 'utf8', env: baseEnv }); // baseEnv has OFFLINE=1
+        const summary7F = fs.readFileSync(path.join(projDir7F, 'phase6-summary.md'), 'utf8');
+        assert(summary7F.includes('OFFLINE_PLACEHOLDER'), '7F: phase6-summary.md must contain OFFLINE_PLACEHOLDER');
+        const state7F = fs.readFileSync(path.join(projDir7F, 'workflow-state.md'), 'utf8');
+        assert(state7F.includes('pr_url: OFFLINE_PLACEHOLDER'), '7F: ## Sink block must contain pr_url: OFFLINE_PLACEHOLDER');
+        const ghCalls7F = fs.existsSync(ghCallLog) ? fs.readFileSync(ghCallLog, 'utf8') : '';
+        assert(ghCalls7F.trim() === '', '7F: no gh calls must be made in OFFLINE mode, got: ' + ghCalls7F);
+
+      } finally {
+        fs.rmSync(epic7Tmp, { recursive: true, force: true });
+      }
+    }
+
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

@@ -279,6 +279,7 @@ The workflow includes automation scripts installed to `~/.claude/kaola-workflow/
 | `kaola-workflow-sink-merge.js` | Branch-per-issue auto-merge sink — rebase-then-ff-merge sequence | Phase 6 |
 | `kaola-workflow-roadmap.js` | ROADMAP.md regenerator — generate/migrate/validate/init-issue subcommands; reads `kaola-workflow/.roadmap/issue-{N}.md` per-issue files | Phase 1, Phase 6 |
 | `kaola-workflow-classifier.js` | Parallel-work classifier — classifies open issues as green/yellow/red/blocked before claim; reads lock files and issue file sets | Startup (Step 0) |
+| `kaola-workflow-sink-pr.js` | PR-based sink — pushes branch, opens GitHub PR via `gh pr create`, records PR URL; optionally enables auto-merge | Phase 6 |
 
 ### Classifier Configuration
 
@@ -296,6 +297,32 @@ Valid `parallel_mode` values:
 - Other values: Bypass classification; treat all issues as green for fast claiming.
 
 When an issue receives a `yellow` verdict (shared infrastructure warning), a cache file is written to `kaola-workflow/{project}/.cache/parallel-classifier.md` to flag the caution for the phase team.
+
+### PR Sink
+
+Use `/workflow-next-pr` instead of `/workflow-next` when Phase 6 should open a GitHub PR and wait for merge rather than performing a local fast-forward merge.
+
+`/workflow-next-pr` sets `KAOLA_SINK=pr` in the environment and delegates to `/workflow-next`. Startup Step 0 passes `--sink pr` to `claim`, which writes `sink: pr` to the `## Sink` block of `workflow-state.md`. Phase 6 Step 8 reads this field and dispatches to `kaola-workflow-sink-pr.js`.
+
+**`pr_auto_merge` config key** (`~/.config/kaola-workflow/config.json`):
+
+```json
+{
+  "pr_auto_merge": false
+}
+```
+
+- `false` (default): open PR and watch for manual merge; `watch-pr` detects MERGED/CLOSED and releases lease automatically
+- `true`: open PR and also call `gh pr merge --auto --squash --delete-branch` (requires branch protection rules to be enabled on the repo; failure is non-fatal)
+
+**`watch-pr` subcommand** (`kaola-workflow-claim.js watch-pr`):
+
+Called automatically at `/workflow-next` Startup Step 0 (order: sweep → watch-pr → classify → claim). Scans all `.lock` files for entries with `sink: pr` and a `pr_url`. For each:
+- `MERGED`: releases lease, deletes local branch via `git branch -D`
+- `CLOSED` (no merge): releases lease with reason=aborted; does NOT delete branch; issue stays open
+- `OPEN`: updates `last_heartbeat` and extends `expires` in the lock file
+
+**OFFLINE behavior**: `kaola-workflow-sink-pr.js` writes `OFFLINE_PLACEHOLDER` and `0` to the lock file, workflow-state.md Sink block, and phase6-summary.md, then exits 0.
 
 The sink-merge script is invoked by Phase 6 Step 8 to automate the final merge sequence. It performs: git fetch, merge-base skip-check, rebase onto origin/main, post-rebase validation, FF-only merge with race-condition retry loop (MAX_AUTOMERGE_RETRIES=3), push, issue close, and branch cleanup. Exit codes: 0 (success), 1 (error), 2 (FF race exhausted).
 

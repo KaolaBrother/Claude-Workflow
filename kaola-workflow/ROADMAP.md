@@ -10,7 +10,7 @@ This file mirrors active unfinished work. GitHub issues are the source of truth 
 | #10 | multi-session substrate: hardening pass | open | — | ready (unblocked) |
 | #9 | Multi-session: cross-machine hardening (tiebreaker, ticker, remote sweeper) | open | — | ready (unblocked) |
 | #8 | Multi-session: Codex parity via shared scripts | open | — | ready (unblocked) |
-| #7 | Multi-session: PR sink + /workflow-next-pr + merge watcher | open | — | ready (unblocked) |
+| #7 | Multi-session: PR sink + /workflow-next-pr + merge watcher | closed | pr-sink | done |
 | #6 | Multi-session: parallelizability classifier + auto candidate selection | closed | parallel-classifier | done |
 | #2 | Multi-session co-work scheme for Kaola-Workflow (epic) | open | — | close when #4-10 done |
 
