@@ -100,6 +100,8 @@ assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'kaola-workf
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '.codex/plugins/cache');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'bootstrap');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '--runtime codex');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'CODEX_THREAD_ID');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'handoff --project');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, '## Goal Contract');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, 'collision suffix');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, 'do not ask the user');
@@ -155,6 +157,8 @@ for (const script of pluginLocalSharedScripts) {
 }
 assertIncludes(repairScript, 'kaola-workflow');
 assertIncludes(repairScript, 'next_skill');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'CODEX_THREAD_ID');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function cmdHandoff');
 assertIncludes(simulateScript, 'Kaola-Workflow walkthrough simulation passed');
 assertNotIncludes(simulateScript, '../../../scripts/kaola-workflow-claim.js');
 assertIncludes(installAgentsScript, 'BEGIN kaola-workflow agents');

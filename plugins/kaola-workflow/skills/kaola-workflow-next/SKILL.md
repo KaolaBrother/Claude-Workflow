@@ -27,8 +27,8 @@ artifact.
 ## Startup
 
 Bootstrap the claim lease for this session. Use `KAOLA_SESSION_ID` if it is
-already set; otherwise generate one and keep using the returned `session` value
-for later heartbeat, branch, and release steps.
+already set; otherwise prefer `CODEX_THREAD_ID`, then generate a fallback.
+Normal startup resumes only active work owned by the current session id.
 
 ```bash
 claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
@@ -37,16 +37,22 @@ if [ ! -f "$claim_script" ]; then
 fi
 
 if [ -f "$claim_script" ]; then
-  KAOLA_BOOTSTRAP_SESSION="${KAOLA_SESSION_ID:-$(node -e 'process.stdout.write(require("crypto").randomUUID())')}"
+  KAOLA_BOOTSTRAP_SESSION="$(node "$claim_script" session 2>/dev/null || true)"
+  [ -n "$KAOLA_BOOTSTRAP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
   KAOLA_SINK_FLAG=""
   [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
   BOOTSTRAP_OUT=$(node "$claim_script" bootstrap \
     --session "$KAOLA_BOOTSTRAP_SESSION" \
     --runtime codex \
     $KAOLA_SINK_FLAG 2>/dev/null) || true
-  [ -z "${KAOLA_SESSION_ID:-}" ] && [ -n "$BOOTSTRAP_OUT" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
 fi
 ```
+
+If `BOOTSTRAP_OUT` has `verdict: "owned"`, route that project. If another
+session owns the only active project, skip it and claim the next free issue.
+If no free issue exists, stop with the bootstrap no-unclaimed-work message.
+Use `handoff --project <project> --session "$KAOLA_SESSION_ID"` only for
+explicit recovery when the user intentionally transfers unfinished work.
 
 Classify local and remote Git state:
 

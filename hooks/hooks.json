@@ -3,6 +3,18 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PLUGIN_ROOT/scripts/kaola-workflow-session-env.js\"",
+            "timeout": 5
+          }
+        ],
+        "description": "Persist Claude Code session_id as KAOLA_SESSION_ID",
+        "id": "kaola-workflow:session-env"
+      },
+      {
         "matcher": "compact",
         "hooks": [
           {

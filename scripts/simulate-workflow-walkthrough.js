@@ -1562,60 +1562,52 @@ exit 0
           }
         }
 
-        // 8K: session lookup rehydrates from lock first, then durable workflow-state lease
+        // 8K: session lookup validates current ownership; handoff is explicit.
         {
           const epic8kTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8k-'));
           try {
             runClaim(epic8kTmp, 'sess-8k', 20, 'epic8k');
 
             const r8kLock = spawnSync(process.execPath, [
-              claimScript, 'session', '--project', 'epic8k'
+              claimScript, 'session', '--project', 'epic8k', '--session', 'sess-8k'
             ], {
               cwd: epic8kTmp,
               encoding: 'utf8',
               env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
-            assert(r8kLock.status === 0, '8K-a: session lookup from lock must succeed, got ' + r8kLock.status + '\nstderr: ' + r8kLock.stderr);
-            assert(r8kLock.stdout.trim() === 'sess-8k', '8K-a: expected sess-8k from lock, got: ' + r8kLock.stdout);
+            assert(r8kLock.status === 0, '8K-a: matching lock owner must validate, got ' + r8kLock.status + '\nstderr: ' + r8kLock.stderr);
+            assert(r8kLock.stdout.trim() === 'sess-8k', '8K-a: expected current session sess-8k, got: ' + r8kLock.stdout);
 
-            const r8kOnly = spawnSync(process.execPath, [claimScript, 'session'], {
+            const r8kIntruder = spawnSync(process.execPath, [
+              claimScript, 'session', '--project', 'epic8k', '--session', 'sess-intruder'
+            ], {
               cwd: epic8kTmp,
               encoding: 'utf8',
               env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
-            assert(r8kOnly.status === 0, '8K-b: unscoped single-session lookup must succeed, got ' + r8kOnly.status);
-            assert(r8kOnly.stdout.trim() === 'sess-8k', '8K-b: expected sess-8k from unscoped lookup, got: ' + r8kOnly.stdout);
+            assert(r8kIntruder.status === 2, '8K-b: foreign lock owner must be occupied, got ' + r8kIntruder.status);
 
             fs.unlinkSync(path.join(epic8kTmp, 'kaola-workflow', '.locks', 'epic8k.lock'));
             const r8kState = spawnSync(process.execPath, [
-              claimScript, 'session', '--project', 'epic8k'
+              claimScript, 'session', '--project', 'epic8k', '--session', 'sess-8k'
             ], {
               cwd: epic8kTmp,
               encoding: 'utf8',
               env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
-            assert(r8kState.status === 0, '8K-c: session lookup from workflow-state lease must succeed, got ' + r8kState.status + '\nstderr: ' + r8kState.stderr);
-            assert(r8kState.stdout.trim() === 'sess-8k', '8K-c: expected sess-8k from workflow-state lease, got: ' + r8kState.stdout);
+            assert(r8kState.status === 0, '8K-c: matching state-only owner must validate, got ' + r8kState.status + '\nstderr: ' + r8kState.stderr);
+            assert(r8kState.stdout.trim() === 'sess-8k', '8K-c: expected sess-8k from workflow-state validation, got: ' + r8kState.stdout);
 
-            const otherDir8k = path.join(epic8kTmp, 'kaola-workflow', 'epic8k-other');
-            fs.mkdirSync(otherDir8k, { recursive: true });
-            fs.writeFileSync(path.join(otherDir8k, 'workflow-state.md'), [
-              '# Kaola-Workflow State',
-              '',
-              '## Project',
-              'name: epic8k-other',
-              'status: active',
-              '',
-              '## Lease',
-              'session_id: sess-8k-other',
-              ''
-            ].join('\n'));
-            const r8kAmbiguous = spawnSync(process.execPath, [claimScript, 'session'], {
+            const r8kHandoff = spawnSync(process.execPath, [
+              claimScript, 'handoff', '--project', 'epic8k', '--session', 'sess-8k-new'
+            ], {
               cwd: epic8kTmp,
               encoding: 'utf8',
               env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
-            assert(r8kAmbiguous.status === 1, '8K-d: unscoped multi-session lookup must be ambiguous, got ' + r8kAmbiguous.status);
+            assert(r8kHandoff.status === 0, '8K-d: explicit handoff must succeed, got ' + r8kHandoff.status + '\nstderr: ' + r8kHandoff.stderr);
+            const handedOffState = fs.readFileSync(path.join(epic8kTmp, 'kaola-workflow', 'epic8k', 'workflow-state.md'), 'utf8');
+            assert(handedOffState.includes('session_id: sess-8k-new'), '8K-d: handoff must update workflow-state lease');
           } finally {
             fs.rmSync(epic8kTmp, { recursive: true, force: true });
           }
@@ -1668,6 +1660,9 @@ exit 0
               HOME: epic8iTmp,
               KAOLA_WORKFLOW_OFFLINE: ''
             };
+            delete env8i.KAOLA_SESSION_ID;
+            delete env8i.CODEX_THREAD_ID;
+            delete env8i.CLAUDE_SESSION_ID;
 
             const r8i1 = spawnSync(process.execPath, [
               claimScript, 'bootstrap', '--runtime', 'codex'
@@ -1676,6 +1671,14 @@ exit 0
             const out8i1 = JSON.parse(r8i1.stdout.trim());
             assert(out8i1.issue === 11, '8I-a: first bootstrap must pick issue 11, got ' + out8i1.issue);
             assert(out8i1.session, '8I-a: bootstrap output must include generated session');
+
+            const r8iOwned = spawnSync(process.execPath, [
+              claimScript, 'bootstrap', '--session', out8i1.session, '--runtime', 'codex'
+            ], { cwd: epic8iTmp, encoding: 'utf8', env: env8i });
+            assert(r8iOwned.status === 0, '8I-owned: same session must resume owned issue, got ' + r8iOwned.status);
+            const out8iOwned = JSON.parse(r8iOwned.stdout.trim());
+            assert(out8iOwned.verdict === 'owned' && out8iOwned.issue === 11,
+              '8I-owned: same session must return owned issue 11, got ' + r8iOwned.stdout);
 
             const r8i2 = spawnSync(process.execPath, [
               claimScript, 'bootstrap', '--runtime', 'codex'
@@ -2554,9 +2557,9 @@ exit 0
           writeStageProject(epic12Tmp, spec, projectName, issue, sessionId, true);
 
           const sessionOut = execFileSync(process.execPath, [
-            claimScript, 'session', '--project', projectName
+            claimScript, 'session', '--project', projectName, '--session', sessionId
           ], { cwd: epic12Tmp, encoding: 'utf8', env: { ...process.env, HOME: epic12Tmp } }).trim();
-          assert(sessionOut === sessionId, '12A phase ' + spec.phase + ': session lookup must return primary session');
+          assert(sessionOut === sessionId, '12A phase ' + spec.phase + ': matching session must validate primary owner');
 
           const duplicateDirect = spawnSync(process.execPath, [
             claimScript, 'claim',
@@ -2606,10 +2609,10 @@ exit 0
           writeStageProject(epic12Tmp, spec, projectName, issue, sessionId, false);
 
           const sessionOut = execFileSync(process.execPath, [
-            claimScript, 'session', '--project', projectName
+            claimScript, 'session', '--project', projectName, '--session', sessionId
           ], { cwd: epic12Tmp, encoding: 'utf8', env: { ...process.env, HOME: epic12Tmp } }).trim();
           assert(sessionOut === sessionId,
-            '12E phase ' + spec.phase + ': state-only session lookup must return workflow-state lease');
+            '12E phase ' + spec.phase + ': matching session must validate state-only lease');
 
           const duplicateDirect = spawnSync(process.execPath, [
             claimScript, 'claim',

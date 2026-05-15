@@ -408,12 +408,22 @@ When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact res
 
 Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets a distinct project. Session management is handled by `kaola-workflow-claim.js`:
 
-- Automatic on startup via `/workflow-next`; it uses `KAOLA_SESSION_ID` when set and generates a session id when absent
+- Automatic on startup via `/workflow-next`; it uses `KAOLA_SESSION_ID` when set, otherwise derives it from the host platform (`CODEX_THREAD_ID` in Codex, Claude Code `SessionStart.session_id` via the plugin hook), and generates a fallback only when no platform id is available
 - Manual claim/release: `kaola-workflow-claim.js claim --session <id> --project <name> --issue <N>`
+- Explicit recovery/handoff: `kaola-workflow-claim.js handoff --project <name> --session <id>` transfers an unfinished project to a new session when the user intentionally wants to pick it up
 - Background ticker (`ticker` subcommand) keeps leases active across machines with 15-min heartbeat intervals
 - Claim race tiebreaker: lowest GitHub comment ID wins; losers yield cleanly and release the lease
 - Remote sweeper (`sweep` subcommand) checks GitHub comment `updated_at` — skips active sessions (< 24h), clears stale ones (≥ 24h)
 - Pre-commit hook blocks commits that stage files from a project owned by a different session
+
+Normal startup resumes only work whose lease `session_id` exactly matches the current `KAOLA_SESSION_ID`. Active work owned by a different live session is treated as occupied, so `/workflow-next` skips it and claims the next free issue. If no free issue exists, startup stops with a no-unclaimed-work message instead of adopting the foreign lease.
+
+Session id lifecycle:
+
+- Claude Code: new startup, `/clear`, and normal exit/re-enter produce a fresh session id. `--continue`, `--resume`, and `/resume` keep the resumed session id. The plugin SessionStart hook persists that id as `KAOLA_SESSION_ID` for later Bash commands.
+- Codex: fresh threads, `/clear`, `/new`, and `/fork` produce a fresh thread id. `/compact`, `/resume`, and `codex resume <SESSION_ID>` keep the same resumed thread id. Kaola uses `CODEX_THREAD_ID` when `KAOLA_SESSION_ID` is unset.
+
+Use recovery/handoff only when a user intentionally switches a new session to continue a specific unfinished project. Recovery is never triggered implicitly by being in the same folder or by there being only one active workflow project.
 
 Cross-machine hardening ensures that only one session can hold an issue lease at a time, with automatic cleanup if a session becomes inactive. For full details, see `commands/workflow-next.md` "Startup Step 0" and "Co-active Leases".
 

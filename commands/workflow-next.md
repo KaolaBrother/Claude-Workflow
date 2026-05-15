@@ -45,9 +45,10 @@ authorization or materially user-owned choices.
 ## Startup Step 0 - Sweep, Classify, And Claim
 
 If `kaola-workflow-claim.js` and `kaola-workflow-classifier.js` are available,
-run bootstrap before selecting work. Use the current `KAOLA_SESSION_ID` when
-set; otherwise generate one for this workflow session and keep using it for
-later heartbeat, branch, and release steps.
+run bootstrap before selecting work. Resolve the current session id from
+`KAOLA_SESSION_ID`, then the host platform id, then a generated fallback. Normal
+startup must continue only projects owned by that id; foreign active projects
+are occupied and skipped.
 
 Bootstrap runs the claim helper's `sweep`, `watch-pr`, classifier, and claim
 steps so stale leases, merged PR leases, and remotely claimed issues are handled
@@ -56,20 +57,23 @@ before selecting the next candidate.
 ```bash
 CLAIM_JS="${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js"
 if [ -f "$CLAIM_JS" ]; then
-  KAOLA_BOOTSTRAP_SESSION="${KAOLA_SESSION_ID:-$(node -e 'process.stdout.write(require("crypto").randomUUID())')}"
+  KAOLA_BOOTSTRAP_SESSION="$(node "$CLAIM_JS" session 2>/dev/null || true)"
+  [ -n "$KAOLA_BOOTSTRAP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
   KAOLA_SINK_FLAG=""
   [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
   BOOTSTRAP_OUT=$(node "$CLAIM_JS" bootstrap \
     --session "$KAOLA_BOOTSTRAP_SESSION" \
     --runtime claude \
     $KAOLA_SINK_FLAG 2>/dev/null) || true
-  [ -z "${KAOLA_SESSION_ID:-}" ] && [ -n "$BOOTSTRAP_OUT" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
 fi
 ```
 
 If `BOOTSTRAP_OUT` is JSON, its `session` field is the active session id to
-carry through the rest of this workflow session. If the script is unavailable
-or no candidate passes classify, skip this step and continue to Step 1.
+carry through the rest of this workflow session. A verdict of `owned` means
+route that owned project instead of claiming new work. If the script is
+unavailable, skip this step and continue to Step 1. If bootstrap reports no
+unclaimed work for the current session, stop with that message unless the user
+explicitly requested recovery/handoff for a specific unfinished project.
 
 ## Startup Step 1 - Git Freshness
 
@@ -143,6 +147,13 @@ task is available, ask the user what to implement. New work starts with:
 ## Co-active Leases
 
 Multiple sessions may hold leases simultaneously when each targets a distinct project. Session A on `issue-3` and Session B on `issue-4` are coexistent. The pre-commit guard blocks only commits that stage files from a project owned by a different session.
+
+Use explicit recovery/handoff only when a user intentionally switches a new
+session to an unfinished project:
+
+```bash
+node "$CLAIM_JS" handoff --project <project> --session "$KAOLA_SESSION_ID"
+```
 
 ## Resume Detection
 

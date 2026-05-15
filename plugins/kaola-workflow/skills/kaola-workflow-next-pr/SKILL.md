@@ -10,28 +10,14 @@ This skill sets the sink mode to `pr` and delegates to `kaola-workflow-next`. Us
 ## Behavior
 
 1. Set `KAOLA_SINK=pr` in the environment.
-2. Run the bootstrap startup sequence with PR sink.
-3. Delegate to `kaola-workflow-next` for routing.
-4. Routing decisions are recorded in `kaola-workflow/{project}/workflow-state.md` via `kaola-workflow-next`.
+2. Delegate to `kaola-workflow-next` for routing.
+3. Routing decisions are recorded in `kaola-workflow/{project}/workflow-state.md` via `kaola-workflow-next`.
 
 ## Startup
 
 ```bash
 export KAOLA_SINK=pr
 
-claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
-if [ ! -f "$claim_script" ]; then
-  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
-fi
-
-if [ -f "$claim_script" ]; then
-  KAOLA_BOOTSTRAP_SESSION="${KAOLA_SESSION_ID:-$(node -e 'process.stdout.write(require("crypto").randomUUID())')}"
-  BOOTSTRAP_OUT=$(node "$claim_script" bootstrap \
-    --session "$KAOLA_BOOTSTRAP_SESSION" \
-    --runtime codex \
-    --sink pr 2>/dev/null) || true
-  [ -z "${KAOLA_SESSION_ID:-}" ] && [ -n "$BOOTSTRAP_OUT" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
-fi
 ```
 
 Then continue as `kaola-workflow-next` would, using `$ARGUMENTS`.

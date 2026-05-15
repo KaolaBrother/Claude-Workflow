@@ -28,8 +28,14 @@ If a claim session is active or recoverable, ensure the background heartbeat tic
 ```bash
 _CLAIM_JS="${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js"
 if [ -f "$_CLAIM_JS" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
-  KAOLA_SESSION_ID="$(node "$_CLAIM_JS" session --project "{project}" 2>/dev/null || true)"
+  KAOLA_SESSION_ID="$(node "$_CLAIM_JS" session 2>/dev/null || true)"
   [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
+fi
+if [ -f "$_CLAIM_JS" ] && [ -n "${KAOLA_SESSION_ID:-}" ]; then
+  node "$_CLAIM_JS" session --project "{project}" --session "$KAOLA_SESSION_ID" >/dev/null || {
+    echo "Kaola-Workflow: {project} is owned by another session; use explicit recovery/handoff to continue it."
+    exit 1
+  }
 fi
 [ -n "${KAOLA_SESSION_ID:-}" ] && {
   _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"

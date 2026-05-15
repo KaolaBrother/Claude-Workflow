@@ -60,7 +60,7 @@ function phaseFile(title, rows) {
 
 function assertRepair(workdir, expectedSkill, expectedPhase) {
   const output = runRepair(workdir);
-  assert(output.includes('Kaola-Workflow state repair: wrote') || output.includes('Kaola-Workflow state repair: repaired stale'), 'repair output must report a write or stale repair');
+  assert(output.includes('Workflow state repair: wrote') || output.includes('Workflow state repair: repaired stale'), 'repair output must report a write or stale repair');
   assert(output.includes(`Current phase: ${expectedPhase}`), `repair output missing phase ${expectedPhase}`);
   assert(output.includes(`Next skill: ${expectedSkill}`), `repair output missing ${expectedSkill}`);
   const stateFile = path.join(workdir, 'kaola-workflow', project, 'workflow-state.md');
@@ -91,7 +91,7 @@ function main() {
     try {
       fs.mkdirSync(path.join(emptyRoot, 'kaola-workflow', project), { recursive: true });
       const output = runRepair(emptyRoot, project);
-      assert(output.includes('Kaola-Workflow state repair: skipped - no phase artifacts available for repair'), 'repair must not create state for brand-new work');
+      assert(output.includes('Workflow state repair: skipped - no phase artifacts available for repair'), 'repair must not create state for brand-new work');
       assert(!fs.existsSync(path.join(emptyRoot, 'kaola-workflow', project, 'workflow-state.md')), 'repair created state without phase artifacts');
     } finally {
       fs.rmSync(emptyRoot, { recursive: true, force: true });
@@ -120,7 +120,7 @@ function main() {
         cwd: stateOnlyRoot,
         encoding: 'utf8'
       });
-      assert(output.includes('Kaola-Workflow state repair: existing state valid'), 'repair must recognize active workflow-state before phase files exist');
+      assert(output.includes('Workflow state repair: existing state valid'), 'repair must recognize active workflow-state before phase files exist');
       assert(output.includes('Workflow project: ' + activeProject), 'repair must route the state-only active project');
     } finally {
       fs.rmSync(stateOnlyRoot, { recursive: true, force: true });
@@ -338,12 +338,21 @@ exit 0
           HOME: case5Dir,
           KAOLA_WORKFLOW_OFFLINE: ''
         };
+        delete env5e.KAOLA_SESSION_ID;
+        delete env5e.CODEX_THREAD_ID;
+        delete env5e.CLAUDE_SESSION_ID;
 
         const out5e1 = JSON.parse(execFileSync(process.execPath, [
           claimScript, 'bootstrap', '--runtime', 'codex'
         ], { cwd: case5Dir, encoding: 'utf8', env: env5e }).trim());
         assert(out5e1.issue === 11, 'Case 5e-a: first bootstrap must pick issue 11, got: ' + out5e1.issue);
         assert(out5e1.session, 'Case 5e-a: bootstrap output must include generated session');
+
+        const out5eOwned = JSON.parse(execFileSync(process.execPath, [
+          claimScript, 'bootstrap', '--session', out5e1.session, '--runtime', 'codex'
+        ], { cwd: case5Dir, encoding: 'utf8', env: env5e }).trim());
+        assert(out5eOwned.verdict === 'owned' && out5eOwned.issue === 11,
+          'Case 5e-owned: same session must resume owned issue 11, got: ' + JSON.stringify(out5eOwned));
 
         const out5e2 = JSON.parse(execFileSync(process.execPath, [
           claimScript, 'bootstrap', '--runtime', 'codex'
@@ -409,7 +418,7 @@ exit 0
         assert(!log.includes('--title'), 'Case 5f: claim must not mutate issue title, got: ' + log);
       }
 
-      // Case 5g: session lookup rehydrates from the lock, then workflow-state lease.
+      // Case 5g: session lookup validates the current owner; handoff is explicit.
       {
         const case5gDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5g-'));
         try {
@@ -422,15 +431,28 @@ exit 0
           ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
 
           const fromLock = execFileSync(process.execPath, [
-            claimScript, 'session', '--project', 'plugin-session'
+            claimScript, 'session', '--project', 'plugin-session', '--session', 'sess-plugin-5g'
           ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } }).trim();
-          assert(fromLock === 'sess-plugin-5g', 'Case 5g-a: session lookup from lock must return sess-plugin-5g, got: ' + fromLock);
+          assert(fromLock === 'sess-plugin-5g', 'Case 5g-a: matching lock owner must validate, got: ' + fromLock);
+
+          let intruderCode = 0;
+          try {
+            execFileSync(process.execPath, [
+              claimScript, 'session', '--project', 'plugin-session', '--session', 'sess-plugin-intruder'
+            ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          } catch (e) { intruderCode = e.status || 1; }
+          assert(intruderCode === 2, 'Case 5g-b: foreign owner must be occupied, got: ' + intruderCode);
 
           fs.unlinkSync(path.join(case5gDir, 'kaola-workflow', '.locks', 'plugin-session.lock'));
           const fromState = execFileSync(process.execPath, [
-            claimScript, 'session', '--project', 'plugin-session'
+            claimScript, 'session', '--project', 'plugin-session', '--session', 'sess-plugin-5g'
           ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } }).trim();
-          assert(fromState === 'sess-plugin-5g', 'Case 5g-b: session lookup from workflow-state must return sess-plugin-5g, got: ' + fromState);
+          assert(fromState === 'sess-plugin-5g', 'Case 5g-c: matching state-only owner must validate, got: ' + fromState);
+
+          const handoff = execFileSync(process.execPath, [
+            claimScript, 'handoff', '--project', 'plugin-session', '--session', 'sess-plugin-5g-new'
+          ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          assert(JSON.parse(handoff).session === 'sess-plugin-5g-new', 'Case 5g-d: handoff must return new session');
         } finally {
           fs.rmSync(case5gDir, { recursive: true, force: true });
         }
@@ -551,9 +573,9 @@ exit 0
           writeStageProject(matrixDir, spec, projectName, issue, sessionId, true);
 
           const sessionOut = execFileSync(process.execPath, [
-            claimScript, 'session', '--project', projectName
+            claimScript, 'session', '--project', projectName, '--session', sessionId
           ], { cwd: matrixDir, encoding: 'utf8', env: { ...process.env, HOME: matrixDir } }).trim();
-          assert(sessionOut === sessionId, 'Case 5h phase ' + spec.phase + ': session lookup must return primary session');
+          assert(sessionOut === sessionId, 'Case 5h phase ' + spec.phase + ': matching session must validate primary owner');
 
           const duplicateClaimCode = exitCode([
             claimScript, 'claim',
@@ -595,10 +617,10 @@ exit 0
           const sessionId = 'sess-codex-state-stage-' + spec.phase;
           writeStageProject(matrixDir, spec, projectName, issue, sessionId, false);
           const sessionOut = execFileSync(process.execPath, [
-            claimScript, 'session', '--project', projectName
+            claimScript, 'session', '--project', projectName, '--session', sessionId
           ], { cwd: matrixDir, encoding: 'utf8', env: { ...process.env, HOME: matrixDir } }).trim();
           assert(sessionOut === sessionId,
-            'Case 5h state-only phase ' + spec.phase + ': session lookup must read workflow-state lease');
+            'Case 5h state-only phase ' + spec.phase + ': matching session must validate workflow-state lease');
           const duplicateClaimCode = exitCode([
             claimScript, 'claim',
             '--session', 'sess-codex-state-stage-' + spec.phase + '-intruder',

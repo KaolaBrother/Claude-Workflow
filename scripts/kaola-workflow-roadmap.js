@@ -64,7 +64,7 @@ function readRoadmapIssues(dir) {
     .sort((a, b) => {
       const na = parseInt(a.match(/\d+/)[0], 10);
       const nb = parseInt(b.match(/\d+/)[0], 10);
-      return nb - na; // descending
+      return na - nb; // ascending workflow order
     });
   return files.map(f => {
     const content = fs.readFileSync(path.join(dir, f), 'utf8');

@@ -137,11 +137,14 @@ assertIncludes('uninstall.sh', '.claude/kaola-workflow');
 
 assert(exists('hooks/hooks.json'), 'hooks/hooks.json is missing');
 assert(exists('scripts/kaola-workflow-compact-context.js'), 'compact context hook script is missing');
+assert(exists('scripts/kaola-workflow-session-env.js'), 'session env hook script is missing');
 assert(exists('scripts/kaola-workflow-repair-state.js'), 'state repair script is missing');
 assert(exists('scripts/simulate-workflow-walkthrough.js'), 'workflow walkthrough simulation script is missing');
 assertIncludes('hooks/hooks.json', 'SessionStart');
 assertIncludes('hooks/hooks.json', 'compact');
 assertIncludes('hooks/hooks.json', 'kaola-workflow-compact-context.js');
+assertIncludes('hooks/hooks.json', 'kaola-workflow-session-env.js');
+assertIncludes('hooks/hooks.json', 'startup|resume|clear|compact');
 
 const pluginJson = JSON.parse(read('.claude-plugin/plugin.json'));
 assert(!Object.prototype.hasOwnProperty.call(pluginJson, 'hooks'), 'plugin.json must not declare hooks/hooks.json');
@@ -200,8 +203,11 @@ assertIncludes('.gitignore', 'kaola-workflow/.locks/');
 assertIncludes('.gitignore', 'kaola-workflow/.sessions/');
 assertIncludes('hooks/hooks.json', 'PreToolUse');
 assertIncludes('install.sh', 'kaola-workflow-claim.js');
+assertIncludes('install.sh', 'kaola-workflow-session-env.js');
 assertIncludes('install.sh', 'kaola-workflow-sink-merge.js');
 assertIncludes('scripts/kaola-workflow-claim.js', 'workflow/issue-');
+assertIncludes('scripts/kaola-workflow-claim.js', 'CODEX_THREAD_ID');
+assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdHandoff');
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.js');
 assertIncludes('commands/workflow-next.md', 'Branch:');
 assertIncludes('scripts/kaola-workflow-sink-merge.js', 'MAX_AUTOMERGE_RETRIES');
@@ -228,6 +234,10 @@ assertIncludes('commands/workflow-next.md', 'kaola-workflow-roadmap.js');
 assertIncludes('commands/workflow-next.md', 'kaola-workflow-classifier.js');
 assertIncludes('commands/workflow-next.md', 'Sweep, Classify, And Claim');
 assertIncludes('commands/workflow-next.md', 'Parallel decision:');
+assertIncludes('commands/workflow-next.md', 'handoff --project');
+assertIncludes('README.md', 'CODEX_THREAD_ID');
+assertIncludes('README.md', 'SessionStart.session_id');
+assertIncludes('README.md', 'Recovery is never triggered implicitly');
 
 // pr-sink assertions
 assert(exists('scripts/kaola-workflow-sink-pr.js'), 'scripts/kaola-workflow-sink-pr.js is missing');

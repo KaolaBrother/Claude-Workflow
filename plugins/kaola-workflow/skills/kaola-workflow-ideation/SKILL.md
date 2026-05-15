@@ -17,13 +17,14 @@ if [ ! -f "$claim_script" ]; then
   claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
 fi
 if [ -f "$claim_script" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
-  _KW_PROJECT_ARG="${KAOLA_PROJECT:-}"
-  if [ -n "$_KW_PROJECT_ARG" ]; then
-    KAOLA_SESSION_ID="$(node "$claim_script" session --project "$_KW_PROJECT_ARG" 2>/dev/null || true)"
-  else
-    KAOLA_SESSION_ID="$(node "$claim_script" session 2>/dev/null || true)"
-  fi
+  KAOLA_SESSION_ID="$(node "$claim_script" session 2>/dev/null || true)"
   [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
+fi
+if [ -f "$claim_script" ] && [ -n "${KAOLA_SESSION_ID:-}" ] && [ -n "${KAOLA_PROJECT:-}" ]; then
+  node "$claim_script" session --project "$KAOLA_PROJECT" --session "$KAOLA_SESSION_ID" >/dev/null || {
+    echo "Kaola-Workflow: $KAOLA_PROJECT is owned by another session; use explicit recovery/handoff to continue it."
+    exit 1
+  }
 fi
 [ -n "${KAOLA_SESSION_ID:-}" ] && {
   _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"

@@ -10,6 +10,14 @@ const PHASES = {
   5: 'Review',
   6: 'Finalize'
 };
+const SKILLS = {
+  1: 'kaola-workflow-research',
+  2: 'kaola-workflow-ideation',
+  3: 'kaola-workflow-plan',
+  4: 'kaola-workflow-execute',
+  5: 'kaola-workflow-review',
+  6: 'kaola-workflow-finalize'
+};
 const WORKFLOW_DIR = 'kaola-workflow';
 const LEGACY_WORKFLOW_DIRS = ['claude-workflow'];
 
@@ -62,6 +70,38 @@ function isSafeName(name) {
   return Boolean(name) && !name.includes('/') && !name.includes('\\') && name !== '.' && name !== '..';
 }
 
+function currentSessionId() {
+  return process.env.KAOLA_SESSION_ID ||
+    process.env.CODEX_THREAD_ID ||
+    process.env.CLAUDE_SESSION_ID ||
+    '';
+}
+
+function projectOwner(workflowDir, project) {
+  const lockFile = path.join(workflowDir, '.locks', project + '.lock');
+  try {
+    const lock = JSON.parse(readFile(lockFile));
+    if (isSafeName(lock.session_id)) return lock.session_id;
+  } catch (_) {}
+
+  const stateFile = path.join(workflowDir, project, 'workflow-state.md');
+  try {
+    const content = readFile(stateFile);
+    if (/^status:\s*active\s*$/m.test(content)) {
+      const sessionId = field(content, 'session_id');
+      if (isSafeName(sessionId)) return sessionId;
+    }
+  } catch (_) {}
+
+  return '';
+}
+
+function ownedByCurrentSession(workflowDir, project, sessionId) {
+  if (!sessionId) return true;
+  const owner = projectOwner(workflowDir, project);
+  return !owner || owner === sessionId;
+}
+
 function projectHasPhaseArtifacts(projectDir) {
   return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
 }
@@ -70,12 +110,18 @@ function projectHasActiveState(projectDir) {
   const stateFile = path.join(projectDir, 'workflow-state.md');
   if (!exists(stateFile)) return false;
   const content = readFile(stateFile);
+  const phase = Number(field(content, 'phase'));
+  const nextCommand = field(content, 'next_command');
+  const nextSkill = field(content, 'next_skill');
   return /^status:\s*active\s*$/m.test(content) &&
-    /^phase:\s*[1-6]\s*$/m.test(content) &&
-    /^next_command:\s*\/kaola-workflow-phase[1-6]\b/m.test(content);
+    PHASES[phase] &&
+    (
+      /^\/kaola-workflow-phase[1-6]\b/.test(nextCommand) ||
+      new RegExp('^' + SKILLS[phase] + '\\b').test(nextSkill)
+    );
 }
 
-function activeProjects(workflowDir) {
+function activeProjects(workflowDir, sessionId) {
   if (!exists(workflowDir)) return [];
 
   return fs.readdirSync(workflowDir, { withFileTypes: true })
@@ -85,17 +131,22 @@ function activeProjects(workflowDir) {
       const projectDir = path.join(workflowDir, entry.name);
       return projectHasPhaseArtifacts(projectDir) || projectHasActiveState(projectDir);
     })
+    .filter(entry => ownedByCurrentSession(workflowDir, entry.name, sessionId))
     .map(entry => entry.name)
     .sort();
 }
 
 function selectProject(workflowDir, argument) {
+  const sessionId = currentSessionId();
   const requested = String(argument || '').trim().split(/\s+/)[0];
   if (isSafeName(requested) && exists(path.join(workflowDir, requested))) {
+    if (!ownedByCurrentSession(workflowDir, requested, sessionId)) {
+      return { reason: `project ${requested} is owned by another session` };
+    }
     return { project: requested };
   }
 
-  const projects = activeProjects(workflowDir);
+  const projects = activeProjects(workflowDir, sessionId);
   if (projects.length === 1) {
     return { project: projects[0] };
   }
@@ -104,7 +155,9 @@ function selectProject(workflowDir, argument) {
     return { reason: `ambiguous active projects: ${projects.join(', ')}` };
   }
 
-  return { reason: 'no active workflow projects with phase artifacts or active state' };
+  return { reason: sessionId
+    ? 'no active workflow projects owned by current session'
+    : 'no active workflow projects with phase artifacts or active state' };
 }
 
 function complianceRows(content) {
@@ -231,6 +284,7 @@ function route(root, workflowDir, project, phase, phaseFileName, crossesBoundary
     step: 'router-reconstructed',
     task,
     nextCommand: `/kaola-workflow-phase${phase} ${project}`,
+    nextSkill: `${SKILLS[phase]} ${project}`,
     phaseFile,
     pendingGates: unresolved
   };
@@ -239,10 +293,14 @@ function route(root, workflowDir, project, phase, phaseFileName, crossesBoundary
 function stateLooksValid(root, project, content) {
   const phase = Number(field(content, 'phase'));
   const nextCommand = field(content, 'next_command');
+  const nextSkill = field(content, 'next_skill');
   const phaseFile = field(content, 'phase_file');
 
   if (!PHASES[phase]) return false;
-  if (!new RegExp(`^/kaola-workflow-phase${phase}\\s+${project.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`).test(nextCommand)) {
+  const safeProject = project.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const commandOk = new RegExp(`^/kaola-workflow-phase${phase}\\s+${safeProject}$`).test(nextCommand);
+  const skillOk = new RegExp(`^${SKILLS[phase]}\\s+${safeProject}$`).test(nextSkill);
+  if (!commandOk && !skillOk) {
     return false;
   }
   if (phaseFile && phaseFile !== 'N/A' && !exists(path.join(root, phaseFile))) return false;
@@ -255,13 +313,26 @@ function pendingGateLines(rows) {
   return rows.map(row => `- ${row.requirement}: ${row.status || 'missing'}`);
 }
 
-function stateContent(routeResult) {
+function extractSection(content, heading) {
+  if (!content) return '';
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = content.match(new RegExp('(?:^|\\n)(## ' + escaped + '[\\s\\S]*?)(?=\\n## |\\s*$)'));
+  return match ? match[1].trim() : '';
+}
+
+function preservedStateBlocks(existingContent) {
+  return ['Sink', 'Lease']
+    .map(section => extractSection(existingContent, section))
+    .filter(Boolean);
+}
+
+function stateContent(routeResult, existingContent = '') {
   const relativePhaseFile = path.relative(routeResult.root, routeResult.phaseFile);
   const fixOwner = routeResult.phase >= 4 && routeResult.phase <= 6
     ? 'tdd-guide or build-error-resolver'
     : 'N/A';
 
-  return [
+  const lines = [
     '# Kaola-Workflow State',
     '',
     '## Project',
@@ -274,6 +345,7 @@ function stateContent(routeResult) {
     `step: ${routeResult.step}`,
     `task: ${routeResult.task}`,
     `next_command: ${routeResult.nextCommand}`,
+    `next_skill: ${routeResult.nextSkill}`,
     '',
     '## Pending Gates',
     ...pendingGateLines(routeResult.pendingGates),
@@ -293,7 +365,11 @@ function stateContent(routeResult) {
     '## Last Updated',
     new Date().toISOString(),
     ''
-  ].join('\n');
+  ];
+
+  const preserved = preservedStateBlocks(existingContent);
+  if (preserved.length > 0) lines.push(...preserved, '');
+  return lines.join('\n');
 }
 
 function printRoute(prefix, routeResult) {
@@ -308,6 +384,7 @@ function printRoute(prefix, routeResult) {
     `Current step: ${routeResult.step}`,
     `Pending gates: ${pending}`,
     `Next command: ${routeResult.nextCommand}`,
+    `Next skill: ${routeResult.nextSkill || 'N/A'}`,
     ''
   ].join('\n'));
 }
@@ -339,7 +416,7 @@ function main() {
 
       if (routeResult.nextCommand && routeResult.nextCommand !== field(content, 'next_command')) {
         routeResult.root = root;
-        fs.writeFileSync(stateFile, stateContent(routeResult));
+        fs.writeFileSync(stateFile, stateContent(routeResult, content));
         printRoute(`Workflow state repair: repaired stale ${path.relative(root, stateFile)}`, routeResult);
         return;
       }
@@ -349,6 +426,7 @@ function main() {
         phase: field(content, 'phase'),
         step: field(content, 'step') || 'unknown',
         nextCommand: field(content, 'next_command'),
+        nextSkill: field(content, 'next_skill'),
         pendingGates: []
       });
       return;
@@ -366,7 +444,8 @@ function main() {
   }
 
   routeResult.root = root;
-  fs.writeFileSync(stateFile, stateContent(routeResult));
+  const existingContent = exists(stateFile) ? readFile(stateFile) : '';
+  fs.writeFileSync(stateFile, stateContent(routeResult, existingContent));
   printRoute(`Workflow state repair: wrote ${path.relative(root, stateFile)}`, routeResult);
 }
 
