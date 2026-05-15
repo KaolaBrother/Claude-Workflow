@@ -195,7 +195,7 @@ function main() {
     assert(finalOutput.includes('workflow is complete'), 'complete workflow should not be repaired again');
 
     // Case 5: cross-runtime co-work, two distinct projects
-    const claimScript = path.resolve(__dirname, '../../../scripts/kaola-workflow-claim.js');
+    const claimScript = path.join(pluginRoot, 'scripts', 'kaola-workflow-claim.js');
     const case5Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5-'));
     try {
       execFileSync('git', ['init', case5Dir], { encoding: 'utf8' });

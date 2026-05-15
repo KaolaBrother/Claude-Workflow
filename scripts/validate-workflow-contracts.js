@@ -30,6 +30,15 @@ function assertNotIncludes(file, needle) {
   assert(!content.includes(needle), `${file} must not include: ${needle}`);
 }
 
+function assertBefore(file, first, second) {
+  const content = read(file);
+  const firstIndex = content.indexOf(first);
+  const secondIndex = content.indexOf(second);
+  assert(firstIndex >= 0, `${file} must include: ${first}`);
+  assert(secondIndex >= 0, `${file} must include: ${second}`);
+  assert(firstIndex < secondIndex, `${file} must put ${first} before ${second}`);
+}
+
 const phaseCommands = [
   'commands/kaola-workflow-phase1.md',
   'commands/kaola-workflow-phase2.md',
@@ -109,7 +118,9 @@ assertIncludes('commands/kaola-workflow-phase6.md', '## Documentation Docking');
 assertIncludes('commands/kaola-workflow-phase6.md', '.cache/doc-docking.md');
 assertIncludes('commands/kaola-workflow-phase6.md', '## Closure Decision Gate');
 assertIncludes('commands/kaola-workflow-phase6.md', '.cache/advisor-closure.md');
-assertIncludes('commands/kaola-workflow-phase6.md', '## Step 8 - Sink');
+assertIncludes('commands/kaola-workflow-phase6.md', '## Step 8 - Commit Gate');
+assertIncludes('commands/kaola-workflow-phase6.md', '## Step 9 - Sink');
+assertBefore('commands/kaola-workflow-phase6.md', 'git commit -m "chore: finalize {project}"', 'kaola-workflow-sink-merge.js');
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.js');
 assertIncludes('README.md', 'Avoid redundant validation runs');
 assertIncludes('README.md', '/workflow-next');

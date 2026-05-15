@@ -28,6 +28,15 @@ function assertNotIncludes(file, needle) {
   assert(!content.includes(needle), `${file} must not include: ${needle}`);
 }
 
+function assertBefore(file, first, second) {
+  const content = read(file);
+  const firstIndex = content.indexOf(first);
+  const secondIndex = content.indexOf(second);
+  assert(firstIndex >= 0, `${file} must include: ${first}`);
+  assert(secondIndex >= 0, `${file} must include: ${second}`);
+  assert(firstIndex < secondIndex, `${file} must put ${first} before ${second}`);
+}
+
 function parseJson(file) {
   return JSON.parse(read(file));
 }
@@ -122,17 +131,30 @@ assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'Documen
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'Commit And Push');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, '## Session Heartbeat');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'kaola-workflow-sink-pr.js');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'git commit -m "chore: finalize ${KAOLA_PROJECT}"');
+assertBefore(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'git commit -m "chore: finalize ${KAOLA_PROJECT}"', 'kaola-workflow-sink-merge.js');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'Session lifecycle');
 
 const repairScript = `${pluginRoot}/scripts/kaola-workflow-repair-state.js`;
 const simulateScript = `${pluginRoot}/scripts/simulate-kaola-workflow-walkthrough.js`;
 const installAgentsScript = `${pluginRoot}/scripts/install-codex-agent-profiles.js`;
+const pluginLocalSharedScripts = [
+  `${pluginRoot}/scripts/kaola-workflow-claim.js`,
+  `${pluginRoot}/scripts/kaola-workflow-classifier.js`,
+  `${pluginRoot}/scripts/kaola-workflow-roadmap.js`,
+  `${pluginRoot}/scripts/kaola-workflow-sink-merge.js`,
+  `${pluginRoot}/scripts/kaola-workflow-sink-pr.js`,
+];
 assert(exists(repairScript), `${repairScript} is missing`);
 assert(exists(simulateScript), `${simulateScript} is missing`);
 assert(exists(installAgentsScript), `${installAgentsScript} is missing`);
+for (const script of pluginLocalSharedScripts) {
+  assert(exists(script), `${script} is missing`);
+}
 assertIncludes(repairScript, 'kaola-workflow');
 assertIncludes(repairScript, 'next_skill');
 assertIncludes(simulateScript, 'Kaola-Workflow walkthrough simulation passed');
+assertNotIncludes(simulateScript, '../../../scripts/kaola-workflow-claim.js');
 assertIncludes(installAgentsScript, 'BEGIN kaola-workflow agents');
 
 const codexAgentRoles = [

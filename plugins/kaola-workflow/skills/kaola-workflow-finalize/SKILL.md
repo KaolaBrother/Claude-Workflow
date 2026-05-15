@@ -104,7 +104,23 @@ fi
    If either check fails, do not stage; release the project under another
    lease, or coordinate manually. Do not attempt to bypass this guard.
 
-   Before committing, dispatch to the correct sink script based on the `sink` field in `workflow-state.md`:
+   Before sink dispatch, stage only approved implementation, docs, roadmap,
+   archive, and workflow artifacts for this project, then create the final
+   conventional commit on the workflow branch:
+
+   ```bash
+   git status --short
+   git add <approved-files-only>
+   git commit -m "chore: finalize ${KAOLA_PROJECT}"
+   git status --short
+   ```
+
+   If there is nothing to commit, verify and record that the branch already
+   contains the final candidate commit. Do not run a sink with uncommitted final
+   changes.
+
+   After the commit gate, dispatch to the correct sink script based on the
+   `sink` field in `workflow-state.md`:
 
    ```bash
    claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"

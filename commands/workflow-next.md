@@ -44,7 +44,12 @@ authorization or materially user-owned choices.
 
 ## Startup Step 0 - Sweep, Classify, And Claim
 
-If `kaola-workflow-claim.js` is available and `KAOLA_SESSION_ID` is set, run bootstrap:
+If `kaola-workflow-claim.js` and `kaola-workflow-classifier.js` are available
+and `KAOLA_SESSION_ID` is set, run bootstrap:
+
+Bootstrap runs the claim helper's `sweep`, `watch-pr`, classifier, and claim
+steps so stale leases, merged PR leases, and remotely claimed issues are handled
+before selecting the next candidate.
 
 ```bash
 CLAIM_JS="${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js"
@@ -215,4 +220,3 @@ Next command: {next_command}
 If nested slash-command execution is supported in the current Claude Code
 environment, continue by applying the matching command. Otherwise stop after
 printing the next command.
-

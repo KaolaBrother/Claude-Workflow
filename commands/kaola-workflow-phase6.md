@@ -481,7 +481,27 @@ fi
 If either check fails, do not stage; release the project under another lease,
 or coordinate manually. Do not attempt to bypass this guard.
 
-## Step 8 - Sink
+## Step 8 - Commit Gate
+
+The sink must only receive committed work. Before dispatching to `sink-merge`
+or `sink-pr`, stage only the approved implementation, documentation, roadmap,
+archive, and workflow artifacts for this project, then create the final
+conventional commit on the workflow branch.
+
+Minimum gate:
+
+```bash
+git status --short
+git add <approved-files-only>
+git commit -m "chore: finalize {project}"
+git status --short
+```
+
+If there is nothing to commit, verify the branch already contains the final
+candidate commit and record that evidence in `phase6-summary.md`. Do not run a
+sink with uncommitted final changes.
+
+## Step 9 - Sink
 
 Read the `## Sink` block from `kaola-workflow/{project}/workflow-state.md`:
 

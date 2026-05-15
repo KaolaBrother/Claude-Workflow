@@ -427,6 +427,7 @@ async function main() {
       execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
       execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
       execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['--git-dir', remoteDir, 'symbolic-ref', 'HEAD', 'refs/heads/main'], { encoding: 'utf8' });
       // Cut feature branch at same HEAD as origin/main — alreadyUpToDate will be true
       execFileSync('git', ['checkout', '-b', 'workflow/issue-99-epic2'], { cwd: workDir, encoding: 'utf8' });
       let epic2ExitCode = 0;
@@ -467,6 +468,7 @@ async function main() {
       execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
       execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
       execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['--git-dir', remoteDir, 'symbolic-ref', 'HEAD', 'refs/heads/main'], { encoding: 'utf8' });
       // Sibling advances origin/main
       execFileSync('git', ['clone', remoteDir, siblingDir], { encoding: 'utf8' });
       execFileSync('git', ['config', 'user.email', 'sibling@test.com'], { cwd: siblingDir, encoding: 'utf8' });
@@ -506,6 +508,79 @@ async function main() {
       fs.rmSync(epic3Tmp, { recursive: true, force: true });
     }
 
+    // Epic Case 3B: sink-merge checks out requested branch before merge-base/rebase
+    const epic3bTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic3b-'));
+    try {
+      const remoteDir = path.join(epic3bTmp, 'remote.git');
+      const workDir = path.join(epic3bTmp, 'work');
+      const siblingDir = path.join(epic3bTmp, 'sibling');
+      execFileSync('git', ['init', '--bare', remoteDir], { encoding: 'utf8' });
+      execFileSync('git', ['init', workDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'README.md'), 'init\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['--git-dir', remoteDir, 'symbolic-ref', 'HEAD', 'refs/heads/main'], { encoding: 'utf8' });
+      execFileSync('git', ['checkout', '-b', 'workflow/issue-121-epic3b'], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'feature-3b.txt'), 'feature\n');
+      execFileSync('git', ['add', 'feature-3b.txt'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'feature 3b'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['checkout', 'main'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['clone', remoteDir, siblingDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'sibling@test.com'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Sibling'], { cwd: siblingDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(siblingDir, 'sibling-3b.txt'), 'sibling\n');
+      execFileSync('git', ['add', 'sibling-3b.txt'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'sibling 3b'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'main'], { cwd: siblingDir, encoding: 'utf8' });
+      execFileSync('git', ['fetch', 'origin'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-sink-merge.js'),
+        '--branch', 'workflow/issue-121-epic3b', '--issue', '121', '--project', 'epic3b'
+      ], { cwd: workDir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      const currentBranch3b = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+        { cwd: workDir, encoding: 'utf8' }).trim();
+      assert(currentBranch3b === 'main', 'Epic Case 3B: worktree must end on main, got ' + currentBranch3b);
+      assert(fs.existsSync(path.join(workDir, 'feature-3b.txt')), 'Epic Case 3B: feature file must be merged');
+      assert(fs.existsSync(path.join(workDir, 'sibling-3b.txt')), 'Epic Case 3B: rebased main file must be present');
+    } finally {
+      fs.rmSync(epic3bTmp, { recursive: true, force: true });
+    }
+
+    // Epic Case 3C: Phase 6 commit gate simulation includes final changes before sink
+    const epic3cTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic3c-'));
+    try {
+      const remoteDir = path.join(epic3cTmp, 'remote.git');
+      const workDir = path.join(epic3cTmp, 'work');
+      execFileSync('git', ['init', '--bare', remoteDir], { encoding: 'utf8' });
+      execFileSync('git', ['init', workDir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['remote', 'add', 'origin', remoteDir], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'README.md'), 'init\n');
+      execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['--git-dir', remoteDir, 'symbolic-ref', 'HEAD', 'refs/heads/main'], { encoding: 'utf8' });
+      execFileSync('git', ['checkout', '-b', 'workflow/issue-122-epic3c'], { cwd: workDir, encoding: 'utf8' });
+      fs.writeFileSync(path.join(workDir, 'final-change.txt'), 'included by final commit gate\n');
+      execFileSync('git', ['add', 'final-change.txt'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['commit', '-m', 'chore: phase6 final gate'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['checkout', 'main'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync(process.execPath, [
+        path.join(root, 'scripts/kaola-workflow-sink-merge.js'),
+        '--branch', 'workflow/issue-122-epic3c', '--issue', '122', '--project', 'epic3c'
+      ], { cwd: workDir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      assert(fs.existsSync(path.join(workDir, 'final-change.txt')), 'Epic Case 3C: final committed change must be present on main after sink');
+      const lastMsg3c = execFileSync('git', ['log', '-1', '--pretty=%s'], { cwd: workDir, encoding: 'utf8' }).trim();
+      assert(lastMsg3c === 'chore: phase6 final gate', 'Epic Case 3C: final commit must be the sink target, got ' + lastMsg3c);
+    } finally {
+      fs.rmSync(epic3cTmp, { recursive: true, force: true });
+    }
+
     // Epic Case 4: FF race retry exhaustion (FORCE_FF_FAIL=3 == MAX_AUTOMERGE_RETRIES)
     const epic4Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic4-'));
     try {
@@ -521,6 +596,7 @@ async function main() {
       execFileSync('git', ['add', 'README.md'], { cwd: workDir, encoding: 'utf8' });
       execFileSync('git', ['commit', '-m', 'init'], { cwd: workDir, encoding: 'utf8' });
       execFileSync('git', ['push', 'origin', 'HEAD:main'], { cwd: workDir, encoding: 'utf8' });
+      execFileSync('git', ['--git-dir', remoteDir, 'symbolic-ref', 'HEAD', 'refs/heads/main'], { encoding: 'utf8' });
       // Sibling advances origin/main (same setup as Case 3)
       execFileSync('git', ['clone', remoteDir, siblingDir], { encoding: 'utf8' });
       execFileSync('git', ['config', 'user.email', 'sibling@test.com'], { cwd: siblingDir, encoding: 'utf8' });
@@ -802,6 +878,53 @@ async function main() {
             { cwd: epic6Tmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
         } catch (e) { exit6F = e.status || 1; }
         assert(exit6F === 2, 'Epic Case 6F: already-claimed issue must cause exit code 2, got ' + exit6F);
+
+        // 6G: bootstrap skips a remotely claimed issue and selects the next free issue
+        const ghShimBootstrap = [
+          '#!/bin/sh',
+          'ARGS="$@"',
+          'case "$ARGS" in',
+          '  *"issue list"*)',
+          '    echo \'[{"number":19},{"number":21}]\'',
+          '    ;;',
+          '  *"issue view 19"*)',
+          '    echo \'{"number":19,"title":"remote claimed","body":"scripts/remote.js","labels":[{"name":"workflow:in-progress"}],"state":"open"}\'',
+          '    ;;',
+          '  *"issue view 21"*)',
+          '    echo \'{"number":21,"title":"free issue","body":"commands/free.md","labels":[],"state":"open"}\'',
+          '    ;;',
+          '  *"repo view"*)',
+          '    echo \'{"owner":{"login":"test"},"name":"repo"}\'',
+          '    ;;',
+          '  *"repos/test/repo/issues/19/comments"*)',
+          '    echo \'[{"id":190,"body":"Session claimed by remote <!-- kw:claim sess=remote -->"}]\'',
+          '    ;;',
+          '  *"repos/test/repo/issues/21/comments"*)',
+          '    echo \'[]\'',
+          '    ;;',
+          '  *"issue comment 21"*)',
+          '    echo "https://github.com/test/repo/issues/21#issuecomment-210"',
+          '    ;;',
+          '  *)',
+          '    echo \'[]\' ;;',
+          'esac',
+        ].join('\n');
+        fs.writeFileSync(ghShimPath, ghShimBootstrap);
+        fs.chmodSync(ghShimPath, 0o755);
+        const claimScript6G = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+        const out6G = execFileSync(process.execPath, [
+          claimScript6G, 'bootstrap',
+          '--session', 'sess-6g',
+          '--runtime', 'codex'
+        ], {
+          cwd: epic6Tmp,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: ghShimDir + path.delimiter + (process.env.PATH || ''), HOME: epic6Tmp }
+        });
+        const r6G = JSON.parse(out6G.trim());
+        assert(r6G.issue === 21, 'Epic Case 6G: bootstrap must select free issue #21, got #' + r6G.issue);
+        assert(fs.existsSync(path.join(locksDir, 'issue-21.lock')), 'Epic Case 6G: issue-21 lock must exist after bootstrap');
+        assert(!fs.existsSync(path.join(locksDir, 'issue-19.lock')), 'Epic Case 6G: issue-19 lock must not be created');
 
       } finally {
         fs.rmSync(epic6Tmp, { recursive: true, force: true });
@@ -1351,6 +1474,35 @@ exit 0
           }
         }
 
+        // 8H: brand-new claim creates durable Sink/Lease metadata before Phase 1 rewrites state
+        {
+          const epic8hTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8h-'));
+          try {
+            execFileSync('git', ['init', epic8hTmp], { encoding: 'utf8' });
+            const r8h = spawnSync(process.execPath, [
+              claimScript, 'claim',
+              '--session', 'sess-8h',
+              '--project', 'epic8h',
+              '--issue', '15',
+              '--runtime', 'codex'
+            ], {
+              cwd: epic8hTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8hTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8h.status === 0, '8H: claim must succeed for brand-new project, got ' + r8h.status + '\nstderr: ' + r8h.stderr);
+            const state8hPath = path.join(epic8hTmp, 'kaola-workflow', 'epic8h', 'workflow-state.md');
+            assert(fs.existsSync(state8hPath), '8H: claim must create workflow-state.md for new project');
+            const state8h = fs.readFileSync(state8hPath, 'utf8');
+            assert(state8h.includes('## Sink'), '8H: state must contain ## Sink');
+            assert(state8h.includes('branch: workflow/issue-15-epic8h'), '8H: state must contain issue branch');
+            assert(state8h.includes('## Lease'), '8H: state must contain ## Lease');
+            assert(state8h.includes('session_id: sess-8h'), '8H: state must contain lease session_id');
+          } finally {
+            fs.rmSync(epic8hTmp, { recursive: true, force: true });
+          }
+        }
+
       } finally {
         fs.rmSync(epic8Tmp, { recursive: true, force: true });
       }
@@ -1445,6 +1597,9 @@ exit 0
           assert(!lockExists9a1, '9A1: lock file must not exist after yield');
           const callLogContent9a1 = fs.existsSync(callLog) ? fs.readFileSync(callLog, 'utf8') : '';
           assert(callLogContent9a1.includes(':yielded'), '9A1: gh call log must contain :yielded comment, got: ' + callLogContent9a1);
+          assert(callLogContent9a1.includes('kw:released reason=tiebreaker-yield'), '9A1: loser claim comment marker must be cleared, got: ' + callLogContent9a1);
+          assert(!callLogContent9a1.includes('--remove-label'), '9A1: tiebreaker loser must not remove winner label, got: ' + callLogContent9a1);
+          assert(!callLogContent9a1.includes('--remove-assignee'), '9A1: tiebreaker loser must not remove winner assignee, got: ' + callLogContent9a1);
         }
 
         // ── Test 9A2: tiebreaker — only our own comment present, stay claimed ──
@@ -1745,6 +1900,57 @@ exit 0
           assert(callLog9dContent.includes('--remove-assignee'), '9D: release must call --remove-assignee @me, got: ' + callLog9dContent);
         }
 
+        // ── Test 9E: ticker heartbeat PATCH preserves claim sentinel and adds heartbeat metadata ──
+        await (async function test9EHeartbeatPreservesClaimMarker() {
+          const subTmp = fs.mkdtempSync(path.join(epic9Tmp, '9e-'));
+          try {
+            const binDir = path.join(subTmp, 'bin');
+            makeKwDirs(subTmp);
+            fs.mkdirSync(path.join(subTmp, 'kaola-workflow', '.tickers'), { recursive: true });
+            const callLog9e = path.join(subTmp, 'gh-calls.log');
+            makeGhShim(binDir, `#!/bin/sh
+echo "$@" >> "${callLog9e}"
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ] && [ "$2" != "--method" ]; then
+  printf '[{"id":888,"body":"Session claimed by sess-9e <!-- kw:claim sess=sess-9e -->"}]'
+  exit 0
+fi
+exit 0
+`);
+            writeLock(subTmp, 'proj9e', 'sess-9e', {
+              issue_number: 17,
+              claim_comment_id: '888'
+            });
+            const child9e = spawn(process.execPath, [
+              claimScript9, 'ticker',
+              '--session', 'sess-9e',
+              '--interval', '50'
+            ], {
+              cwd: subTmp,
+              env: { ...process.env, PATH: binDir + path.delimiter + PATH, HOME: subTmp }
+            });
+            try {
+              let log = '';
+              for (let i = 0; i < 30; i++) {
+                await sleep(100);
+                log = fs.existsSync(callLog9e) ? fs.readFileSync(callLog9e, 'utf8') : '';
+                if (log.includes('--method PATCH')) break;
+              }
+              assert(log.includes('--method PATCH'), '9E: ticker must PATCH the claim comment, got: ' + log);
+              assert(log.includes('kw:claim sess=sess-9e'), '9E: heartbeat body must preserve kw:claim marker, got: ' + log);
+              assert(log.includes('kw:hb ts='), '9E: heartbeat body must include kw:hb timestamp, got: ' + log);
+            } finally {
+              try { child9e.kill('SIGTERM'); } catch (_) {}
+              await waitExit(child9e, 3000).catch(() => {});
+            }
+          } finally {
+            fs.rmSync(subTmp, { recursive: true, force: true });
+          }
+        })();
+
         // ── Test LOW-2 SIGINT: ticker removes PID file on SIGINT ──
         await (async function test9B_SIGINT() {
           const subTmpSIGINT = fs.mkdtempSync(path.join(epic9Tmp, 'sigint-'));
@@ -1905,6 +2111,7 @@ exit 0
         'Cross-Session Staging Guard',
         'BLOCKED: cross-session staging',
         'BLOCKED: split your commit',
+        'git commit -m',
       ];
       for (const src of guardSources) {
         const text = fs.readFileSync(src, 'utf8');
@@ -1912,6 +2119,8 @@ exit 0
           assert(text.includes(needle),
             'Epic Case 11: ' + path.basename(src) + ' missing guard marker "' + needle + '"');
         }
+        assert(text.indexOf('git commit -m') < text.indexOf('kaola-workflow-sink-merge.js'),
+          'Epic Case 11: commit gate must appear before sink dispatch in ' + path.basename(src));
       }
     }
 
