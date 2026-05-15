@@ -42,39 +42,43 @@ advisor internally for essential technical decisions, apply the chosen answer,
 and record it under `.cache/` or the phase artifact. Ask only for true external
 authorization or materially user-owned choices.
 
-## Startup Step 0 - Sweep, Classify, And Claim
+## Startup Step 0 - Startup Transaction
 
 If `kaola-workflow-claim.js` and `kaola-workflow-classifier.js` are available,
-run bootstrap before selecting work. Resolve the current session id from
+run the startup transaction before selecting work. Resolve the current session id from
 `KAOLA_SESSION_ID`, then the host platform id, then a generated fallback. Normal
 startup must continue only projects owned by that id; foreign active projects
 are occupied and skipped.
 
-Bootstrap runs the claim helper's `sweep`, `watch-pr`, classifier, and claim
-steps so stale leases, merged PR leases, and remotely claimed issues are handled
-before selecting the next candidate.
+Startup synchronizes GitHub issues into the local roadmap mirror, runs `sweep`,
+`watch-pr`, classifier, and claim, writes a session startup receipt, and emits
+structured JSON before selecting the next candidate.
 
 ```bash
 kaola_script(){ _n="$1"; for _p in "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}" "$HOME/.claude/kaola-workflow/scripts/$_n" "./scripts/$_n"; do [ -f "$_p" ] && { printf '%s\n' "$_p"; return; }; done; find "$HOME/.claude/plugins/cache" "$HOME/.claude/plugins/marketplaces" -path "*/scripts/$_n" -print 2>/dev/null | sort | tail -n 1; }
 CLAIM_JS="$(kaola_script kaola-workflow-claim.js)"
 if [ -f "$CLAIM_JS" ]; then
-  KAOLA_BOOTSTRAP_SESSION="$(node "$CLAIM_JS" session 2>/dev/null || true)"
-  [ -n "$KAOLA_BOOTSTRAP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
+  KAOLA_STARTUP_SESSION="$(node "$CLAIM_JS" session 2>/dev/null || true)"
+  [ -n "$KAOLA_STARTUP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_STARTUP_SESSION"
   KAOLA_SINK_FLAG=""
   [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
-  BOOTSTRAP_OUT=$(node "$CLAIM_JS" bootstrap \
-    --session "$KAOLA_BOOTSTRAP_SESSION" \
+  STARTUP_OUT=$(node "$CLAIM_JS" startup \
+    --session "$KAOLA_STARTUP_SESSION" \
     --runtime claude \
     $KAOLA_SINK_FLAG 2>/dev/null) || true
+else
+  echo "BLOCKED: kaola-workflow startup unavailable; cannot select issue-backed work without a startup receipt." >&2
+  exit 1
 fi
 ```
 
-If `BOOTSTRAP_OUT` is JSON, its `session` field is the active session id to
+If `STARTUP_OUT` is JSON, its `session` field is the active session id to
 carry through the rest of this workflow session. A verdict of `owned` means
-route that owned project instead of claiming new work. If the script is
-unavailable, skip this step and continue to Step 1. If bootstrap reports no
-unclaimed work for the current session, stop with that message unless the user
+route that owned project instead of claiming new work. If the startup script is
+unavailable, stop for repair. If startup reports no unclaimed work for the current session, stop with that message unless the user
 explicitly requested recovery/handoff for a specific unfinished project.
+Do not proceed to project selection when the startup receipt is missing or
+malformed.
 
 ## Startup Step 1 - Git Freshness
 

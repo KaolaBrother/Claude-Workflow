@@ -26,7 +26,7 @@ artifact.
 
 ## Startup
 
-Bootstrap the claim lease for this session. Use `KAOLA_SESSION_ID` if it is
+Run the startup transaction for this session. Use `KAOLA_SESSION_ID` if it is
 already set; otherwise prefer `CODEX_THREAD_ID`, then generate a fallback.
 Normal startup resumes only active work owned by the current session id.
 
@@ -37,20 +37,26 @@ if [ ! -f "$claim_script" ]; then
 fi
 
 if [ -f "$claim_script" ]; then
-  KAOLA_BOOTSTRAP_SESSION="$(node "$claim_script" session 2>/dev/null || true)"
-  [ -n "$KAOLA_BOOTSTRAP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
+  KAOLA_STARTUP_SESSION="$(node "$claim_script" session 2>/dev/null || true)"
+  [ -n "$KAOLA_STARTUP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_STARTUP_SESSION"
   KAOLA_SINK_FLAG=""
   [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
-  BOOTSTRAP_OUT=$(node "$claim_script" bootstrap \
-    --session "$KAOLA_BOOTSTRAP_SESSION" \
+  STARTUP_OUT=$(node "$claim_script" startup \
+    --session "$KAOLA_STARTUP_SESSION" \
     --runtime codex \
     $KAOLA_SINK_FLAG 2>/dev/null) || true
+else
+  echo "BLOCKED: kaola-workflow startup unavailable; cannot select issue-backed work without a startup receipt." >&2
+  exit 1
 fi
 ```
 
-If `BOOTSTRAP_OUT` has `verdict: "owned"`, route that project. If another
+If `STARTUP_OUT` has `verdict: "owned"`, route that project. If another
 session owns the only active project, skip it and claim the next free issue.
-If no free issue exists, stop with the bootstrap no-unclaimed-work message.
+If no free issue exists, stop with the startup no-unclaimed-work message.
+If the startup script is unavailable, stop for repair.
+Do not proceed to project selection when the startup receipt is missing or
+malformed.
 Use `handoff --project <project> --session "$KAOLA_SESSION_ID"` only for
 explicit recovery when the user intentionally transfers unfinished work.
 

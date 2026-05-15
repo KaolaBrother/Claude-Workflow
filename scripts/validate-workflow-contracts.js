@@ -216,7 +216,12 @@ assertIncludes('scripts/kaola-workflow-claim.js', 'workflow/issue-');
 assertIncludes('scripts/kaola-workflow-claim.js', 'CODEX_THREAD_ID');
 assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdHandoff');
 assertIncludes('scripts/kaola-workflow-claim.js', 'function runBootstrapClaimFirstAvailable');
+assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdStartup');
+assertIncludes('scripts/kaola-workflow-claim.js', 'startupReceiptPath');
+assertIncludes('scripts/kaola-workflow-claim.js', 'syncIssuesToRoadmap');
+assertIncludes('scripts/kaola-workflow-claim.js', 'workflow:queued');
 assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 13: true parallel bootstrap coordination');
+assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 14: startup transaction');
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.js');
 assertIncludes('commands/workflow-next.md', 'Branch:');
 assertIncludes('scripts/kaola-workflow-sink-merge.js', 'MAX_AUTOMERGE_RETRIES');
@@ -251,9 +256,17 @@ assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-roadmap.js')
 assertIncludes('commands/kaola-workflow-phase1.md', 'init-issue');
 assertIncludes('commands/workflow-next.md', 'kaola-workflow-roadmap.js');
 assertIncludes('commands/workflow-next.md', 'kaola-workflow-classifier.js');
-assertIncludes('commands/workflow-next.md', 'Sweep, Classify, And Claim');
+assertIncludes('commands/workflow-next.md', 'Startup Transaction');
+assertIncludes('commands/workflow-next.md', 'STARTUP_OUT');
+assertIncludes('commands/workflow-next.md', 'startup receipt');
+assertIncludes('commands/workflow-next.md', 'startup unavailable');
+assertIncludes('commands/workflow-next.md', 'stop for repair');
 assertIncludes('commands/workflow-next.md', 'Parallel decision:');
 assertIncludes('commands/workflow-next.md', 'handoff --project');
+for (const file of phaseCommands) {
+  assertIncludes(file, 'Startup Receipt Guard');
+  assertIncludes(file, '.startup.json');
+}
 assertIncludes('README.md', 'CODEX_THREAD_ID');
 assertIncludes('README.md', 'SessionStart.session_id');
 assertIncludes('README.md', 'Recovery is never triggered implicitly');

@@ -838,6 +838,68 @@ exit 0
         assert(fs.existsSync(path.join(parallelLocks, 'issue-942.lock')), 'Case 5i-b: issue 942 lock missing');
       }
 
+      // Case 5k: startup transaction syncs issue roadmap, writes receipt,
+      // records skipped claimed issues, and skips dependency-blocked issues.
+      {
+        const startupDir = path.join(case5Dir, 'startup-transaction');
+        const startupBin = path.join(startupDir, 'bin');
+        fs.mkdirSync(startupBin, { recursive: true });
+        execFileSync('git', ['init', startupDir], { encoding: 'utf8' });
+        const startupGh = path.join(startupBin, 'gh');
+        write(startupGh, `#!/bin/sh
+if [ "$1" = "issue" ] && [ "$2" = "list" ]; then
+  printf '[{"number":951,"title":"plugin queued startup","state":"OPEN","labels":[{"name":"workflow:queued"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/951"},{"number":952,"title":"plugin blocked startup","state":"OPEN","labels":[],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/952"},{"number":953,"title":"plugin next startup","state":"OPEN","labels":[],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/953"}]'
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  num="$3"
+  case "$num" in
+    951) printf '{"number":951,"title":"plugin queued startup","body":"plugins/kaola-workflow/skills/startup-951.md","labels":[],"state":"OPEN"}' ;;
+    952) printf '{"number":952,"title":"plugin blocked startup","body":"plugins/kaola-workflow/skills/startup-952.md","labels":[{"name":"depends-on:#951"}],"state":"OPEN"}' ;;
+    953) printf '{"number":953,"title":"plugin next startup","body":"plugins/kaola-workflow/skills/startup-953.md","labels":[],"state":"OPEN"}' ;;
+    *) printf '{"number":%s,"title":"dep","body":"","labels":[],"state":"OPEN"}' "$num" ;;
+  esac
+  exit 0
+fi
+if [ "$1" = "label" ] && [ "$2" = "create" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  echo "https://github.com/test/repo/issues/$3#issuecomment-$3"
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then printf '[]'; exit 0; fi
+exit 0
+`);
+        fs.chmodSync(startupGh, 0o755);
+        const startupEnv = { ...process.env, PATH: startupBin + path.delimiter + (process.env.PATH || ''), HOME: startupDir };
+        const first = JSON.parse(execFileSync(process.execPath, [
+          claimScript, 'startup',
+          '--session', 'sess-plugin-startup-a',
+          '--runtime', 'codex'
+        ], { cwd: startupDir, encoding: 'utf8', env: startupEnv }).trim());
+        assert(first.startup_completed === true && first.issue === 951 && first.claim === 'acquired',
+          'Case 5k-a: startup must claim queued issue 951 and report receipt fields, got: ' + JSON.stringify(first));
+        assert(first.issue_sync === 'ok' && first.roadmap_sync === 'ok',
+          'Case 5k-a: startup must sync plugin roadmap, got: ' + JSON.stringify(first));
+        assert(fs.existsSync(path.join(startupDir, 'kaola-workflow', '.sessions', 'sess-plugin-startup-a.startup.json')),
+          'Case 5k-a: startup receipt missing');
+        assert(fs.existsSync(path.join(startupDir, 'kaola-workflow', '.roadmap', 'issue-952.md')),
+          'Case 5k-a: issue-ahead-of-roadmap file missing');
+        const second = JSON.parse(execFileSync(process.execPath, [
+          claimScript, 'startup',
+          '--session', 'sess-plugin-startup-b',
+          '--runtime', 'codex'
+        ], { cwd: startupDir, encoding: 'utf8', env: startupEnv }).trim());
+        assert(second.issue === 953,
+          'Case 5k-b: second startup must skip 951, block 952, and claim 953, got: ' + JSON.stringify(second));
+        assert(second.skipped.some(item => item.issue === 951), 'Case 5k-b: skipped receipt must include 951');
+        assert(second.blocked.some(item => item.issue === 952), 'Case 5k-b: blocked receipt must include 952');
+      }
+
       // Case 5j: locks are isolated by project — all claimed projects must still exist independently
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock')),
         'Case 5j: project-alpha lock must still exist');

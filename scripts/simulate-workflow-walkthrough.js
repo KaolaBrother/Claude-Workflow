@@ -2854,6 +2854,84 @@ exit 0
       }
     }
 
+    // Epic Case 14: startup transaction syncs issues, writes a receipt, and
+    // cannot silently skip claim/bootstrap semantics.
+    {
+      const claimScript = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+      const startupTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic14-startup-'));
+      try {
+        execFileSync('git', ['init', '-q', '-b', 'main', startupTmp]);
+        const startupBin = path.join(startupTmp, 'bin');
+        fs.mkdirSync(startupBin, { recursive: true });
+        const startupGh = path.join(startupBin, 'gh');
+        fs.writeFileSync(startupGh, `#!/bin/sh
+if [ "$1" = "issue" ] && [ "$2" = "list" ]; then
+  printf '[{"number":201,"title":"queued startup","state":"OPEN","labels":[{"name":"workflow:queued"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/201"},{"number":202,"title":"blocked startup","state":"OPEN","labels":[],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/202"},{"number":203,"title":"next startup","state":"OPEN","labels":[],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/203"}]'
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  num="$3"
+  case "$num" in
+    201) printf '{"number":201,"title":"queued startup","body":"commands/startup-201.md","labels":[],"state":"OPEN"}' ;;
+    202) printf '{"number":202,"title":"blocked startup","body":"commands/startup-202.md","labels":[{"name":"depends-on:#201"}],"state":"OPEN"}' ;;
+    203) printf '{"number":203,"title":"next startup","body":"commands/startup-203.md","labels":[],"state":"OPEN"}' ;;
+    *) printf '{"number":%s,"title":"dep","body":"","labels":[],"state":"OPEN"}' "$num" ;;
+  esac
+  exit 0
+fi
+if [ "$1" = "label" ] && [ "$2" = "create" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  echo "https://github.com/test/repo/issues/$3#issuecomment-$3"
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then printf '[]'; exit 0; fi
+exit 0
+`);
+        fs.chmodSync(startupGh, 0o755);
+        const env = { ...process.env, PATH: startupBin + path.delimiter + (process.env.PATH || ''), HOME: startupTmp };
+
+        const first = JSON.parse(execFileSync(process.execPath, [
+          claimScript, 'startup',
+          '--session', 'sess-startup-a',
+          '--runtime', 'codex'
+        ], { cwd: startupTmp, encoding: 'utf8', env }).trim());
+        assert(first.startup_completed === true, '14A: startup output must mark startup_completed');
+        assert(first.issue === 201 && first.claim === 'acquired',
+          '14A: queued issue 201 must be selected first, got: ' + JSON.stringify(first));
+        assert(first.issue_sync === 'ok' && first.roadmap_sync === 'ok',
+          '14A: startup must sync issues and roadmap before selection');
+        assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.sessions', 'sess-startup-a.startup.json')),
+          '14A: startup receipt must be written');
+        assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.roadmap', 'issue-202.md')),
+          '14A: startup must create roadmap file for issue ahead of local roadmap');
+        const roadmap = fs.readFileSync(path.join(startupTmp, 'kaola-workflow', 'ROADMAP.md'), 'utf8');
+        assert(roadmap.includes('| #201 | queued startup | open |'), '14A: ROADMAP must include synced issue 201');
+        assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.locks', 'issue-201.lock')),
+          '14A: startup must claim issue 201');
+
+        const second = JSON.parse(execFileSync(process.execPath, [
+          claimScript, 'startup',
+          '--session', 'sess-startup-b',
+          '--runtime', 'codex'
+        ], { cwd: startupTmp, encoding: 'utf8', env }).trim());
+        assert(second.issue === 203,
+          '14B: second startup must skip claimed 201, block 202, and claim 203, got: ' + JSON.stringify(second));
+        assert(second.skipped.some(item => item.issue === 201),
+          '14B: receipt must record claimed issue 201 as skipped');
+        assert(second.blocked.some(item => item.issue === 202),
+          '14B: receipt must record dependency-blocked issue 202');
+        assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.sessions', 'sess-startup-b.startup.json')),
+          '14B: second startup receipt must be written');
+      } finally {
+        fs.rmSync(startupTmp, { recursive: true, force: true });
+      }
+    }
+
     // LOW-3: corpus-grep — every phase shim must contain liveness and session rehydration checks
     {
       const shimPaths = [

@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.7 - 2026-05-15 (Claude Code) / Codex 1.1.7 - 2026-05-15
+
+### Fixed
+
+- **Mandatory startup transaction**: added `kaola-workflow-claim.js startup` so workflow startup is a single script-level transaction that syncs issues, refreshes the roadmap mirror, sweeps stale leases, watches PR leases, detects owned work, classifies candidates, claims the first actionable issue, writes a startup receipt, and emits structured JSON.
+- **Skipped-bootstrap hardening**: `/workflow-next`, Codex `kaola-workflow-next`, and all phase commands/skills now require a startup receipt guard for issue-backed work.
+- **Issue-to-roadmap sync before selection**: online startup now imports open GitHub issues into `.roadmap` and regenerates `ROADMAP.md` before candidate selection while preserving conservative offline behavior.
+
+### Tests
+
+- Added root and packaged Codex walkthrough coverage for startup receipt writing, issue-ahead-of-roadmap sync, claimed-issue skipping, dependency-blocked candidate skipping, and next actionable issue selection.
+
 ## 3.1.6 - 2026-05-15 (Claude Code) / Codex 1.1.6 - 2026-05-15
 
 ### Fixed

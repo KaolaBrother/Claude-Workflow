@@ -270,6 +270,21 @@ function issueAlreadyClaimed(root, issue) {
     activeStateIssueNumbers(root).has(issue);
 }
 
+function startupReceiptPath(root, sessionId) {
+  return path.join(sessionsDir(root), sessionId + '.startup.json');
+}
+
+function writeStartupReceipt(root, sessionId, data) {
+  fs.mkdirSync(sessionsDir(root), { recursive: true });
+  const receipt = Object.assign({
+    startup_completed: true,
+    session: sessionId,
+    written_at: new Date().toISOString()
+  }, data);
+  fs.writeFileSync(startupReceiptPath(root, sessionId), JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+  return receipt;
+}
+
 function cmdSession() {
   const args = parseArgs(process.argv.slice(3));
   const root = getRoot();
@@ -484,12 +499,161 @@ function buildLockData(args, machineId, now) {
   };
 }
 
-function listOpenIssues(cwd) {
-  if (OFFLINE) return [];
+function roadmapDir(root) { return path.join(root, 'kaola-workflow', '.roadmap'); }
+
+function roadmapIssuePath(root, issueNumber) {
+  return path.join(roadmapDir(root), 'issue-' + issueNumber + '.md');
+}
+
+function cleanRoadmapValue(value, fallback) {
+  const text = String(value == null || value === '' ? fallback : value);
+  return text.replace(/[\r\n]/g, ' ').replace(/\|/g, '\\|').trim() || fallback;
+}
+
+function issueLabelNames(issue) {
+  return (issue.labels || []).map(function(label) {
+    return String((label && label.name) || label || '');
+  }).filter(Boolean);
+}
+
+function issueHasLabel(issue, labelName) {
+  return issueLabelNames(issue).includes(labelName);
+}
+
+function sortIssueRecords(issues) {
+  return issues.slice().sort(function(a, b) {
+    const aq = issueHasLabel(a, 'workflow:queued') ? 0 : 1;
+    const bq = issueHasLabel(b, 'workflow:queued') ? 0 : 1;
+    if (aq !== bq) return aq - bq;
+    return Number(a.number || 0) - Number(b.number || 0);
+  });
+}
+
+function readLocalRoadmapIssueRecords(root) {
+  const dir = roadmapDir(root);
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir)
+    .filter(f => /^issue-\d+\.md$/.test(f))
+    .map(function(fileName) {
+      const issueNumber = parseInt(fileName.match(/\d+/)[0], 10);
+      const content = fs.readFileSync(path.join(dir, fileName), 'utf8');
+      return {
+        number: issueNumber,
+        title: field(content, 'title') || 'Issue ' + issueNumber,
+        state: field(content, 'status') || 'open',
+        labels: [],
+        url: field(content, 'url') || ''
+      };
+    })
+    .filter(issue => Number.isFinite(issue.number) && issue.number > 0 && String(issue.state).toLowerCase() === 'open')
+    .sort((a, b) => a.number - b.number);
+}
+
+function fetchOpenIssueRecords(cwd) {
+  if (OFFLINE) {
+    return { status: 'offline', issues: readLocalRoadmapIssueRecords(cwd) };
+  }
   try {
-    const raw = execFileSync('gh', ['issue', 'list', '--state', 'open', '--json', 'number'], { cwd, encoding: 'utf8' });
-    return JSON.parse(raw).map(function(item) { return item.number; });
-  } catch (_) { return []; }
+    const raw = execFileSync('gh', [
+      'issue', 'list',
+      '--state', 'open',
+      '--limit', '100',
+      '--json', 'number,title,state,labels,updatedAt,url'
+    ], { cwd, encoding: 'utf8' });
+    const issues = JSON.parse(raw)
+      .filter(issue => Number.isFinite(Number(issue.number)) && Number(issue.number) > 0)
+      .map(issue => Object.assign({}, issue, { number: Number(issue.number) }));
+    return { status: 'ok', issues: sortIssueRecords(issues) };
+  } catch (_) {
+    return { status: 'failed', issues: readLocalRoadmapIssueRecords(cwd) };
+  }
+}
+
+function listOpenIssues(cwd) {
+  return fetchOpenIssueRecords(cwd).issues.map(function(item) { return item.number; });
+}
+
+function buildRoadmapIssueContent(issue, existing) {
+  const issueNumber = Number(issue.number);
+  const workflowProject = field(existing || '', 'workflow_project') || '—';
+  const nextStep = field(existing || '', 'next_step') || 'ready';
+  const labels = issueLabelNames(issue);
+  const lines = [
+    'issue: #' + issueNumber,
+    'title: ' + cleanRoadmapValue(issue.title, 'Issue ' + issueNumber),
+    'status: open',
+    'workflow_project: ' + cleanRoadmapValue(workflowProject, '—'),
+    'next_step: ' + cleanRoadmapValue(nextStep, 'ready')
+  ];
+  if (issue.url) lines.push('url: ' + cleanRoadmapValue(issue.url, issue.url));
+  if (issue.updatedAt) lines.push('updated_at: ' + cleanRoadmapValue(issue.updatedAt, issue.updatedAt));
+  if (labels.length > 0) lines.push('labels: ' + labels.map(label => cleanRoadmapValue(label, label)).join(', '));
+  lines.push('');
+  return lines.join('\n');
+}
+
+function syncIssuesToRoadmap(root, issues) {
+  if (OFFLINE) return { issue_sync: 'offline', roadmap_sync: 'offline', created: 0, updated: 0 };
+  if (!issues || issues.length === 0) {
+    const generated = generateRoadmap(root);
+    return { issue_sync: 'ok', roadmap_sync: generated, created: 0, updated: 0 };
+  }
+  let created = 0;
+  let updated = 0;
+  fs.mkdirSync(roadmapDir(root), { recursive: true });
+  for (const issue of issues) {
+    const filePath = roadmapIssuePath(root, Number(issue.number));
+    let existing = '';
+    try { existing = fs.readFileSync(filePath, 'utf8'); } catch (_) {}
+    const content = buildRoadmapIssueContent(issue, existing);
+    if (!existing) created++;
+    if (existing !== content) {
+      fs.writeFileSync(filePath, content, 'utf8');
+      if (existing) updated++;
+    }
+  }
+  const generated = generateRoadmap(root);
+  return { issue_sync: 'ok', roadmap_sync: generated, created: created, updated: updated };
+}
+
+function generateRoadmap(root) {
+  const roadmapScript = path.join(path.dirname(__filename), 'kaola-workflow-roadmap.js');
+  if (!fs.existsSync(roadmapScript)) return 'skipped';
+  try {
+    execFileSync(process.execPath, [roadmapScript, 'generate'], { cwd: root, encoding: 'utf8' });
+    return 'ok';
+  } catch (_) {
+    return 'failed';
+  }
+}
+
+function projectNameForIssue(classifierScript, issueNumber) {
+  try {
+    const name = execFileSync(process.execPath, [path.join(path.dirname(classifierScript), 'kaola-workflow-roadmap.js'), 'project-name', '--issue', String(issueNumber)], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    if (name) return name;
+  } catch (_) {}
+  return 'issue-' + issueNumber;
+}
+
+function classifyIssueCandidate(classifierScript, issueNumber) {
+  try {
+    const raw = execFileSync(process.execPath, [classifierScript, 'classify', '--issue', String(issueNumber)], { encoding: 'utf8' });
+    const result = JSON.parse(raw);
+    return {
+      issue: issueNumber,
+      project: projectNameForIssue(classifierScript, issueNumber),
+      verdict: result.verdict,
+      reasoning: result.reasoning || ''
+    };
+  } catch (e) {
+    if (e.status === 2) {
+      return { issue: issueNumber, project: 'issue-' + issueNumber, verdict: 'skipped', reasoning: 'already claimed' };
+    }
+    return { issue: issueNumber, project: 'issue-' + issueNumber, verdict: 'skipped', reasoning: 'classifier failed' };
+  }
 }
 
 function pickFirstActionableIssue(classifierScript, issues) {
@@ -588,6 +752,108 @@ function cmdBootstrap() {
     return;
   }
   process.stdout.write(JSON.stringify({ project: pick.project, issue: pick.pick, verdict: pick.verdict, session: args.session }) + '\n');
+}
+
+function runStartupClaimFirstAvailable(claimScript, classifierScript, args, issues, skipped, blocked) {
+  if (!fs.existsSync(classifierScript)) return { pick: null };
+  for (const issue of issues) {
+    const issueNumber = Number(issue.number || issue);
+    if (!Number.isFinite(issueNumber) || issueNumber <= 0) continue;
+    const candidate = classifyIssueCandidate(classifierScript, issueNumber);
+    if (candidate.verdict === 'blocked') {
+      blocked.push({ issue: issueNumber, reason: candidate.reasoning });
+      continue;
+    }
+    if (candidate.verdict !== 'green' && candidate.verdict !== 'yellow') {
+      skipped.push({ issue: issueNumber, verdict: candidate.verdict, reason: candidate.reasoning });
+      continue;
+    }
+    const pick = { pick: issueNumber, project: candidate.project, verdict: candidate.verdict };
+    if (runBootstrapClaim(claimScript, args, pick)) return pick;
+    skipped.push({ issue: issueNumber, verdict: 'skipped', reason: 'claim race or existing lock' });
+  }
+  return { pick: null };
+}
+
+function cmdStartup() {
+  const args = parseArgs(process.argv.slice(3));
+  args.session = currentSessionId(args);
+  assertSafeSession(args.session, '--session/current platform session id');
+  assert(!args.sink || args.sink === 'merge' || args.sink === 'pr', '--sink must be "merge" or "pr"');
+  assert(!args.runtime || args.runtime === 'claude' || args.runtime === 'codex',
+    '--runtime must be "claude" or "codex"');
+
+  const root = getRoot();
+  const classifierScript = path.join(path.dirname(__filename), 'kaola-workflow-classifier.js');
+  const issueFetch = fetchOpenIssueRecords(root);
+  const sync = issueFetch.status === 'ok'
+    ? syncIssuesToRoadmap(root, issueFetch.issues)
+    : (issueFetch.status === 'offline'
+      ? { issue_sync: 'offline', roadmap_sync: 'offline', created: 0, updated: 0 }
+      : { issue_sync: 'failed', roadmap_sync: 'skipped', created: 0, updated: 0 });
+  const skipped = [];
+  const blocked = [];
+
+  runBootstrapSweep(__filename, root);
+  runBootstrapWatchPr(__filename, root);
+
+  const owned = ownedActiveProject(root, args.session);
+  if (owned) {
+    const receipt = writeStartupReceipt(root, args.session, {
+      runtime: args.runtime || 'claude',
+      issue_sync: sync.issue_sync,
+      roadmap_sync: sync.roadmap_sync,
+      issue_source: issueFetch.status,
+      project: owned.project,
+      issue: owned.issue_number,
+      selected_issue: owned.issue_number,
+      selected_project: owned.project,
+      verdict: 'owned',
+      claim: 'owned',
+      skipped: skipped,
+      blocked: blocked
+    });
+    process.stdout.write(JSON.stringify(receipt) + '\n');
+    return;
+  }
+
+  const pick = runStartupClaimFirstAvailable(__filename, classifierScript, args, issueFetch.issues, skipped, blocked);
+  if (!pick.pick) {
+    const receipt = writeStartupReceipt(root, args.session, {
+      runtime: args.runtime || 'claude',
+      issue_sync: sync.issue_sync,
+      roadmap_sync: sync.roadmap_sync,
+      issue_source: issueFetch.status,
+      project: null,
+      issue: null,
+      selected_issue: null,
+      selected_project: null,
+      verdict: 'none',
+      claim: 'none',
+      skipped: skipped,
+      blocked: blocked
+    });
+    process.stderr.write('startup: no unclaimed work available for session ' + args.session + '\n');
+    process.stdout.write(JSON.stringify(receipt) + '\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  const receipt = writeStartupReceipt(root, args.session, {
+    runtime: args.runtime || 'claude',
+    issue_sync: sync.issue_sync,
+    roadmap_sync: sync.roadmap_sync,
+    issue_source: issueFetch.status,
+    project: pick.project,
+    issue: pick.pick,
+    selected_issue: pick.pick,
+    selected_project: pick.project,
+    verdict: pick.verdict,
+    claim: 'acquired',
+    skipped: skipped,
+    blocked: blocked
+  });
+  process.stdout.write(JSON.stringify(receipt) + '\n');
 }
 
 function cmdClaim() {
@@ -1063,7 +1329,7 @@ function cmdWatchPr() {
 
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|handoff|patch-branch|watch-pr|bootstrap>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|handoff|patch-branch|watch-pr|bootstrap|startup>');
   if (sub === 'claim') return cmdClaim();
   if (sub === 'handoff') return cmdHandoff();
   if (sub === 'release') return cmdRelease();
@@ -1075,6 +1341,7 @@ function main() {
   if (sub === 'patch-branch') return cmdPatchBranch();
   if (sub === 'watch-pr') return cmdWatchPr();
   if (sub === 'bootstrap') return cmdBootstrap();
+  if (sub === 'startup') return cmdStartup();
   throw new Error('unknown subcommand: ' + sub);
 }
 

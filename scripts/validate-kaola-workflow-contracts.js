@@ -98,7 +98,11 @@ assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'generated p
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'strongest available expert model/profile');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'kaola-workflow-repair-state.js');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '.codex/plugins/cache');
-assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'bootstrap');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'startup');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'STARTUP_OUT');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'startup receipt');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'startup unavailable');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'stop for repair');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '--runtime codex');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'CODEX_THREAD_ID');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'handoff --project');
@@ -124,6 +128,8 @@ for (const phaseSkill of [
   'kaola-workflow-finalize',
 ]) {
   assertIncludes(`${pluginRoot}/skills/${phaseSkill}/SKILL.md`, '## Goal Contract');
+  assertIncludes(`${pluginRoot}/skills/${phaseSkill}/SKILL.md`, 'Startup Receipt Guard');
+  assertIncludes(`${pluginRoot}/skills/${phaseSkill}/SKILL.md`, '.startup.json');
 }
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, 'Required Agent Compliance');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, 'RED');
@@ -162,7 +168,11 @@ assertIncludes(`${pluginRoot}/scripts/kaola-workflow-classifier.js`, 'plugins\\/
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'CODEX_THREAD_ID');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function cmdHandoff');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function runBootstrapClaimFirstAvailable');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function cmdStartup');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'startupReceiptPath');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'syncIssuesToRoadmap');
 assertIncludes(simulateScript, 'real parallel bootstrap coordination and claim-race retry');
+assertIncludes(simulateScript, 'startup transaction syncs issue roadmap');
 assertIncludes(simulateScript, 'Kaola-Workflow walkthrough simulation passed');
 assertNotIncludes(simulateScript, '../../../scripts/kaola-workflow-claim.js');
 assertIncludes(installAgentsScript, 'BEGIN kaola-workflow agents');

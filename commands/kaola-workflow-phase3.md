@@ -50,6 +50,14 @@ if [ -n "${KAOLA_SESSION_ID:-}" ] && [ -f "$_CLAIM_JS" ]; then
 fi
 ```
 
+## Startup Receipt Guard
+
+For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
+exists and records this project or an owned/acquired claim before doing phase
+work. If the receipt is missing, stale, or belongs to another session, run
+`kaola-workflow-claim.js startup --session "$KAOLA_SESSION_ID" --runtime claude`
+or stop instead of continuing.
+
 ## Resume Detection
 
 If `phase3-plan.md` exists with no pending compliance rows, route to:

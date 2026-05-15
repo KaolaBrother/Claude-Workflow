@@ -46,6 +46,14 @@ correctness.
 
 ## Prerequisite
 
+## Startup Receipt Guard
+
+For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
+exists and records this project or an owned/acquired claim before doing phase
+work. If the receipt is missing, stale, or belongs to another session, run
+`kaola-workflow-claim.js startup --session "$KAOLA_SESSION_ID" --runtime codex`
+or stop instead of continuing.
+
 Read `workflow-state.md`, `phase1-research.md`, and `phase2-ideation.md`.
 
 ## Blueprint Requirements
