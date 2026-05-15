@@ -181,6 +181,28 @@ function activeStateSessions(root) {
     .filter(Boolean);
 }
 
+function activeStateIssueNumbers(root) {
+  const workflowDir = path.join(root, 'kaola-workflow');
+  if (!fs.existsSync(workflowDir)) return new Set();
+  const issues = new Set();
+  for (const entry of fs.readdirSync(workflowDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue;
+    const stateFile = path.join(workflowDir, entry.name, 'workflow-state.md');
+    try {
+      const content = fs.readFileSync(stateFile, 'utf8');
+      if (!/^status:\s*active\s*$/m.test(content)) continue;
+      const issue = parseInt(field(content, 'issue_number'), 10);
+      if (Number.isFinite(issue) && issue > 0) issues.add(issue);
+    } catch (_) {}
+  }
+  return issues;
+}
+
+function issueAlreadyClaimed(root, issue) {
+  return readLockFiles(root).some(lock => lock.issue_number === issue) ||
+    activeStateIssueNumbers(root).has(issue);
+}
+
 function cmdSession() {
   const args = parseArgs(process.argv.slice(3));
   const root = getRoot();
@@ -482,6 +504,11 @@ function cmdClaim() {
   const now = new Date();
 
   fs.mkdirSync(locksDir(root), { recursive: true });
+
+  if (args.issue != null && issueAlreadyClaimed(root, args.issue)) {
+    process.exitCode = 2;
+    return;
+  }
 
   const lp = lockPath(root, args.project);
   const lockData = buildLockData(args, machineId, now);

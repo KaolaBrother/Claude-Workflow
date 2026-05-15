@@ -225,6 +225,7 @@ function main() {
 
     // Case 5: cross-runtime co-work, two distinct projects
     const claimScript = path.join(pluginRoot, 'scripts', 'kaola-workflow-claim.js');
+    const classifierScript = path.join(pluginRoot, 'scripts', 'kaola-workflow-classifier.js');
     const case5Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5-'));
     try {
       execFileSync('git', ['init', case5Dir], { encoding: 'utf8' });
@@ -435,17 +436,212 @@ exit 0
         }
       }
 
-      // Case 5h: locks are isolated by project — all claimed projects must still exist independently
+      // Case 5h: cross-session phase matrix for the Codex plugin scripts.
+      {
+        const matrixDir = path.join(case5Dir, 'matrix');
+        const matrixLocks = path.join(matrixDir, 'kaola-workflow', '.locks');
+        const matrixBin = path.join(matrixDir, 'bin');
+        fs.mkdirSync(matrixLocks, { recursive: true });
+        fs.mkdirSync(matrixBin, { recursive: true });
+        execFileSync('git', ['init', matrixDir], { encoding: 'utf8' });
+
+        const phaseMatrix = [
+          { phase: 1, phaseName: 'Research', nextSkill: 'kaola-workflow-research' },
+          { phase: 2, phaseName: 'Ideation', nextSkill: 'kaola-workflow-ideation' },
+          { phase: 3, phaseName: 'Plan', nextSkill: 'kaola-workflow-plan' },
+          { phase: 4, phaseName: 'Execute', nextSkill: 'kaola-workflow-execute' },
+          { phase: 5, phaseName: 'Review', nextSkill: 'kaola-workflow-review' },
+          { phase: 6, phaseName: 'Finalize', nextSkill: 'kaola-workflow-finalize' },
+        ];
+
+        function writeStageProject(baseDir, spec, projectName, issue, sessionId, withLock) {
+          const projectDir = path.join(baseDir, 'kaola-workflow', projectName);
+          fs.mkdirSync(projectDir, { recursive: true });
+          const now = new Date(Date.now() + spec.phase * 1000).toISOString();
+          write(path.join(projectDir, 'workflow-state.md'), [
+            '# Kaola-Workflow State',
+            '',
+            '## Project',
+            'name: ' + projectName,
+            'status: active',
+            '',
+            '## Current Position',
+            'phase: ' + spec.phase,
+            'phase_name: ' + spec.phaseName,
+            'step: phase-' + spec.phase + '-work',
+            'next_skill: ' + spec.nextSkill + ' ' + projectName,
+            '',
+            '## Sink',
+            'branch: workflow/issue-' + issue + '-' + projectName,
+            'issue_number: ' + issue,
+            'claimed_at: ' + now,
+            'sink: merge',
+            '',
+            '## Lease',
+            'session_id: ' + sessionId,
+            'expires: ' + new Date(Date.now() + 3600000).toISOString(),
+            'last_heartbeat: ' + now,
+            'claim_comment_id: N/A',
+            ''
+          ].join('\n'));
+          if (spec.phase >= 2) write(path.join(projectDir, 'phase1-research.md'), 'area:codex-stage-' + spec.phase + '\n');
+          if (spec.phase >= 3) write(path.join(projectDir, 'phase2-ideation.md'), '# Phase 2\n');
+          if (spec.phase >= 4) write(path.join(projectDir, 'phase3-plan.md'), '# Phase 3\nFiles: commands/codex-primary-' + spec.phase + '.md\n');
+          if (spec.phase >= 5) write(path.join(projectDir, 'phase4-progress.md'), '# Phase 4\ncomplete\n');
+          if (spec.phase >= 6) write(path.join(projectDir, 'phase5-review.md'), '# Phase 5\nreview passed\n');
+          if (withLock) {
+            write(path.join(matrixLocks, projectName + '.lock'), JSON.stringify({
+              project: projectName,
+              session_id: sessionId,
+              machine_id: 'codex-machine-' + spec.phase,
+              claimed_at: now,
+              expires: new Date(Date.now() + 3600000).toISOString(),
+              last_heartbeat: now,
+              issue_number: issue,
+              claim_comment_id: null,
+              sink: 'merge',
+              runtime: 'codex'
+            }, null, 2) + '\n');
+          }
+        }
+
+        function exitCode(args, env) {
+          try {
+            execFileSync(process.execPath, args, { cwd: matrixDir, encoding: 'utf8', env });
+            return 0;
+          } catch (e) {
+            return e.status || 1;
+          }
+        }
+
+        function writeBootstrapGhShim(sameIssue, freeIssue) {
+          const ghPath = path.join(matrixBin, 'gh');
+          write(ghPath, [
+            '#!/bin/sh',
+            'if [ "$1" = "issue" ] && [ "$2" = "list" ]; then',
+            '  printf \'[{"number":' + sameIssue + '},{"number":' + freeIssue + '}]\'',
+            '  exit 0',
+            'fi',
+            'if [ "$1" = "issue" ] && [ "$2" = "view" ]; then',
+            '  printf \'{"number":%s,"title":"Issue %s","body":"hooks/codex-free-' + freeIssue + '.js","labels":[],"state":"OPEN"}\' "$3" "$3"',
+            '  exit 0',
+            'fi',
+            'if [ "$1" = "label" ] && [ "$2" = "create" ]; then exit 0; fi',
+            'if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then exit 0; fi',
+            'if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then',
+            '  echo "https://github.com/test/repo/issues/' + freeIssue + '#issuecomment-' + freeIssue + '"',
+            '  exit 0',
+            'fi',
+            'if [ "$1" = "repo" ] && [ "$2" = "view" ]; then',
+            '  printf \'{"owner":{"login":"test"},"name":"repo"}\'',
+            '  exit 0',
+            'fi',
+            'if [ "$1" = "api" ]; then printf \'[]\'; exit 0; fi',
+            'exit 0',
+            ''
+          ].join('\n'));
+          fs.chmodSync(ghPath, 0o755);
+        }
+
+        for (const spec of phaseMatrix) {
+          const issue = 600 + spec.phase;
+          const freeIssue = 700 + spec.phase;
+          const projectName = 'codex-stage-' + spec.phase + '-primary';
+          const sessionId = 'sess-codex-stage-' + spec.phase;
+          writeStageProject(matrixDir, spec, projectName, issue, sessionId, true);
+
+          const sessionOut = execFileSync(process.execPath, [
+            claimScript, 'session', '--project', projectName
+          ], { cwd: matrixDir, encoding: 'utf8', env: { ...process.env, HOME: matrixDir } }).trim();
+          assert(sessionOut === sessionId, 'Case 5h phase ' + spec.phase + ': session lookup must return primary session');
+
+          const duplicateClaimCode = exitCode([
+            claimScript, 'claim',
+            '--session', 'sess-codex-stage-' + spec.phase + '-intruder',
+            '--project', 'codex-stage-' + spec.phase + '-intruder',
+            '--issue', String(issue),
+            '--runtime', 'claude'
+          ], { ...process.env, HOME: matrixDir, KAOLA_WORKFLOW_OFFLINE: '1' });
+          assert(duplicateClaimCode === 2,
+            'Case 5h phase ' + spec.phase + ': direct duplicate issue claim must exit 2, got ' + duplicateClaimCode);
+
+          const duplicateClassifyCode = exitCode([
+            classifierScript, 'classify', '--issue', String(issue)
+          ], { ...process.env, HOME: matrixDir, KAOLA_WORKFLOW_OFFLINE: '1' });
+          assert(duplicateClassifyCode === 2,
+            'Case 5h phase ' + spec.phase + ': classifier must skip occupied issue, got ' + duplicateClassifyCode);
+
+          writeBootstrapGhShim(issue, freeIssue);
+          const picked = JSON.parse(execFileSync(process.execPath, [
+            claimScript, 'bootstrap',
+            '--session', 'sess-codex-stage-' + spec.phase + '-secondary',
+            '--runtime', 'codex'
+          ], {
+            cwd: matrixDir,
+            encoding: 'utf8',
+            env: { ...process.env, PATH: matrixBin + path.delimiter + (process.env.PATH || ''), HOME: matrixDir, KAOLA_WORKFLOW_OFFLINE: '' }
+          }).trim());
+          assert(picked.issue === freeIssue,
+            'Case 5h phase ' + spec.phase + ': secondary bootstrap must pick free issue #' + freeIssue + ', got #' + picked.issue);
+          assert(fs.existsSync(path.join(matrixLocks, projectName + '.lock')),
+            'Case 5h phase ' + spec.phase + ': primary lock must remain');
+          assert(fs.existsSync(path.join(matrixLocks, 'issue-' + freeIssue + '.lock')),
+            'Case 5h phase ' + spec.phase + ': secondary free lock must exist');
+        }
+
+        for (const spec of phaseMatrix) {
+          const issue = 800 + spec.phase;
+          const projectName = 'codex-state-stage-' + spec.phase;
+          const sessionId = 'sess-codex-state-stage-' + spec.phase;
+          writeStageProject(matrixDir, spec, projectName, issue, sessionId, false);
+          const sessionOut = execFileSync(process.execPath, [
+            claimScript, 'session', '--project', projectName
+          ], { cwd: matrixDir, encoding: 'utf8', env: { ...process.env, HOME: matrixDir } }).trim();
+          assert(sessionOut === sessionId,
+            'Case 5h state-only phase ' + spec.phase + ': session lookup must read workflow-state lease');
+          const duplicateClaimCode = exitCode([
+            claimScript, 'claim',
+            '--session', 'sess-codex-state-stage-' + spec.phase + '-intruder',
+            '--project', 'codex-state-stage-' + spec.phase + '-intruder',
+            '--issue', String(issue)
+          ], { ...process.env, HOME: matrixDir, KAOLA_WORKFLOW_OFFLINE: '1' });
+          assert(duplicateClaimCode === 2,
+            'Case 5h state-only phase ' + spec.phase + ': direct claim must respect state-only active issue, got ' + duplicateClaimCode);
+        }
+
+        const completeDir = path.join(matrixDir, 'kaola-workflow', 'codex-complete');
+        write(path.join(completeDir, 'workflow-state.md'), [
+          '# Kaola-Workflow State',
+          '',
+          '## Project',
+          'name: codex-complete',
+          'status: complete',
+          '',
+          '## Sink',
+          'issue_number: 950',
+          ''
+        ].join('\n'));
+        const completedClaimCode = exitCode([
+          claimScript, 'claim',
+          '--session', 'sess-codex-completed-reclaim',
+          '--project', 'codex-completed-reclaim',
+          '--issue', '950'
+        ], { ...process.env, HOME: matrixDir, KAOLA_WORKFLOW_OFFLINE: '1' });
+        assert(completedClaimCode === 0,
+          'Case 5h: completed workflow-state must not block fresh claim, got ' + completedClaimCode);
+      }
+
+      // Case 5i: locks are isolated by project — all claimed projects must still exist independently
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock')),
-        'Case 5h: project-alpha lock must still exist');
+        'Case 5i: project-alpha lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock')),
-        'Case 5h: project-beta lock must still exist');
+        'Case 5i: project-beta lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'issue-11.lock')),
-        'Case 5h: issue-11 lock must still exist');
+        'Case 5i: issue-11 lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'issue-12.lock')),
-        'Case 5h: issue-12 lock must still exist');
+        'Case 5i: issue-12 lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-label.lock')),
-        'Case 5h: project-label lock must still exist');
+        'Case 5i: project-label lock must still exist');
 
       const finalAlpha = JSON.parse(fs.readFileSync(
         path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock'), 'utf8'
@@ -453,7 +649,7 @@ exit 0
       const finalBeta = JSON.parse(fs.readFileSync(
         path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock'), 'utf8'
       ));
-      assert(finalAlpha.runtime !== finalBeta.runtime, 'Case 5h: locks must have different runtime fields');
+      assert(finalAlpha.runtime !== finalBeta.runtime, 'Case 5i: locks must have different runtime fields');
     } finally {
       fs.rmSync(case5Dir, { recursive: true, force: true });
     }
