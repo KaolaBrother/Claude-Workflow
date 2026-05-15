@@ -1787,6 +1787,111 @@ exit 0
       }
     }
 
+    // Epic Case 10: pre-commit hook blocks cross-session commits.
+    // Regression guard against the BASH_COMMAND shadowing bug (10A would silently
+    // exit 0 because bash overwrote the variable before the case-match ran).
+    {
+      const hookPath = path.join(__dirname, '..', 'hooks', 'kaola-workflow-pre-commit.sh');
+      assert(fs.existsSync(hookPath), 'Epic Case 10: pre-commit hook must exist');
+
+      const epic10Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic10-'));
+      try {
+        execFileSync('git', ['init', '-q', '-b', 'main', epic10Tmp]);
+        execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: epic10Tmp });
+        execFileSync('git', ['config', 'user.name', 'Test'], { cwd: epic10Tmp });
+        fs.writeFileSync(path.join(epic10Tmp, 'README.md'), 'init\n');
+        execFileSync('git', ['add', 'README.md'], { cwd: epic10Tmp });
+        execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: epic10Tmp });
+
+        fs.mkdirSync(path.join(epic10Tmp, 'kaola-workflow', '.locks'), { recursive: true });
+        fs.mkdirSync(path.join(epic10Tmp, 'kaola-workflow', 'projA'), { recursive: true });
+        fs.writeFileSync(path.join(epic10Tmp, 'kaola-workflow', '.locks', 'projA.lock'),
+          JSON.stringify({
+            project: 'projA',
+            session_id: 'sess-owner',
+            machine_id: 'm1',
+            claimed_at: '2026-05-15T10:00:00Z',
+            expires: '2026-05-15T12:00:00Z',
+            last_heartbeat: '2026-05-15T10:00:00Z',
+            issue_number: 100,
+            claim_comment_id: null,
+            sink: 'merge'
+          }, null, 2) + '\n');
+
+        fs.writeFileSync(path.join(epic10Tmp, 'kaola-workflow', 'projA', 'phase1-research.md'),
+          '# Phase 1\n');
+        execFileSync('git', ['add', 'kaola-workflow/projA/phase1-research.md'], { cwd: epic10Tmp });
+
+        const hookInput = JSON.stringify({ tool_input: { command: 'git commit -m wip' } });
+
+        // 10A: wrong session must be blocked with exit 2
+        const r10A = spawnSync('bash', [hookPath], {
+          cwd: epic10Tmp,
+          encoding: 'utf8',
+          input: hookInput,
+          env: { ...process.env, KAOLA_SESSION_ID: 'sess-intruder' }
+        });
+        assert(r10A.status === 2,
+          '10A: hook must exit 2 when a non-owning session tries to commit projA files, got ' + r10A.status +
+          '\nstderr: ' + r10A.stderr);
+        assert(r10A.stderr.includes('BLOCKED'),
+          '10A: stderr must contain BLOCKED marker, got: ' + r10A.stderr);
+
+        // 10B: owning session must pass through (exit 0)
+        const r10B = spawnSync('bash', [hookPath], {
+          cwd: epic10Tmp,
+          encoding: 'utf8',
+          input: hookInput,
+          env: { ...process.env, KAOLA_SESSION_ID: 'sess-owner' }
+        });
+        assert(r10B.status === 0,
+          '10B: hook must exit 0 for owning session, got ' + r10B.status +
+          '\nstderr: ' + r10B.stderr);
+
+        // 10C: non-commit bash command must short-circuit to exit 0 even with wrong session
+        const r10C = spawnSync('bash', [hookPath], {
+          cwd: epic10Tmp,
+          encoding: 'utf8',
+          input: JSON.stringify({ tool_input: { command: 'ls -la' } }),
+          env: { ...process.env, KAOLA_SESSION_ID: 'sess-intruder' }
+        });
+        assert(r10C.status === 0,
+          '10C: hook must exit 0 for non-commit commands regardless of session, got ' + r10C.status);
+
+        // 10D: missing KAOLA_SESSION_ID must short-circuit to exit 0 (no session to compare)
+        const envNoSess = { ...process.env };
+        delete envNoSess.KAOLA_SESSION_ID;
+        const r10D = spawnSync('bash', [hookPath], {
+          cwd: epic10Tmp,
+          encoding: 'utf8',
+          input: hookInput,
+          env: envNoSess
+        });
+        assert(r10D.status === 0,
+          '10D: hook must exit 0 when KAOLA_SESSION_ID is unset, got ' + r10D.status);
+
+        // 10E: split-commit guard — staging files from two different projects must
+        // block with exit 2 regardless of session ownership.
+        fs.mkdirSync(path.join(epic10Tmp, 'kaola-workflow', 'projB'), { recursive: true });
+        fs.writeFileSync(path.join(epic10Tmp, 'kaola-workflow', 'projB', 'phase1-research.md'),
+          '# Phase 1 B\n');
+        execFileSync('git', ['add', 'kaola-workflow/projB/phase1-research.md'], { cwd: epic10Tmp });
+        const r10E = spawnSync('bash', [hookPath], {
+          cwd: epic10Tmp,
+          encoding: 'utf8',
+          input: hookInput,
+          env: { ...process.env, KAOLA_SESSION_ID: 'sess-owner' }
+        });
+        assert(r10E.status === 2,
+          '10E: hook must exit 2 when multiple kaola-workflow projects are staged, got ' + r10E.status +
+          '\nstderr: ' + r10E.stderr);
+        assert(r10E.stderr.includes('split your commit'),
+          '10E: stderr must instruct to split the commit, got: ' + r10E.stderr);
+      } finally {
+        fs.rmSync(epic10Tmp, { recursive: true, force: true });
+      }
+    }
+
     // LOW-3: corpus-grep — every phase shim must contain liveness check
     {
       const shimPaths = [

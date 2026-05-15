@@ -229,7 +229,7 @@ performs the same review locally when no detached advisor profile is available.
 
 Current official release versions:
 
-- Claude Code `kaola-workflow` package/plugin: `3.1.0`
+- Claude Code `kaola-workflow` package/plugin: `3.1.1`
 - Codex `kaola-workflow` plugin manifest: `1.1.1`
 
 The root `package.json` version is the official repository and Claude Code

@@ -6,14 +6,17 @@ GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 export HOOK_INPUT
 HOOK_INPUT="$(cat)"
 
-BASH_COMMAND="$(node -e "
+# NOTE: do not name this INVOKED_CMD variable BASH_COMMAND — that name is a bash
+# special variable that bash overwrites with the currently-executing command,
+# which silently turns the case match below into a never-match.
+INVOKED_CMD="$(node -e "
   try {
     const d = JSON.parse(process.env.HOOK_INPUT);
     process.stdout.write(d.tool_input && d.tool_input.command ? d.tool_input.command : '');
   } catch(e) { process.stdout.write(''); }
 " 2>/dev/null)" || true
 
-case "$BASH_COMMAND" in
+case "$INVOKED_CMD" in
   *"git commit"*) ;;
   *) exit 0 ;;
 esac
