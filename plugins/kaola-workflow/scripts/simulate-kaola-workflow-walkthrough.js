@@ -97,6 +97,35 @@ function main() {
       fs.rmSync(emptyRoot, { recursive: true, force: true });
     }
 
+    const stateOnlyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-stateonly-'));
+    try {
+      const activeProject = 'phase-one-active';
+      const activeDir = path.join(stateOnlyRoot, 'kaola-workflow', activeProject);
+      fs.mkdirSync(activeDir, { recursive: true });
+      write(path.join(activeDir, 'workflow-state.md'), [
+        '# Kaola-Workflow State',
+        '',
+        '## Project',
+        'name: ' + activeProject,
+        'status: active',
+        '',
+        '## Current Position',
+        'phase: 1',
+        'phase_name: Research',
+        'step: requirement-parsing',
+        'next_skill: kaola-workflow-research ' + activeProject,
+        '',
+      ].join('\n'));
+      const output = execFileSync(process.execPath, [repairScript], {
+        cwd: stateOnlyRoot,
+        encoding: 'utf8'
+      });
+      assert(output.includes('Kaola-Workflow state repair: existing state valid'), 'repair must recognize active workflow-state before phase files exist');
+      assert(output.includes('Workflow project: ' + activeProject), 'repair must route the state-only active project');
+    } finally {
+      fs.rmSync(stateOnlyRoot, { recursive: true, force: true });
+    }
+
     const workflowRoot = path.join(tmp, 'kaola-workflow');
     const projectRoot = path.join(workflowRoot, project);
     const cache = path.join(projectRoot, '.cache');
@@ -263,11 +292,133 @@ function main() {
       }
       assert(bootstrapExitCode === 1, 'Case 5d: bootstrap with no open issues must exit 1, got: ' + bootstrapExitCode);
 
-      // Case 5e: locks are isolated by project — both must still exist independently
+      // Case 5e: bootstrap without a preexisting session id claims one issue;
+      // a second fresh bootstrap skips the locked issue and claims the next.
+      {
+        const binDir = path.join(case5Dir, 'bin');
+        fs.mkdirSync(binDir, { recursive: true });
+        const ghPath = path.join(binDir, 'gh');
+        fs.writeFileSync(ghPath, `#!/bin/sh
+if [ "$1" = "issue" ] && [ "$2" = "list" ]; then
+  printf '[{"number":11},{"number":12}]'
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  num="$3"
+  printf '{"number":%s,"title":"Issue %s","body":"plugins/kaola-workflow/skills/kaola-workflow-next/SKILL.md","labels":[],"state":"OPEN"}' "$num" "$num"
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  case "$3" in
+    11) echo "https://github.com/test/repo/issues/11#issuecomment-1100" ;;
+    12) echo "https://github.com/test/repo/issues/12#issuecomment-1200" ;;
+  esac
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then
+  case "$*" in
+    *issues/11/comments*) printf '[]' ; exit 0 ;;
+    *issues/12/comments*) printf '[]' ; exit 0 ;;
+  esac
+fi
+exit 0
+`);
+        fs.chmodSync(ghPath, 0o755);
+        const env5e = {
+          ...process.env,
+          PATH: binDir + path.delimiter + (process.env.PATH || ''),
+          HOME: case5Dir,
+          KAOLA_WORKFLOW_OFFLINE: ''
+        };
+
+        const out5e1 = JSON.parse(execFileSync(process.execPath, [
+          claimScript, 'bootstrap', '--runtime', 'codex'
+        ], { cwd: case5Dir, encoding: 'utf8', env: env5e }).trim());
+        assert(out5e1.issue === 11, 'Case 5e-a: first bootstrap must pick issue 11, got: ' + out5e1.issue);
+        assert(out5e1.session, 'Case 5e-a: bootstrap output must include generated session');
+
+        const out5e2 = JSON.parse(execFileSync(process.execPath, [
+          claimScript, 'bootstrap', '--runtime', 'codex'
+        ], { cwd: case5Dir, encoding: 'utf8', env: env5e }).trim());
+        assert(out5e2.issue === 12, 'Case 5e-b: second bootstrap must skip locked issue 11 and pick 12, got: ' + out5e2.issue);
+        assert(out5e2.session && out5e2.session !== out5e1.session, 'Case 5e-b: second bootstrap must generate an independent session');
+      }
+
+      // Case 5f: remote claim creates/applies workflow:in-progress label and
+      // still posts the sentinel comment when assignment fails.
+      {
+        const binDir = path.join(case5Dir, 'bin-label');
+        fs.mkdirSync(binDir, { recursive: true });
+        const callLog = path.join(case5Dir, 'gh-label-calls.log');
+        const ghPath = path.join(binDir, 'gh');
+        fs.writeFileSync(ghPath, `#!/bin/sh
+echo "$@" >> "${callLog}"
+if [ "$1" = "label" ] && [ "$2" = "create" ]; then
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
+  case "$*" in
+    *"--add-assignee @me"*) exit 1 ;;
+    *) exit 0 ;;
+  esac
+fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  echo "https://github.com/test/repo/issues/19#issuecomment-1900"
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then
+  printf '[{"id":1900,"body":"Session claimed by sess-label <!-- kw:claim sess=sess-label -->"}]'
+  exit 0
+fi
+exit 0
+`);
+        fs.chmodSync(ghPath, 0o755);
+        execFileSync(process.execPath, [
+          claimScript, 'claim',
+          '--session', 'sess-label',
+          '--project', 'project-label',
+          '--issue', '19',
+          '--runtime', 'codex'
+        ], {
+          cwd: case5Dir,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: binDir + path.delimiter + (process.env.PATH || ''),
+            HOME: case5Dir,
+            KAOLA_WORKFLOW_OFFLINE: ''
+          }
+        });
+        const log = fs.readFileSync(callLog, 'utf8');
+        assert(log.includes('label create workflow:in-progress'), 'Case 5f: claim must create workflow:in-progress label, got: ' + log);
+        assert(log.includes('issue edit 19 --add-label workflow:in-progress'), 'Case 5f: claim must add workflow:in-progress label, got: ' + log);
+        assert(log.includes('issue edit 19 --add-assignee @me'), 'Case 5f: claim must try to assign @me, got: ' + log);
+        assert(log.includes('issue comment 19'), 'Case 5f: claim must still post sentinel comment, got: ' + log);
+        assert(!log.includes('--title'), 'Case 5f: claim must not mutate issue title, got: ' + log);
+      }
+
+      // Case 5g: locks are isolated by project — all claimed projects must still exist independently
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock')),
-        'Case 5e: project-alpha lock must still exist');
+        'Case 5g: project-alpha lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock')),
-        'Case 5e: project-beta lock must still exist');
+        'Case 5g: project-beta lock must still exist');
+      assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'issue-11.lock')),
+        'Case 5g: issue-11 lock must still exist');
+      assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'issue-12.lock')),
+        'Case 5g: issue-12 lock must still exist');
+      assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-label.lock')),
+        'Case 5g: project-label lock must still exist');
 
       const finalAlpha = JSON.parse(fs.readFileSync(
         path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock'), 'utf8'
@@ -275,7 +426,7 @@ function main() {
       const finalBeta = JSON.parse(fs.readFileSync(
         path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock'), 'utf8'
       ));
-      assert(finalAlpha.runtime !== finalBeta.runtime, 'Case 5e: locks must have different runtime fields');
+      assert(finalAlpha.runtime !== finalBeta.runtime, 'Case 5g: locks must have different runtime fields');
     } finally {
       fs.rmSync(case5Dir, { recursive: true, force: true });
     }

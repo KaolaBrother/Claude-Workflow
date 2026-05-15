@@ -84,7 +84,15 @@ Ask only if the input does not contain enough information to produce a safe
 name, or if multiple unrelated issues/tasks are competing for the same workflow
 cycle.
 
-Create or update `kaola-workflow/{project-name}/workflow-state.md`:
+Create or update `kaola-workflow/{project-name}/workflow-state.md`. If the
+file already contains `## Sink` or `## Lease`, preserve those blocks exactly;
+only update the phase position, pending gates, and evidence fields. Do not
+replace the whole file with the minimal snippet below.
+
+If a linked GitHub issue number `N` is known and no `## Sink` block exists yet,
+add a lightweight `## Sink` block with `branch: TBD`, `issue_number: N`,
+`claimed_at: N/A`, and `sink: merge`. This lets later sessions recognize the
+active issue even before `phase1-research.md` exists.
 
 ```markdown
 phase: 1
@@ -206,6 +214,8 @@ step: complete
 next_command: /kaola-workflow-phase2 {project-name}
 ```
 
+Preserve any existing `## Sink` and `## Lease` blocks during this update.
+
 Continue to Phase 2 when Phase 1 evidence and compliance rows are complete.
 
 ## Step 5b - Per-Issue Roadmap File (Conditional)
@@ -304,5 +314,7 @@ phase: 1
 step: complete
 next_command: /kaola-workflow-phase2 {project-name}
 ```
+
+Preserve any existing `## Sink` and `## Lease` blocks during this update.
 
 Continue to Phase 2 when Phase 1 evidence and compliance rows are complete.

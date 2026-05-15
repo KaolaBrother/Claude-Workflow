@@ -408,7 +408,7 @@ When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact res
 
 Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets a distinct project. Session management is handled by `kaola-workflow-claim.js`:
 
-- Automatic on startup via `/workflow-next` when `KAOLA_SESSION_ID` is set
+- Automatic on startup via `/workflow-next`; it uses `KAOLA_SESSION_ID` when set and generates a session id when absent
 - Manual claim/release: `kaola-workflow-claim.js claim --session <id> --project <name> --issue <N>`
 - Background ticker (`ticker` subcommand) keeps leases active across machines with 15-min heartbeat intervals
 - Claim race tiebreaker: lowest GitHub comment ID wins; losers yield cleanly and release the lease

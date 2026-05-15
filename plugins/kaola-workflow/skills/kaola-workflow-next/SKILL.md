@@ -26,7 +26,9 @@ artifact.
 
 ## Startup
 
-Bootstrap the claim lease for this session:
+Bootstrap the claim lease for this session. Use `KAOLA_SESSION_ID` if it is
+already set; otherwise generate one and keep using the returned `session` value
+for later heartbeat, branch, and release steps.
 
 ```bash
 claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
@@ -34,13 +36,15 @@ if [ ! -f "$claim_script" ]; then
   claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
 fi
 
-if [ -f "$claim_script" ] && [ -n "${KAOLA_SESSION_ID:-}" ]; then
+if [ -f "$claim_script" ]; then
+  KAOLA_BOOTSTRAP_SESSION="${KAOLA_SESSION_ID:-$(node -e 'process.stdout.write(require("crypto").randomUUID())')}"
   KAOLA_SINK_FLAG=""
   [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
-  node "$claim_script" bootstrap \
-    --session "$KAOLA_SESSION_ID" \
+  BOOTSTRAP_OUT=$(node "$claim_script" bootstrap \
+    --session "$KAOLA_BOOTSTRAP_SESSION" \
     --runtime codex \
-    $KAOLA_SINK_FLAG 2>/dev/null || true
+    $KAOLA_SINK_FLAG 2>/dev/null) || true
+  [ -z "${KAOLA_SESSION_ID:-}" ] && [ -n "$BOOTSTRAP_OUT" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
 fi
 ```
 
@@ -80,8 +84,10 @@ node "$repair_script" {project-or-empty}
 ```
 
 Use the repaired state only when it identifies exactly one safe `next_skill`.
-If there is one unambiguous open GitHub issue and no active project, select it
-without asking the user to confirm the generated workflow folder name.
+Treat a `kaola-workflow/{project}/workflow-state.md` with `status: active` as
+active work even before any `phase*.md` file exists. If there is one
+unambiguous open GitHub issue and no active project, select it without asking
+the user to confirm the generated workflow folder name.
 
 Manual reconstruction order:
 

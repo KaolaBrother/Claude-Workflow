@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const OFFLINE = process.env.KAOLA_WORKFLOW_OFFLINE === '1';
+const CLAIM_LABEL = 'workflow:in-progress';
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
@@ -270,7 +271,17 @@ function writeSessionFile(root, sessionId, machineId) {
 
 function postGitHubClaim(issueNum, sessionId) {
   if (!issueNum) return null;
-  ghExec(['issue', 'edit', String(issueNum), '--add-label', 'workflow:in-progress', '--add-assignee', '@me']);
+  try {
+    ghExec(['label', 'create', CLAIM_LABEL, '--color', 'f9d0c4', '--description', 'Kaola-Workflow active work marker']);
+  } catch (_) {}
+  try {
+    ghExec(['issue', 'edit', String(issueNum), '--add-label', CLAIM_LABEL]);
+  } catch (e) {
+    process.stderr.write('warning: failed to add ' + CLAIM_LABEL + ' label to issue #' + issueNum + ': ' + e.message + '\n');
+  }
+  try {
+    ghExec(['issue', 'edit', String(issueNum), '--add-assignee', '@me']);
+  } catch (_) {}
   const out = ghExec(['issue', 'comment', String(issueNum), '--body', buildClaimCommentBody(sessionId)]);
   const m = out.match(/issuecomment-(\d+)/);
   return m ? m[1] : null;
@@ -387,7 +398,8 @@ function runBootstrapClaim(claimScript, args, pick) {
 
 function cmdBootstrap() {
   const args = parseArgs(process.argv.slice(3));
-  assert(args.session, '--session required for bootstrap');
+  if (!args.session) args.session = crypto.randomUUID();
+  assert(isSafeName(args.session), '--session must be a simple UUID with no path separators');
   const classifierScript = path.join(path.dirname(__filename), 'kaola-workflow-classifier.js');
   const root = getRoot();
   runBootstrapSweep(__filename, root);
@@ -395,7 +407,7 @@ function cmdBootstrap() {
   const pick = runBootstrapClassify(classifierScript, args);
   if (!pick.pick) { process.exitCode = 1; return; }
   runBootstrapClaim(__filename, args, pick);
-  process.stdout.write(JSON.stringify({ project: pick.project, issue: pick.pick, verdict: pick.verdict }) + '\n');
+  process.stdout.write(JSON.stringify({ project: pick.project, issue: pick.pick, verdict: pick.verdict, session: args.session }) + '\n');
 }
 
 function cmdClaim() {
@@ -464,7 +476,7 @@ function releaseSession(root, sessionId, reason, options) {
   clearClaimComment(match, reason);
   if (remoteCleanup && !OFFLINE && match.issue_number != null) {
     try {
-      ghExec(['issue', 'edit', String(match.issue_number), '--remove-label', 'workflow:in-progress', '--remove-assignee', '@me']);
+      ghExec(['issue', 'edit', String(match.issue_number), '--remove-label', CLAIM_LABEL, '--remove-assignee', '@me']);
     } catch (_) {}
   }
 
@@ -626,7 +638,7 @@ function cmdSweep() {
 
     if (!OFFLINE && lock.issue_number != null) {
       try {
-        ghExec(['issue', 'edit', String(lock.issue_number), '--remove-label', 'workflow:in-progress']);
+        ghExec(['issue', 'edit', String(lock.issue_number), '--remove-label', CLAIM_LABEL]);
       } catch (_) {}
       try {
         ghExec(['issue', 'edit', String(lock.issue_number), '--remove-assignee', '@me']);
@@ -661,7 +673,7 @@ function cmdStatus() {
         const labels = (data.labels || []).map(l => l.name);
         remote = {
           assignee: assignees.join(',') || null,
-          has_label: labels.includes('workflow:in-progress'),
+          has_label: labels.includes(CLAIM_LABEL),
           sentinel_comment_id: lock.claim_comment_id || null
         };
       } catch (_) {}

@@ -24,11 +24,13 @@ if [ ! -f "$claim_script" ]; then
   claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
 fi
 
-if [ -f "$claim_script" ] && [ -n "${KAOLA_SESSION_ID:-}" ]; then
-  node "$claim_script" bootstrap \
-    --session "$KAOLA_SESSION_ID" \
+if [ -f "$claim_script" ]; then
+  KAOLA_BOOTSTRAP_SESSION="${KAOLA_SESSION_ID:-$(node -e 'process.stdout.write(require("crypto").randomUUID())')}"
+  BOOTSTRAP_OUT=$(node "$claim_script" bootstrap \
+    --session "$KAOLA_BOOTSTRAP_SESSION" \
     --runtime codex \
-    --sink pr 2>/dev/null || true
+    --sink pr 2>/dev/null) || true
+  [ -z "${KAOLA_SESSION_ID:-}" ] && [ -n "$BOOTSTRAP_OUT" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
 fi
 ```
 

@@ -27,7 +27,7 @@ function workflowHasPhaseArtifacts(workflowDir) {
     .some(entry => {
       if (!entry.isDirectory() || entry.name === 'archive' || entry.name === '_phase1-pending') return false;
       const projectDir = path.join(workflowDir, entry.name);
-      return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
+      return projectHasPhaseArtifacts(projectDir);
     });
 }
 
@@ -58,6 +58,19 @@ function isSafeName(name) {
   return Boolean(name) && !name.includes('/') && !name.includes('\\') && name !== '.' && name !== '..';
 }
 
+function projectHasPhaseArtifacts(projectDir) {
+  return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
+}
+
+function projectHasActiveState(projectDir) {
+  const stateFile = path.join(projectDir, 'workflow-state.md');
+  if (!exists(stateFile)) return false;
+  const content = readFile(stateFile);
+  return /^status:\s*active\s*$/m.test(content) &&
+    /^phase:\s*[1-6]\s*$/m.test(content) &&
+    /^next_skill:\s*kaola-workflow-(research|ideation|plan|execute|review|finalize)\b/m.test(content);
+}
+
 function activeProjects(workflowDir) {
   if (!exists(workflowDir)) return [];
   return fs.readdirSync(workflowDir, { withFileTypes: true })
@@ -65,7 +78,7 @@ function activeProjects(workflowDir) {
     .filter(entry => entry.name !== 'archive' && entry.name !== '_phase1-pending')
     .filter(entry => {
       const projectDir = path.join(workflowDir, entry.name);
-      return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
+      return projectHasPhaseArtifacts(projectDir) || projectHasActiveState(projectDir);
     })
     .map(entry => entry.name)
     .sort();
@@ -80,7 +93,7 @@ function selectProject(workflowDir, argument) {
   const projects = activeProjects(workflowDir);
   if (projects.length === 1) return { project: projects[0] };
   if (projects.length > 1) return { reason: `ambiguous active projects: ${projects.join(', ')}` };
-  return { reason: 'no active workflow projects with phase artifacts' };
+  return { reason: 'no active workflow projects with phase artifacts or active state' };
 }
 
 function complianceRows(content) {

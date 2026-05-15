@@ -80,6 +80,23 @@ function readLockFiles(root) {
     .filter(Boolean);
 }
 
+function readActiveStateIssueNumbers(root) {
+  const workflowDir = path.join(root, 'kaola-workflow');
+  if (!fs.existsSync(workflowDir)) return new Set();
+  const issues = new Set();
+  for (const entry of fs.readdirSync(workflowDir, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue;
+    const stateFile = path.join(workflowDir, entry.name, 'workflow-state.md');
+    if (!fs.existsSync(stateFile)) continue;
+    let content = '';
+    try { content = fs.readFileSync(stateFile, 'utf8'); } catch (_) { continue; }
+    if (!/^status:\s*active\s*$/m.test(content)) continue;
+    const issue = parseInt(field(content, 'issue_number'), 10);
+    if (Number.isFinite(issue) && issue > 0) issues.add(issue);
+  }
+  return issues;
+}
+
 // ---------------------------------------------------------------------------
 // File-path extraction
 // ---------------------------------------------------------------------------
@@ -278,9 +295,10 @@ function cmdClassify() {
 
   const root = getRoot();
   const locks = readLockFiles(root);
+  const activeStateIssues = readActiveStateIssueNumbers(root);
 
   // Already claimed → exit 2, no stdout
-  if (locks.some(l => l.issue_number === args.issue)) {
+  if (locks.some(l => l.issue_number === args.issue) || activeStateIssues.has(args.issue)) {
     process.exitCode = 2;
     return;
   }

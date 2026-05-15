@@ -44,8 +44,10 @@ authorization or materially user-owned choices.
 
 ## Startup Step 0 - Sweep, Classify, And Claim
 
-If `kaola-workflow-claim.js` and `kaola-workflow-classifier.js` are available
-and `KAOLA_SESSION_ID` is set, run bootstrap:
+If `kaola-workflow-claim.js` and `kaola-workflow-classifier.js` are available,
+run bootstrap before selecting work. Use the current `KAOLA_SESSION_ID` when
+set; otherwise generate one for this workflow session and keep using it for
+later heartbeat, branch, and release steps.
 
 Bootstrap runs the claim helper's `sweep`, `watch-pr`, classifier, and claim
 steps so stale leases, merged PR leases, and remotely claimed issues are handled
@@ -53,17 +55,21 @@ before selecting the next candidate.
 
 ```bash
 CLAIM_JS="${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js"
-if [ -f "$CLAIM_JS" ] && [ -n "$KAOLA_SESSION_ID" ]; then
+if [ -f "$CLAIM_JS" ]; then
+  KAOLA_BOOTSTRAP_SESSION="${KAOLA_SESSION_ID:-$(node -e 'process.stdout.write(require("crypto").randomUUID())')}"
   KAOLA_SINK_FLAG=""
   [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
   BOOTSTRAP_OUT=$(node "$CLAIM_JS" bootstrap \
-    --session "$KAOLA_SESSION_ID" \
+    --session "$KAOLA_BOOTSTRAP_SESSION" \
     --runtime claude \
     $KAOLA_SINK_FLAG 2>/dev/null) || true
+  [ -z "${KAOLA_SESSION_ID:-}" ] && [ -n "$BOOTSTRAP_OUT" ] && export KAOLA_SESSION_ID="$KAOLA_BOOTSTRAP_SESSION"
 fi
 ```
 
-If `KAOLA_SESSION_ID` is unset, the script is unavailable, or no candidate passes classify, skip this step and continue to Step 1.
+If `BOOTSTRAP_OUT` is JSON, its `session` field is the active session id to
+carry through the rest of this workflow session. If the script is unavailable
+or no candidate passes classify, skip this step and continue to Step 1.
 
 ## Startup Step 1 - Git Freshness
 
@@ -123,7 +129,8 @@ If `$ARGUMENTS` names an existing `kaola-workflow/{project}/` directory, use
 that project.
 
 Otherwise list active workflow folders under `kaola-workflow/` that contain at
-least one `phase*.md` file. Skip `archive/`.
+least one `phase*.md` file or a `workflow-state.md` with `status: active`.
+Skip `archive/`.
 
 If no active project is selected, choose one unambiguous open GitHub issue or
 provided task automatically. If there are multiple plausible issues/tasks or no

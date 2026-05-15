@@ -27,7 +27,7 @@ function workflowHasPhaseArtifacts(workflowDir) {
     .some(entry => {
       if (!entry.isDirectory() || entry.name === 'archive') return false;
       const projectDir = path.join(workflowDir, entry.name);
-      return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
+      return projectHasPhaseArtifacts(projectDir);
     });
 }
 
@@ -62,6 +62,19 @@ function isSafeName(name) {
   return Boolean(name) && !name.includes('/') && !name.includes('\\') && name !== '.' && name !== '..';
 }
 
+function projectHasPhaseArtifacts(projectDir) {
+  return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
+}
+
+function projectHasActiveState(projectDir) {
+  const stateFile = path.join(projectDir, 'workflow-state.md');
+  if (!exists(stateFile)) return false;
+  const content = readFile(stateFile);
+  return /^status:\s*active\s*$/m.test(content) &&
+    /^phase:\s*[1-6]\s*$/m.test(content) &&
+    /^next_command:\s*\/kaola-workflow-phase[1-6]\b/m.test(content);
+}
+
 function activeProjects(workflowDir) {
   if (!exists(workflowDir)) return [];
 
@@ -70,7 +83,7 @@ function activeProjects(workflowDir) {
     .filter(entry => entry.name !== 'archive')
     .filter(entry => {
       const projectDir = path.join(workflowDir, entry.name);
-      return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
+      return projectHasPhaseArtifacts(projectDir) || projectHasActiveState(projectDir);
     })
     .map(entry => entry.name)
     .sort();
@@ -91,7 +104,7 @@ function selectProject(workflowDir, argument) {
     return { reason: `ambiguous active projects: ${projects.join(', ')}` };
   }
 
-  return { reason: 'no active workflow projects with phase artifacts' };
+  return { reason: 'no active workflow projects with phase artifacts or active state' };
 }
 
 function complianceRows(content) {

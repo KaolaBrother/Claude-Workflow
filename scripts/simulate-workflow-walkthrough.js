@@ -137,6 +137,35 @@ async function main() {
       fs.rmSync(emptyRoot, { recursive: true, force: true });
     }
 
+    const stateOnlyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-stateonly-'));
+    try {
+      const activeProject = 'phase-one-active';
+      const activeDir = path.join(stateOnlyRoot, 'kaola-workflow', activeProject);
+      fs.mkdirSync(activeDir, { recursive: true });
+      write(path.join(activeDir, 'workflow-state.md'), [
+        '# Kaola-Workflow State',
+        '',
+        '## Project',
+        'name: ' + activeProject,
+        'status: active',
+        '',
+        '## Current Position',
+        'phase: 1',
+        'phase_name: Research',
+        'step: requirement-parsing',
+        'next_command: /kaola-workflow-phase1 ' + activeProject,
+        '',
+      ].join('\n'));
+      const output = execFileSync(process.execPath, [path.join(root, 'scripts/kaola-workflow-repair-state.js')], {
+        cwd: stateOnlyRoot,
+        encoding: 'utf8'
+      });
+      assert(output.includes('Workflow state repair: existing state valid'), 'repair must recognize active workflow-state before phase files exist');
+      assert(output.includes('Workflow project: ' + activeProject), 'repair must route the state-only active project');
+    } finally {
+      fs.rmSync(stateOnlyRoot, { recursive: true, force: true });
+    }
+
     const workflowRoot = path.join(tmp, 'kaola-workflow');
     const projectRoot = path.join(workflowRoot, project);
     const cache = path.join(projectRoot, '.cache');
@@ -879,6 +908,36 @@ async function main() {
         } catch (e) { exit6F = e.status || 1; }
         assert(exit6F === 2, 'Epic Case 6F: already-claimed issue must cause exit code 2, got ' + exit6F);
 
+        // 6F2: active workflow-state with issue_number also blocks a duplicate claim
+        const stateOnlyDir6F2 = path.join(epic6Tmp, 'kaola-workflow', 'state-only-issue');
+        fs.mkdirSync(stateOnlyDir6F2, { recursive: true });
+        fs.writeFileSync(path.join(stateOnlyDir6F2, 'workflow-state.md'), [
+          '# Kaola-Workflow State',
+          '',
+          '## Project',
+          'name: state-only-issue',
+          'status: active',
+          '',
+          '## Current Position',
+          'phase: 1',
+          'phase_name: Research',
+          'step: requirement-parsing',
+          'next_command: /kaola-workflow-phase1 state-only-issue',
+          '',
+          '## Sink',
+          'branch: workflow/issue-14-state-only-issue',
+          'issue_number: 14',
+          'claimed_at: 2026-05-15T00:00:00.000Z',
+          'sink: merge',
+          '',
+        ].join('\n'));
+        let exit6F2 = 0;
+        try {
+          execFileSync(process.execPath, [classifierScript, 'classify', '--issue', '14'],
+            { cwd: epic6Tmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+        } catch (e) { exit6F2 = e.status || 1; }
+        assert(exit6F2 === 2, 'Epic Case 6F2: active state issue_number must cause exit code 2, got ' + exit6F2);
+
         // 6G: bootstrap skips a remotely claimed issue and selects the next free issue
         const ghShimBootstrap = [
           '#!/bin/sh',
@@ -1500,6 +1559,144 @@ exit 0
             assert(state8h.includes('session_id: sess-8h'), '8H: state must contain lease session_id');
           } finally {
             fs.rmSync(epic8hTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8I: bootstrap without a preexisting session id claims one issue;
+        // a second fresh bootstrap skips the locked issue and claims the next.
+        {
+          const epic8iTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8i-'));
+          try {
+            const binDir = path.join(epic8iTmp, 'bin');
+            fs.mkdirSync(binDir, { recursive: true });
+            const ghPath = path.join(binDir, 'gh');
+            fs.writeFileSync(ghPath, `#!/bin/sh
+if [ "$1" = "issue" ] && [ "$2" = "list" ]; then
+  printf '[{"number":11},{"number":12}]'
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  num="$3"
+  printf '{"number":%s,"title":"Issue %s","body":"commands/workflow-next.md","labels":[],"state":"OPEN"}' "$num" "$num"
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  case "$3" in
+    11) echo "https://github.com/test/repo/issues/11#issuecomment-1100" ;;
+    12) echo "https://github.com/test/repo/issues/12#issuecomment-1200" ;;
+  esac
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then
+  case "$*" in
+    *issues/11/comments*) printf '[]' ; exit 0 ;;
+    *issues/12/comments*) printf '[]' ; exit 0 ;;
+  esac
+fi
+exit 0
+`);
+            fs.chmodSync(ghPath, 0o755);
+            const env8i = {
+              ...process.env,
+              PATH: binDir + path.delimiter + (process.env.PATH || ''),
+              HOME: epic8iTmp,
+              KAOLA_WORKFLOW_OFFLINE: ''
+            };
+
+            const r8i1 = spawnSync(process.execPath, [
+              claimScript, 'bootstrap', '--runtime', 'codex'
+            ], { cwd: epic8iTmp, encoding: 'utf8', env: env8i });
+            assert(r8i1.status === 0, '8I-a: bootstrap without --session must claim issue 11, got ' + r8i1.status + '\nstderr: ' + r8i1.stderr);
+            const out8i1 = JSON.parse(r8i1.stdout.trim());
+            assert(out8i1.issue === 11, '8I-a: first bootstrap must pick issue 11, got ' + out8i1.issue);
+            assert(out8i1.session, '8I-a: bootstrap output must include generated session');
+
+            const r8i2 = spawnSync(process.execPath, [
+              claimScript, 'bootstrap', '--runtime', 'codex'
+            ], { cwd: epic8iTmp, encoding: 'utf8', env: env8i });
+            assert(r8i2.status === 0, '8I-b: second bootstrap must claim issue 12, got ' + r8i2.status + '\nstderr: ' + r8i2.stderr);
+            const out8i2 = JSON.parse(r8i2.stdout.trim());
+            assert(out8i2.issue === 12, '8I-b: second bootstrap must skip locked issue 11 and pick 12, got ' + out8i2.issue);
+            assert(out8i2.session && out8i2.session !== out8i1.session, '8I-b: second bootstrap must generate an independent session');
+
+            const lock11 = JSON.parse(fs.readFileSync(path.join(epic8iTmp, 'kaola-workflow', '.locks', 'issue-11.lock'), 'utf8'));
+            const lock12 = JSON.parse(fs.readFileSync(path.join(epic8iTmp, 'kaola-workflow', '.locks', 'issue-12.lock'), 'utf8'));
+            assert(lock11.issue_number === 11 && lock11.session_id === out8i1.session, '8I: issue 11 lock must belong to first generated session');
+            assert(lock12.issue_number === 12 && lock12.session_id === out8i2.session, '8I: issue 12 lock must belong to second generated session');
+          } finally {
+            fs.rmSync(epic8iTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8J: remote claim creates/applies workflow:in-progress label and still
+        // posts the sentinel comment when assignment fails.
+        {
+          const epic8jTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8j-'));
+          try {
+            const binDir = path.join(epic8jTmp, 'bin');
+            fs.mkdirSync(binDir, { recursive: true });
+            const callLog = path.join(epic8jTmp, 'gh-calls.log');
+            const ghPath = path.join(binDir, 'gh');
+            fs.writeFileSync(ghPath, `#!/bin/sh
+echo "$@" >> "${callLog}"
+if [ "$1" = "label" ] && [ "$2" = "create" ]; then
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
+  case "$*" in
+    *"--add-assignee @me"*) exit 1 ;;
+    *) exit 0 ;;
+  esac
+fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  echo "https://github.com/test/repo/issues/19#issuecomment-1900"
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then
+  printf '[{"id":1900,"body":"Session claimed by sess-8j <!-- kw:claim sess=sess-8j -->"}]'
+  exit 0
+fi
+exit 0
+`);
+            fs.chmodSync(ghPath, 0o755);
+            const r8j = spawnSync(process.execPath, [
+              claimScript, 'claim',
+              '--session', 'sess-8j',
+              '--project', 'epic8j',
+              '--issue', '19',
+              '--runtime', 'codex'
+            ], {
+              cwd: epic8jTmp,
+              encoding: 'utf8',
+              env: {
+                ...process.env,
+                PATH: binDir + path.delimiter + (process.env.PATH || ''),
+                HOME: epic8jTmp,
+                KAOLA_WORKFLOW_OFFLINE: ''
+              }
+            });
+            assert(r8j.status === 0, '8J: claim must succeed even when assignee add fails, got ' + r8j.status + '\nstderr: ' + r8j.stderr);
+            const log8j = fs.readFileSync(callLog, 'utf8');
+            assert(log8j.includes('label create workflow:in-progress'), '8J: claim must create workflow:in-progress label, got: ' + log8j);
+            assert(log8j.includes('issue edit 19 --add-label workflow:in-progress'), '8J: claim must add workflow:in-progress label, got: ' + log8j);
+            assert(log8j.includes('issue edit 19 --add-assignee @me'), '8J: claim must try to assign @me, got: ' + log8j);
+            assert(log8j.includes('issue comment 19'), '8J: claim must still post sentinel comment, got: ' + log8j);
+            assert(!log8j.includes('--title'), '8J: claim must not mutate issue title, got: ' + log8j);
+            const lock8j = JSON.parse(fs.readFileSync(path.join(epic8jTmp, 'kaola-workflow', '.locks', 'epic8j.lock'), 'utf8'));
+            assert(lock8j.claim_comment_id === '1900', '8J: lock must record sentinel comment id, got: ' + lock8j.claim_comment_id);
+          } finally {
+            fs.rmSync(epic8jTmp, { recursive: true, force: true });
           }
         }
 

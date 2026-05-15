@@ -46,11 +46,16 @@ fi
    issue title or task description. If `kaola-workflow/{name}/` exists, append
    the first available collision suffix such as `{name}-2`; do not ask the user
    to confirm routine generated names.
+   If a linked GitHub issue number `N` is known and no `## Sink` block exists
+   yet, add a lightweight `## Sink` block to `workflow-state.md` with
+   `branch: TBD`, `issue_number: N`, `claimed_at: N/A`, and `sink: merge` so
+   later sessions can recognize the active issue before `phase1-research.md`
+   exists.
 3. Inspect relevant files, tests, config, docs, and issues. Use the `code-explorer` Codex agent role when subagents are available; otherwise perform the same read-only research in the current session.
 4. Use the `docs-lookup` Codex agent role only when current external behavior matters; otherwise record why docs lookup is N/A.
 5. Write raw notes to `.cache/code-explorer.md` and `.cache/docs-lookup.md` when used.
 6. Score completeness from 0-10. Stop and ask if below 7.
-7. Write `kaola-workflow/{project}/phase1-research.md` and update `workflow-state.md`.
+7. Write `kaola-workflow/{project}/phase1-research.md` and update `workflow-state.md`. Preserve any existing `## Sink` and `## Lease` blocks exactly; never replace the whole state file with phase-only fields.
 
 ## Phase File
 
@@ -116,4 +121,5 @@ fi
   --branch "$(git rev-parse --abbrev-ref HEAD)"
 ```
 
-State next pointer: `next_skill: kaola-workflow-ideation {project}`.
+State next pointer: `next_skill: kaola-workflow-ideation {project}`. Preserve
+any existing `## Sink` and `## Lease` blocks during this update.
