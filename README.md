@@ -45,6 +45,13 @@ credential or deployment actions, or issue/roadmap reorganization.
 > /plugin install everything-claude-code@everything-claude-code
 > ```
 >
+> **Minimal Kaola-Workflow ECC configuration**
+>
+> - **Hooks:** use `ECC_HOOK_PROFILE=minimal` (see [ECC Hook Policy](#ecc-hook-policy) below)
+> - **Subagents:** install only the ECC subagents listed in the table above
+> - **Language rules:** do not install ECC language rules as part of Kaola-Workflow setup
+> - **Common rules:** user choice based on your own project preferences
+>
 > ECC's current npm package name is `ecc-universal`; the older `everything-claude-code`
 > npm package name is not the active install surface.
 >
@@ -356,8 +363,9 @@ rerun the same check unless the phase requires broader validation or relevant
 files changed after the hook ran. Hook output counts as workflow evidence only
 when recorded with command, scope, result, and evidence path.
 
-For heavy Phase 4 implementation bursts or many subagents, use the lighter hook
-profile:
+Kaola-Workflow recommends the minimal hook profile by default; it is particularly
+useful for heavy Phase 4 implementation bursts or many subagents. Use it by
+running:
 
 ```bash
 ECC_HOOK_PROFILE=minimal claude
