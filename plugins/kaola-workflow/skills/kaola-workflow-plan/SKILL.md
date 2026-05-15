@@ -7,6 +7,25 @@ description: Use when Kaola-Workflow for Codex, also called kaola-workflow, has 
 
 Phase 3 turns the selected strategy into a dependency-safe plan. Do not edit product code in this phase.
 
+## Session Heartbeat
+
+If a session is active, ensure the background heartbeat ticker is running:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+[ -n "${KAOLA_SESSION_ID:-}" ] && {
+  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
+  if [ ! -f "$_TICKER_PID_FILE" ]; then
+    nohup node "$claim_script" ticker \
+      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
+    disown
+  fi
+}
+```
+
 ## Goal Contract
 
 Continue until Phase 3 has a dependency-safe blueprint, expert review evidence,

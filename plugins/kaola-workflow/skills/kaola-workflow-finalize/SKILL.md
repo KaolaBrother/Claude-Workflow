@@ -15,6 +15,25 @@ Before declaring completion, audit every explicit requirement against concrete
 evidence. Stop only for true external authorization, materially user-owned
 choices, or ambiguity that blocks correctness.
 
+## Session Heartbeat
+
+If a session is active, ensure the background heartbeat ticker is running:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+[ -n "${KAOLA_SESSION_ID:-}" ] && {
+  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
+  if [ ! -f "$_TICKER_PID_FILE" ]; then
+    nohup node "$claim_script" ticker \
+      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
+    disown
+  fi
+}
+```
+
 ## Guardrails
 
 - Run or cite fresh final validation before claiming completion.
@@ -33,6 +52,27 @@ choices, or ambiguity that blocks correctness.
 6. Refresh `kaola-workflow/ROADMAP.md`.
 7. Archive `kaola-workflow/{project}/` to `kaola-workflow/archive/{project}/`.
 8. Commit and push only approved files.
+
+   Before committing, dispatch to the correct sink script based on the `sink` field in `workflow-state.md`:
+
+   ```bash
+   claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+   if [ ! -f "$claim_script" ]; then
+     claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+   fi
+   scripts_dir="$(dirname "$claim_script")"
+   SINK_KIND=$(awk '/^## Sink/,0' "kaola-workflow/${KAOLA_PROJECT}/workflow-state.md" | grep '^sink:' | awk '{print $2}')
+   SINK_KIND="${SINK_KIND:-merge}"
+   SINK_BRANCH=$(grep '^branch:' "kaola-workflow/${KAOLA_PROJECT}/workflow-state.md" | awk '{print $2}')
+   case "$SINK_KIND" in
+     pr)
+       node "$scripts_dir/kaola-workflow-sink-pr.js" --branch "$SINK_BRANCH" --project "$KAOLA_PROJECT"
+       ;;
+     merge|*)
+       node "$scripts_dir/kaola-workflow-sink-merge.js" --branch "$SINK_BRANCH" --project "$KAOLA_PROJECT"
+       ;;
+   esac
+   ```
 
 ## Summary File
 

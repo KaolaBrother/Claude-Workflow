@@ -194,6 +194,92 @@ function main() {
     const finalOutput = runRepair(tmp, project);
     assert(finalOutput.includes('workflow is complete'), 'complete workflow should not be repaired again');
 
+    // Case 5: cross-runtime co-work, two distinct projects
+    const claimScript = path.resolve(__dirname, '../../../scripts/kaola-workflow-claim.js');
+    const case5Dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5-'));
+    try {
+      execFileSync('git', ['init', case5Dir], { encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.email', 'test@test.com'], { cwd: case5Dir, encoding: 'utf8' });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: case5Dir, encoding: 'utf8' });
+      fs.mkdirSync(path.join(case5Dir, 'kaola-workflow', '.locks'), { recursive: true });
+      fs.mkdirSync(path.join(case5Dir, 'kaola-workflow', '.sessions'), { recursive: true });
+
+      // Case 5a: claim project-alpha with runtime:claude
+      const sidAlpha = 'aaaaaaaa-0000-0000-0000-000000000001';
+      execFileSync(process.execPath, [
+        claimScript, 'claim',
+        '--session', sidAlpha,
+        '--project', 'project-alpha',
+        '--runtime', 'claude'
+      ], { cwd: case5Dir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+
+      const lockAlpha = JSON.parse(fs.readFileSync(
+        path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock'), 'utf8'
+      ));
+      assert(lockAlpha.runtime === 'claude', 'Case 5a: project-alpha lock must have runtime=claude, got: ' + lockAlpha.runtime);
+      assert(lockAlpha.project === 'project-alpha', 'Case 5a: project field must match');
+
+      // Case 5b: claim project-beta with runtime:codex (different project, should succeed)
+      const sidBeta = 'bbbbbbbb-0000-0000-0000-000000000002';
+      execFileSync(process.execPath, [
+        claimScript, 'claim',
+        '--session', sidBeta,
+        '--project', 'project-beta',
+        '--runtime', 'codex'
+      ], { cwd: case5Dir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+
+      const lockBeta = JSON.parse(fs.readFileSync(
+        path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock'), 'utf8'
+      ));
+      assert(lockBeta.runtime === 'codex', 'Case 5b: project-beta lock must have runtime=codex, got: ' + lockBeta.runtime);
+      assert(lockBeta.project === 'project-beta', 'Case 5b: project field must match');
+
+      // Case 5c: double-claim on project-alpha must exit 2
+      const sidAlpha2 = 'cccccccc-0000-0000-0000-000000000003';
+      let doubleClaimExitCode = 0;
+      try {
+        execFileSync(process.execPath, [
+          claimScript, 'claim',
+          '--session', sidAlpha2,
+          '--project', 'project-alpha',
+          '--runtime', 'claude'
+        ], { cwd: case5Dir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      } catch (e) {
+        doubleClaimExitCode = e.status;
+      }
+      assert(doubleClaimExitCode === 2, 'Case 5c: double-claim on project-alpha must exit 2, got: ' + doubleClaimExitCode);
+
+      // Case 5d: bootstrap with no open issues exits 1 (OFFLINE mode)
+      const sidBootstrap = 'dddddddd-0000-0000-0000-000000000004';
+      let bootstrapExitCode = 0;
+      try {
+        execFileSync(process.execPath, [
+          claimScript, 'bootstrap',
+          '--session', sidBootstrap,
+          '--runtime', 'codex'
+        ], { cwd: case5Dir, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+      } catch (e) {
+        bootstrapExitCode = e.status;
+      }
+      assert(bootstrapExitCode === 1, 'Case 5d: bootstrap with no open issues must exit 1, got: ' + bootstrapExitCode);
+
+      // Case 5e: locks are isolated by project — both must still exist independently
+      assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock')),
+        'Case 5e: project-alpha lock must still exist');
+      assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock')),
+        'Case 5e: project-beta lock must still exist');
+
+      const finalAlpha = JSON.parse(fs.readFileSync(
+        path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock'), 'utf8'
+      ));
+      const finalBeta = JSON.parse(fs.readFileSync(
+        path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock'), 'utf8'
+      ));
+      assert(finalAlpha.runtime !== finalBeta.runtime, 'Case 5e: locks must have different runtime fields');
+    } finally {
+      fs.rmSync(case5Dir, { recursive: true, force: true });
+    }
+
     console.log('Kaola-Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

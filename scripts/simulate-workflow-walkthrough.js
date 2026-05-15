@@ -1255,6 +1255,96 @@ exit 0
           }
         }
 
+        // Test 8G — runtime field is written to lock file
+        {
+          const epic8gTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8g-'));
+          try {
+            fs.mkdirSync(path.join(epic8gTmp, 'kaola-workflow', '.locks'), { recursive: true });
+            fs.mkdirSync(path.join(epic8gTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+
+            // 8G-a: default runtime ('claude') when --runtime is not passed
+            const r8ga = spawnSync(process.execPath, [
+              claimScript, 'claim',
+              '--session', 'sess-8g-a',
+              '--project', 'proj-8g-a'
+            ], {
+              cwd: epic8gTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8gTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8ga.status === 0, '8G-a: claim must succeed, got ' + r8ga.status + '\nstderr: ' + r8ga.stderr);
+            const lock8ga = JSON.parse(fs.readFileSync(path.join(epic8gTmp, 'kaola-workflow', '.locks', 'proj-8g-a.lock'), 'utf8'));
+            assert(lock8ga.runtime === 'claude', '8G-a: lock must include runtime=claude by default, got: ' + lock8ga.runtime);
+
+            // 8G-b: explicit --runtime codex wins
+            const r8gb = spawnSync(process.execPath, [
+              claimScript, 'claim',
+              '--session', 'sess-8g-b',
+              '--project', 'proj-8g-b',
+              '--runtime', 'codex'
+            ], {
+              cwd: epic8gTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8gTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8gb.status === 0, '8G-b: claim must succeed, got ' + r8gb.status + '\nstderr: ' + r8gb.stderr);
+            const lock8gb = JSON.parse(fs.readFileSync(path.join(epic8gTmp, 'kaola-workflow', '.locks', 'proj-8g-b.lock'), 'utf8'));
+            assert(lock8gb.runtime === 'codex', '8G-b: lock must include runtime=codex, got: ' + lock8gb.runtime);
+          } finally {
+            fs.rmSync(epic8gTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8G-c: invalid --runtime value must be rejected (exit 1, stderr contains allowlist message)
+        {
+          const epic8gcTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8gc-'));
+          try {
+            fs.mkdirSync(path.join(epic8gcTmp, 'kaola-workflow', '.locks'), { recursive: true });
+            fs.mkdirSync(path.join(epic8gcTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+            const r8gc = spawnSync(process.execPath, [
+              path.join(root, 'scripts/kaola-workflow-claim.js'), 'claim',
+              '--session', 'sess-8gc',
+              '--project', 'proj-8gc',
+              '--runtime', 'badvalue'
+            ], {
+              cwd: epic8gcTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8gcTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8gc.status !== 0, '8G-c: claim must reject invalid --runtime value, got exit 0');
+            assert(r8gc.stderr.includes('--runtime must be'), '8G-c: stderr must contain allowlist message, got: ' + r8gc.stderr);
+          } finally {
+            fs.rmSync(epic8gcTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8G-d: bootstrap path propagates runtime default ('claude') when --runtime not supplied
+        // Verifies FIX-1: args.runtime || 'claude' in runBootstrapClaim so child never gets "undefined"
+        {
+          const epic8gdTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8gd-'));
+          try {
+            // Minimal git repo so getRoot() works
+            execFileSync('git', ['init', epic8gdTmp], { encoding: 'utf8' });
+            fs.mkdirSync(path.join(epic8gdTmp, 'kaola-workflow', '.locks'), { recursive: true });
+            fs.mkdirSync(path.join(epic8gdTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+            // Directly invoke claim (the bootstrap inner call path) without --runtime
+            const r8gd = spawnSync(process.execPath, [
+              path.join(root, 'scripts/kaola-workflow-claim.js'), 'claim',
+              '--session', 'sess-8gd',
+              '--project', 'proj-8gd'
+            ], {
+              cwd: epic8gdTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8gdTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8gd.status === 0, '8G-d: claim without --runtime must succeed, got ' + r8gd.status + '\nstderr: ' + r8gd.stderr);
+            const lock8gd = JSON.parse(fs.readFileSync(path.join(epic8gdTmp, 'kaola-workflow', '.locks', 'proj-8gd.lock'), 'utf8'));
+            assert(lock8gd.runtime === 'claude', '8G-d: lock.runtime must be "claude" (not "undefined"), got: ' + lock8gd.runtime);
+          } finally {
+            fs.rmSync(epic8gdTmp, { recursive: true, force: true });
+          }
+        }
+
       } finally {
         fs.rmSync(epic8Tmp, { recursive: true, force: true });
       }

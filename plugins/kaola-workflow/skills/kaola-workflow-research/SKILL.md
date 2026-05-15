@@ -15,6 +15,25 @@ selected a safe workflow project name, written `phase1-research.md`, and updated
 only for true external authorization, materially user-owned choices, or
 ambiguity that blocks correctness.
 
+## Session Heartbeat
+
+If a session is active, ensure the background heartbeat ticker is running:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+[ -n "${KAOLA_SESSION_ID:-}" ] && {
+  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
+  if [ ! -f "$_TICKER_PID_FILE" ]; then
+    nohup node "$claim_script" ticker \
+      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
+    disown
+  fi
+}
+```
+
 ## Steps
 
 1. Parse the request:
@@ -66,6 +85,35 @@ X/10
 |-------------|--------|----------|-------------|
 | code-explorer | invoked | .cache/code-explorer.md | |
 | docs-lookup | invoked/N/A | .cache/docs-lookup.md or docs-impact check | reason if N/A |
+```
+
+8. If a GitHub issue is linked, run `init-issue` to create the roadmap tracking file:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+roadmap_script="$(dirname "$claim_script")/kaola-workflow-roadmap.js"
+node "$roadmap_script" init-issue \
+  --issue "$ISSUE_NUMBER" \
+  --title "$ISSUE_TITLE" \
+  --status open \
+  --workflow-project "$KAOLA_PROJECT" \
+  --next-step "ready"
+```
+
+9. If a claim session is active and a branch has been cut, patch the lock file with the branch name:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+[ -n "${KAOLA_SESSION_ID:-}" ] && node "$claim_script" patch-branch \
+  --session "$KAOLA_SESSION_ID" \
+  --project "$KAOLA_PROJECT" \
+  --branch "$(git rev-parse --abbrev-ref HEAD)"
 ```
 
 State next pointer: `next_skill: kaola-workflow-ideation {project}`.

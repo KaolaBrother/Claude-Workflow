@@ -26,6 +26,24 @@ artifact.
 
 ## Startup
 
+Bootstrap the claim lease for this session:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+
+if [ -f "$claim_script" ] && [ -n "${KAOLA_SESSION_ID:-}" ]; then
+  KAOLA_SINK_FLAG=""
+  [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
+  node "$claim_script" bootstrap \
+    --session "$KAOLA_SESSION_ID" \
+    --runtime codex \
+    $KAOLA_SINK_FLAG 2>/dev/null || true
+fi
+```
+
 Classify local and remote Git state:
 
 ```bash

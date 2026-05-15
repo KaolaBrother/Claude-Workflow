@@ -44,45 +44,21 @@ authorization or materially user-owned choices.
 
 ## Startup Step 0 - Sweep, Classify, And Claim
 
-If `kaola-workflow-claim.js` is available and `KAOLA_SESSION_ID` is set, run sweep, then watch-pr (ONLINE only), then classify open issues and claim the first green/yellow candidate:
+If `kaola-workflow-claim.js` is available and `KAOLA_SESSION_ID` is set, run bootstrap:
 
 ```bash
 CLAIM_JS="${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js"
-CLASSIFIER_JS="${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-classifier.js"
 if [ -f "$CLAIM_JS" ] && [ -n "$KAOLA_SESSION_ID" ]; then
-  node "$CLAIM_JS" sweep
-
-  if [ "${KAOLA_WORKFLOW_OFFLINE:-0}" != "1" ]; then
-    node "$CLAIM_JS" watch-pr 2>/dev/null || true
-  fi
-
-  if [ -f "$CLASSIFIER_JS" ] && [ "${KAOLA_WORKFLOW_OFFLINE:-0}" != "1" ]; then
-    KAOLA_PICK=""; KAOLA_VERDICT=""
-    for ISSUE_N in $(gh issue list --state open --json number --jq '.[].number' 2>/dev/null); do
-      RESULT=$(node "$CLASSIFIER_JS" classify --issue "$ISSUE_N" 2>/dev/null)
-      VERDICT=$(node -e "try{process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).verdict)}catch(e){}" <<< "$RESULT" 2>/dev/null)
-      if [ "$VERDICT" = "green" ] || [ "$VERDICT" = "yellow" ]; then
-        KAOLA_PICK="$ISSUE_N"; KAOLA_VERDICT="$VERDICT"; break
-      fi
-    done
-    if [ -n "$KAOLA_PICK" ]; then
-      KAOLA_PROJ=$(node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-roadmap.js" project-name --issue "$KAOLA_PICK" 2>/dev/null || echo "issue-${KAOLA_PICK}")
-      KAOLA_SINK_FLAG=""
-      [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
-      node "$CLAIM_JS" claim --session "$KAOLA_SESSION_ID" --project "$KAOLA_PROJ" --issue "$KAOLA_PICK" $KAOLA_SINK_FLAG
-      if [ "$KAOLA_VERDICT" = "yellow" ]; then
-        mkdir -p "kaola-workflow/${KAOLA_PROJ}/.cache"
-        printf 'parallel-classifier: shared-infra warning for issue #%s\n' "$KAOLA_PICK" \
-          >> "kaola-workflow/${KAOLA_PROJ}/.cache/parallel-classifier.md"
-      fi
-    fi
-  fi
+  KAOLA_SINK_FLAG=""
+  [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
+  BOOTSTRAP_OUT=$(node "$CLAIM_JS" bootstrap \
+    --session "$KAOLA_SESSION_ID" \
+    --runtime claude \
+    $KAOLA_SINK_FLAG 2>/dev/null) || true
 fi
 ```
 
 If `KAOLA_SESSION_ID` is unset, the script is unavailable, or no candidate passes classify, skip this step and continue to Step 1.
-
-**Yellow Verdict Cache File**: When the classifier returns a `yellow` verdict (e.g., shared infrastructure overlap), a warning is appended to `kaola-workflow/{project}/.cache/parallel-classifier.md`. This file flags caution during planning and execution, reminding the phase team to coordinate or validate against other active sessions. The cache is persistent but non-blocking; phases continue normally, with heightened awareness of shared-infra impact.
 
 ## Startup Step 1 - Git Freshness
 

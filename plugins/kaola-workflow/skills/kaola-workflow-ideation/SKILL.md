@@ -7,6 +7,25 @@ description: Use when Phase 1 facts exist and Kaola-Workflow for Codex, also cal
 
 Phase 2 compares strategies. It does not write implementation code or reopen broad research unless Phase 1 has a specific gap.
 
+## Session Heartbeat
+
+If a session is active, ensure the background heartbeat ticker is running:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+[ -n "${KAOLA_SESSION_ID:-}" ] && {
+  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
+  if [ ! -f "$_TICKER_PID_FILE" ]; then
+    nohup node "$claim_script" ticker \
+      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
+    disown
+  fi
+}
+```
+
 ## Goal Contract
 
 Continue until Phase 2 has compared approaches, completed expert review,

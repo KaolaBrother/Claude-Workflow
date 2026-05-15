@@ -7,6 +7,25 @@ description: Use when Phase 3 plan exists and Kaola-Workflow for Codex, also cal
 
 Phase 4 implements the plan. Prefer the `tdd-guide` Codex agent role for assigned implementation tasks when subagents are available. Use the current Codex session as the fallback executor when session policy, availability, or user direction prevents delegation.
 
+## Session Heartbeat
+
+If a session is active, ensure the background heartbeat ticker is running:
+
+```bash
+claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
+if [ ! -f "$claim_script" ]; then
+  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+[ -n "${KAOLA_SESSION_ID:-}" ] && {
+  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
+  if [ ! -f "$_TICKER_PID_FILE" ]; then
+    nohup node "$claim_script" ticker \
+      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
+    disown
+  fi
+}
+```
+
 ## Goal Contract
 
 Continue until all Phase 3 tasks are complete, validation evidence is recorded

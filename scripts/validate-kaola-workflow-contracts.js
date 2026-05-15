@@ -61,6 +61,7 @@ assert(entry.policy && entry.policy.installation === 'AVAILABLE', 'kaola-workflo
 const skills = [
   'kaola-workflow-init',
   'kaola-workflow-next',
+  'kaola-workflow-next-pr',
   'kaola-workflow-research',
   'kaola-workflow-ideation',
   'kaola-workflow-plan',
@@ -78,6 +79,7 @@ for (const skill of skills) {
   assertIncludes(file, 'workflow-state.md');
 }
 
+assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdBootstrap');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'AGENTS.md');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'Do not create or edit CLAUDE.md');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'next_skill');
@@ -87,10 +89,17 @@ assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'generated p
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'strongest available expert model/profile');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'kaola-workflow-repair-state.js');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '.codex/plugins/cache');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'bootstrap');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '--runtime codex');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, '## Goal Contract');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, 'collision suffix');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, 'do not ask the user');
 assertNotIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, '_phase1-pending');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-research/SKILL.md`, '## Session Heartbeat');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-ideation/SKILL.md`, '## Session Heartbeat');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-plan/SKILL.md`, '## Session Heartbeat');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, '## Session Heartbeat');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-review/SKILL.md`, '## Session Heartbeat');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-ideation/SKILL.md`, 'autonomous strategy selection');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-ideation/SKILL.md`, 'Select the advisor-reviewed recommended approach internally');
 assertNotIncludes(`${pluginRoot}/skills/kaola-workflow-ideation/SKILL.md`, 'wait for user selection');
@@ -111,6 +120,9 @@ assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, 'GREEN');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-review/SKILL.md`, 'codex review');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'Documentation Docking');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'Commit And Push');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, '## Session Heartbeat');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'kaola-workflow-sink-pr.js');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'Session lifecycle');
 
 const repairScript = `${pluginRoot}/scripts/kaola-workflow-repair-state.js`;
 const simulateScript = `${pluginRoot}/scripts/simulate-kaola-workflow-walkthrough.js`;

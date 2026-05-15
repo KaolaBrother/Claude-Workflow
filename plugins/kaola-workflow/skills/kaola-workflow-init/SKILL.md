@@ -68,6 +68,7 @@ Add a concise `## Kaola-Workflow` section if none exists:
 - Verify relevant tests before claiming completion.
 - Kaola-Workflow agent profiles live in `.codex/agents/kaola-workflow/` and are
   wired by the managed block in `.codex/config.toml`.
+- Session lifecycle: `kaola-workflow-claim.js` manages claim (acquires lock, starts heartbeat), release (frees lock), and sweep (expires stale locks). Sessions heartbeat every 5 minutes via `ticker`; locks expire after 30 minutes of silence.
 
 ## Initial Roadmap Body
 

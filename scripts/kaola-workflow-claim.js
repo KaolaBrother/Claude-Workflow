@@ -89,6 +89,7 @@ function parseArgs(argv) {
     if (argv[i] === '--issue' && argv[i + 1]) { args.issue = parseInt(argv[++i], 10); continue; }
     if (argv[i] === '--branch' && argv[i + 1]) { args.branch = argv[++i]; continue; }
     if (argv[i] === '--sink' && argv[i + 1]) { args.sink = argv[++i]; continue; }
+    if (argv[i] === '--runtime' && argv[i + 1]) { args.runtime = argv[++i]; continue; }
   }
   return args;
 }
@@ -241,6 +242,8 @@ function validateClaimArgs(args) {
     assert(Number.isFinite(args.issue) && args.issue > 0, '--issue must be a positive integer');
   }
   assert(!args.sink || args.sink === 'merge' || args.sink === 'pr', '--sink must be "merge" or "pr"');
+  assert(!args.runtime || args.runtime === 'claude' || args.runtime === 'codex',
+    '--runtime must be "claude" or "codex"');
 }
 
 function buildLockData(args, machineId, now) {
@@ -256,7 +259,80 @@ function buildLockData(args, machineId, now) {
     sink: (args.sink === 'pr') ? 'pr' : 'merge',
     pr_url: null,
     pr_number: null,
+    runtime: args.runtime || 'claude',
   };
+}
+
+function listOpenIssues(cwd) {
+  if (OFFLINE) return [];
+  try {
+    const raw = execFileSync('gh', ['issue', 'list', '--state', 'open', '--json', 'number'], { cwd, encoding: 'utf8' });
+    return JSON.parse(raw).map(function(item) { return item.number; });
+  } catch (_) { return []; }
+}
+
+function pickFirstActionableIssue(classifierScript, issues) {
+  for (let i = 0; i < issues.length; i++) {
+    const N = issues[i];
+    try {
+      const raw = execFileSync(process.execPath, [classifierScript, 'classify', '--issue', String(N)], { encoding: 'utf8' });
+      const result = JSON.parse(raw);
+      if (result.verdict === 'green' || result.verdict === 'yellow') {
+        let proj = 'issue-' + N;
+        try {
+          const name = execFileSync(process.execPath, [path.join(path.dirname(classifierScript), 'kaola-workflow-roadmap.js'), 'project-name', '--issue', String(N)], { encoding: 'utf8' }).trim();
+          if (name) proj = name;
+        } catch (_) {}
+        return { pick: N, project: proj, verdict: result.verdict };
+      }
+    } catch (_) {}
+  }
+  return { pick: null };
+}
+
+function runBootstrapSweep(claimScript, cwd) {
+  try {
+    execFileSync(process.execPath, [claimScript, 'sweep'], { cwd, encoding: 'utf8' });
+  } catch (_) {}
+}
+
+function runBootstrapWatchPr(claimScript, cwd) {
+  if (OFFLINE) return;
+  try {
+    execFileSync(process.execPath, [claimScript, 'watch-pr'], { cwd, encoding: 'utf8' });
+  } catch (_) {}
+}
+
+function runBootstrapClassify(classifierScript, args) {
+  if (OFFLINE || !fs.existsSync(classifierScript)) return { pick: null };
+  const issues = listOpenIssues(getRoot());
+  return pickFirstActionableIssue(classifierScript, issues);
+}
+
+function runBootstrapClaim(claimScript, args, pick) {
+  assert(isSafeName(pick.project), 'classifier returned unsafe project name: ' + pick.project);
+  const claimArgs = ['claim', '--session', args.session, '--project', pick.project, '--issue', String(pick.pick), '--runtime', args.runtime || 'claude'];
+  if (args.sink) claimArgs.push('--sink', args.sink);
+  execFileSync(process.execPath, [claimScript, ...claimArgs], { encoding: 'utf8' });
+  if (pick.verdict === 'yellow') {
+    const cacheDir = path.join(getRoot(), 'kaola-workflow', pick.project, '.cache');
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.appendFileSync(path.join(cacheDir, 'parallel-classifier.md'), 'parallel-classifier: shared-infra warning for issue #' + pick.pick + '\n');
+  }
+  return pick;
+}
+
+function cmdBootstrap() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(args.session, '--session required for bootstrap');
+  const classifierScript = path.join(path.dirname(__filename), 'kaola-workflow-classifier.js');
+  const root = getRoot();
+  runBootstrapSweep(__filename, root);
+  runBootstrapWatchPr(__filename, root);
+  const pick = runBootstrapClassify(classifierScript, args);
+  if (!pick.pick) { process.exitCode = 1; return; }
+  runBootstrapClaim(__filename, args, pick);
+  process.stdout.write(JSON.stringify({ project: pick.project, issue: pick.pick, verdict: pick.verdict }) + '\n');
 }
 
 function cmdClaim() {
@@ -630,7 +706,7 @@ function cmdWatchPr() {
 
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|patch-branch|watch-pr>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|patch-branch|watch-pr|bootstrap>');
   if (sub === 'claim') return cmdClaim();
   if (sub === 'release') return cmdRelease();
   if (sub === 'heartbeat') return cmdHeartbeat();
@@ -639,6 +715,7 @@ function main() {
   if (sub === 'status') return cmdStatus();
   if (sub === 'patch-branch') return cmdPatchBranch();
   if (sub === 'watch-pr') return cmdWatchPr();
+  if (sub === 'bootstrap') return cmdBootstrap();
   throw new Error('unknown subcommand: ' + sub);
 }
 
