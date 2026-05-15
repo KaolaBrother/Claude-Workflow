@@ -408,17 +408,44 @@ exit 0
         assert(!log.includes('--title'), 'Case 5f: claim must not mutate issue title, got: ' + log);
       }
 
-      // Case 5g: locks are isolated by project — all claimed projects must still exist independently
+      // Case 5g: session lookup rehydrates from the lock, then workflow-state lease.
+      {
+        const case5gDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5g-'));
+        try {
+          execFileSync(process.execPath, [
+            claimScript, 'claim',
+            '--session', 'sess-plugin-5g',
+            '--project', 'plugin-session',
+            '--issue', '21',
+            '--runtime', 'codex'
+          ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+
+          const fromLock = execFileSync(process.execPath, [
+            claimScript, 'session', '--project', 'plugin-session'
+          ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } }).trim();
+          assert(fromLock === 'sess-plugin-5g', 'Case 5g-a: session lookup from lock must return sess-plugin-5g, got: ' + fromLock);
+
+          fs.unlinkSync(path.join(case5gDir, 'kaola-workflow', '.locks', 'plugin-session.lock'));
+          const fromState = execFileSync(process.execPath, [
+            claimScript, 'session', '--project', 'plugin-session'
+          ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } }).trim();
+          assert(fromState === 'sess-plugin-5g', 'Case 5g-b: session lookup from workflow-state must return sess-plugin-5g, got: ' + fromState);
+        } finally {
+          fs.rmSync(case5gDir, { recursive: true, force: true });
+        }
+      }
+
+      // Case 5h: locks are isolated by project — all claimed projects must still exist independently
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock')),
-        'Case 5g: project-alpha lock must still exist');
+        'Case 5h: project-alpha lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock')),
-        'Case 5g: project-beta lock must still exist');
+        'Case 5h: project-beta lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'issue-11.lock')),
-        'Case 5g: issue-11 lock must still exist');
+        'Case 5h: issue-11 lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'issue-12.lock')),
-        'Case 5g: issue-12 lock must still exist');
+        'Case 5h: issue-12 lock must still exist');
       assert(fs.existsSync(path.join(case5Dir, 'kaola-workflow', '.locks', 'project-label.lock')),
-        'Case 5g: project-label lock must still exist');
+        'Case 5h: project-label lock must still exist');
 
       const finalAlpha = JSON.parse(fs.readFileSync(
         path.join(case5Dir, 'kaola-workflow', '.locks', 'project-alpha.lock'), 'utf8'
@@ -426,7 +453,7 @@ exit 0
       const finalBeta = JSON.parse(fs.readFileSync(
         path.join(case5Dir, 'kaola-workflow', '.locks', 'project-beta.lock'), 'utf8'
       ));
-      assert(finalAlpha.runtime !== finalBeta.runtime, 'Case 5g: locks must have different runtime fields');
+      assert(finalAlpha.runtime !== finalBeta.runtime, 'Case 5h: locks must have different runtime fields');
     } finally {
       fs.rmSync(case5Dir, { recursive: true, force: true });
     }

@@ -1562,6 +1562,65 @@ exit 0
           }
         }
 
+        // 8K: session lookup rehydrates from lock first, then durable workflow-state lease
+        {
+          const epic8kTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8k-'));
+          try {
+            runClaim(epic8kTmp, 'sess-8k', 20, 'epic8k');
+
+            const r8kLock = spawnSync(process.execPath, [
+              claimScript, 'session', '--project', 'epic8k'
+            ], {
+              cwd: epic8kTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8kLock.status === 0, '8K-a: session lookup from lock must succeed, got ' + r8kLock.status + '\nstderr: ' + r8kLock.stderr);
+            assert(r8kLock.stdout.trim() === 'sess-8k', '8K-a: expected sess-8k from lock, got: ' + r8kLock.stdout);
+
+            const r8kOnly = spawnSync(process.execPath, [claimScript, 'session'], {
+              cwd: epic8kTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8kOnly.status === 0, '8K-b: unscoped single-session lookup must succeed, got ' + r8kOnly.status);
+            assert(r8kOnly.stdout.trim() === 'sess-8k', '8K-b: expected sess-8k from unscoped lookup, got: ' + r8kOnly.stdout);
+
+            fs.unlinkSync(path.join(epic8kTmp, 'kaola-workflow', '.locks', 'epic8k.lock'));
+            const r8kState = spawnSync(process.execPath, [
+              claimScript, 'session', '--project', 'epic8k'
+            ], {
+              cwd: epic8kTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8kState.status === 0, '8K-c: session lookup from workflow-state lease must succeed, got ' + r8kState.status + '\nstderr: ' + r8kState.stderr);
+            assert(r8kState.stdout.trim() === 'sess-8k', '8K-c: expected sess-8k from workflow-state lease, got: ' + r8kState.stdout);
+
+            const otherDir8k = path.join(epic8kTmp, 'kaola-workflow', 'epic8k-other');
+            fs.mkdirSync(otherDir8k, { recursive: true });
+            fs.writeFileSync(path.join(otherDir8k, 'workflow-state.md'), [
+              '# Kaola-Workflow State',
+              '',
+              '## Project',
+              'name: epic8k-other',
+              'status: active',
+              '',
+              '## Lease',
+              'session_id: sess-8k-other',
+              ''
+            ].join('\n'));
+            const r8kAmbiguous = spawnSync(process.execPath, [claimScript, 'session'], {
+              cwd: epic8kTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8kAmbiguous.status === 1, '8K-d: unscoped multi-session lookup must be ambiguous, got ' + r8kAmbiguous.status);
+          } finally {
+            fs.rmSync(epic8kTmp, { recursive: true, force: true });
+          }
+        }
+
         // 8I: bootstrap without a preexisting session id claims one issue;
         // a second fresh bootstrap skips the locked issue and claims the next.
         {
@@ -2382,7 +2441,7 @@ exit 0
       }
     }
 
-    // LOW-3: corpus-grep — every phase shim must contain liveness check
+    // LOW-3: corpus-grep — every phase shim must contain liveness and session rehydration checks
     {
       const shimPaths = [
         path.join(__dirname, '..', 'commands', 'kaola-workflow-phase1.md'),
@@ -2402,6 +2461,10 @@ exit 0
       for (const shimPath of shimPaths) {
         const shimContent = fs.readFileSync(shimPath, 'utf8');
         assert(shimContent.includes(LIVENESS_CANONICAL), 'LOW-3: missing liveness check in ' + path.basename(shimPath));
+        const hasSessionHydration =
+          shimContent.includes('node "$_CLAIM_JS" session --project "{project}"') ||
+          shimContent.includes('node "$claim_script" session');
+        assert(hasSessionHydration, 'LOW-3: missing session rehydration in ' + path.basename(shimPath));
       }
     }
 

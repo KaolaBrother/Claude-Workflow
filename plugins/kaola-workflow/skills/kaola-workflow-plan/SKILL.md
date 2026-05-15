@@ -9,12 +9,21 @@ Phase 3 turns the selected strategy into a dependency-safe plan. Do not edit pro
 
 ## Session Heartbeat
 
-If a session is active, ensure the background heartbeat ticker is running:
+If a session is active or recoverable, ensure the background heartbeat ticker is running:
 
 ```bash
 claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
 if [ ! -f "$claim_script" ]; then
   claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
+fi
+if [ -f "$claim_script" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
+  _KW_PROJECT_ARG="${KAOLA_PROJECT:-}"
+  if [ -n "$_KW_PROJECT_ARG" ]; then
+    KAOLA_SESSION_ID="$(node "$claim_script" session --project "$_KW_PROJECT_ARG" 2>/dev/null || true)"
+  else
+    KAOLA_SESSION_ID="$(node "$claim_script" session 2>/dev/null || true)"
+  fi
+  [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
 fi
 [ -n "${KAOLA_SESSION_ID:-}" ] && {
   _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"

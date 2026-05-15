@@ -30,13 +30,18 @@ kaola-workflow/{project}/phase5-review.md
 
 ## Session Heartbeat
 
-If a claim session is active, ensure the background heartbeat ticker is running:
+If a claim session is active or recoverable, ensure the background heartbeat ticker is running:
 
 ```bash
+_CLAIM_JS="${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js"
+if [ -f "$_CLAIM_JS" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
+  KAOLA_SESSION_ID="$(node "$_CLAIM_JS" session --project "{project}" 2>/dev/null || true)"
+  [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
+fi
 [ -n "${KAOLA_SESSION_ID:-}" ] && {
   _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
   if [ ! -f "$_TICKER_PID_FILE" ] || ! kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-    nohup node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" ticker \
+    nohup node "$_CLAIM_JS" ticker \
       --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
     disown
   fi

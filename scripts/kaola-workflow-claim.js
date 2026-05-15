@@ -139,6 +139,69 @@ function readSessionFile(root, sessionId) {
   }
 }
 
+function readStateSession(root, project) {
+  const stateFile = path.join(root, 'kaola-workflow', project, 'workflow-state.md');
+  try {
+    const content = fs.readFileSync(stateFile, 'utf8');
+    if (!/^status:\s*active\s*$/m.test(content)) return null;
+    const sessionId = field(content, 'session_id');
+    return isSafeName(sessionId) ? sessionId : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function sessionForProject(root, project) {
+  assert(isSafeName(project), '--project must be a simple folder name with no path separators');
+  try {
+    const raw = fs.readFileSync(lockPath(root, project), 'utf8');
+    const lock = JSON.parse(raw);
+    if (isSafeName(lock.session_id)) return lock.session_id;
+  } catch (_) {}
+  return readStateSession(root, project);
+}
+
+function activeStateSessions(root) {
+  const workflowDir = path.join(root, 'kaola-workflow');
+  if (!fs.existsSync(workflowDir)) return [];
+  return fs.readdirSync(workflowDir, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .filter(entry => entry.name !== 'archive' && !entry.name.startsWith('.'))
+    .map(entry => {
+      const stateFile = path.join(workflowDir, entry.name, 'workflow-state.md');
+      try {
+        const content = fs.readFileSync(stateFile, 'utf8');
+        if (!/^status:\s*active\s*$/m.test(content)) return null;
+        const sessionId = field(content, 'session_id');
+        return isSafeName(sessionId) ? sessionId : null;
+      } catch (_) {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function cmdSession() {
+  const args = parseArgs(process.argv.slice(3));
+  const root = getRoot();
+  let sessionId = null;
+
+  if (args.project) {
+    sessionId = sessionForProject(root, args.project);
+  } else {
+    const sessions = new Set(
+      readLockFiles(root)
+        .map(lock => lock.session_id)
+        .filter(isSafeName)
+        .concat(activeStateSessions(root))
+    );
+    if (sessions.size === 1) sessionId = Array.from(sessions)[0];
+  }
+
+  if (!sessionId) { process.exitCode = 1; return; }
+  process.stdout.write(sessionId + '\n');
+}
+
 function shouldSweep(lock) {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   return new Date(lock.expires).getTime() < cutoff &&
@@ -790,13 +853,14 @@ function cmdWatchPr() {
 
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|patch-branch|watch-pr|bootstrap>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|patch-branch|watch-pr|bootstrap>');
   if (sub === 'claim') return cmdClaim();
   if (sub === 'release') return cmdRelease();
   if (sub === 'heartbeat') return cmdHeartbeat();
   if (sub === 'ticker') return cmdTicker();
   if (sub === 'sweep') return cmdSweep();
   if (sub === 'status') return cmdStatus();
+  if (sub === 'session') return cmdSession();
   if (sub === 'patch-branch') return cmdPatchBranch();
   if (sub === 'watch-pr') return cmdWatchPr();
   if (sub === 'bootstrap') return cmdBootstrap();

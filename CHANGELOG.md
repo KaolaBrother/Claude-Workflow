@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.3 - 2026-05-15 (Claude Code) / Codex 1.1.3 - 2026-05-15
+
+### Fixed
+
+- **Durable session lease recovery**: added `kaola-workflow-claim.js session` so phase commands and Codex skills can rehydrate `KAOLA_SESSION_ID` from the live lock or active `workflow-state.md` lease before starting the heartbeat ticker. This closes the residual gap where later sessions/phases could lose the bootstrap environment variable and stop refreshing the in-progress claim.
+- **Phase heartbeat bootstraps**: all six Claude phase commands and all six Codex phase skills now recover the session before checking ticker liveness.
+
+### Tests
+
+- Added walkthrough regression coverage for lock-backed and workflow-state-backed session lookup in both runtime surfaces.
+- Extended the phase-shim corpus check to require session rehydration alongside ticker liveness checks.
+
 ## 3.1.2 - 2026-05-15 (Claude Code) / Codex 1.1.2 - 2026-05-15
 
 ### Added — prompt-level Cross-Session Staging Guard (both runtimes)
