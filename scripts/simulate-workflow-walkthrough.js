@@ -2,7 +2,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync, spawnSync } = require('child_process');
+const { execFileSync, spawn, spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const project = 'simulated-feature';
@@ -118,7 +118,13 @@ function assertRepair(workdir, expectedCommand, expectedPhase) {
   assertFileIncludes(path.join(workdir, 'kaola-workflow', project, 'workflow-state.md'), 'last_result: state_repaired_from_artifacts');
 }
 
-function main() {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const waitExit = (child, timeoutMs) => new Promise((resolve, reject) => {
+  const t = setTimeout(() => reject(new Error('exit timeout')), timeoutMs);
+  child.on('exit', (code, signal) => { clearTimeout(t); resolve({ code, signal }); });
+});
+
+async function main() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-walkthrough-'));
   try {
     const emptyRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-empty-'));
@@ -1572,7 +1578,7 @@ exit 0
           assert(pidContent9b1 === String(process.pid), '9B1: PID file must not be overwritten, expected ' + process.pid + ' got ' + pidContent9b1);
         }
 
-        // ── Test 9B2: ticker reaps stale PID file and creates new one ──
+        // ── Test 9B2: ticker reaps stale PID file and creates new one (async liveness) ──
         {
           const subTmp = path.join(epic9Tmp, '9b2');
           const binDir = path.join(subTmp, 'bin');
@@ -1583,30 +1589,52 @@ exit 0
 exit 0
 `);
 
-          // Write lock file (no issue/comment so tick() exits fast)
+          // Write lock file with null issue_number; setTimeout keeps the event loop alive
           writeLock(subTmp, 'proj9b2', 'sess-9b2', { issue_number: null, claim_comment_id: null });
 
           // Write stale PID file with nonexistent PID
           const pidFile9b2 = path.join(subTmp, 'kaola-workflow', '.tickers', 'sess-9b2.pid');
           fs.writeFileSync(pidFile9b2, '99999999\n');
 
-          // Spawn ticker — should reap stale PID, write its own PID, then find no matching lock
-          // (or tick once and exit). Use short timeout.
-          const r9b2 = spawnSync(process.execPath, [
+          // Spawn ticker asynchronously so we can probe it while it lives
+          const child9b2 = spawn(process.execPath, [
             claimScript9, 'ticker',
             '--session', 'sess-9b2',
             '--interval', '999999999'
           ], {
             cwd: subTmp,
-            encoding: 'utf8',
-            timeout: 3000,
             env: { ...process.env, PATH: binDir + path.delimiter + PATH, HOME: subTmp }
           });
 
-          // Ticker either exits naturally (no lock match → exits 0) or is killed by timeout
-          // Either way, the stale PID must have been reaped (overwritten or deleted)
-          const pidContentAfter9b2 = fs.existsSync(pidFile9b2) ? fs.readFileSync(pidFile9b2, 'utf8').trim() : '';
-          assert(pidContentAfter9b2 !== '99999999', '9B2: stale PID file must be reaped (overwritten or deleted), still contains 99999999');
+          try {
+            // Poll until PID file changes from '99999999' (100ms × 30 = 3s total)
+            let newPid9b2 = null;
+            for (let i = 0; i < 30; i++) {
+              await sleep(100);
+              if (!fs.existsSync(pidFile9b2)) break;
+              const raw = fs.readFileSync(pidFile9b2, 'utf8').trim();
+              if (raw !== '99999999') {
+                const p = parseInt(raw, 10);
+                if (Number.isFinite(p) && p > 0) { newPid9b2 = p; break; }
+              }
+            }
+            assert(newPid9b2 !== null, '9B2: stale PID file must be reaped and replaced with live PID within 3s');
+
+            // Liveness assertion: process.kill(pid, 0) throws ESRCH if process is dead
+            try {
+              process.kill(newPid9b2, 0);
+            } catch (e) {
+              assert(false, '9B2: ticker process ' + newPid9b2 + ' is not alive after PID reap: ' + e.message);
+            }
+
+            // Send SIGTERM; the claim.js SIGTERM handler calls process.exit(0) after unlinking PID file
+            process.kill(newPid9b2, 'SIGTERM');
+            const result9b2 = await waitExit(child9b2, 3000);
+            assert(result9b2.code === 0, '9B2: ticker did not exit cleanly after SIGTERM, code=' + result9b2.code);
+            assert(!fs.existsSync(pidFile9b2), '9B2: PID file not removed after SIGTERM');
+          } finally {
+            try { child9b2.kill('SIGKILL'); } catch (_) {}
+          }
         }
 
         // ── Test 9C1: sweep skips lock with fresh remote comment ──
@@ -1717,8 +1745,68 @@ exit 0
           assert(callLog9dContent.includes('--remove-assignee'), '9D: release must call --remove-assignee @me, got: ' + callLog9dContent);
         }
 
+        // ── Test LOW-2 SIGINT: ticker removes PID file on SIGINT ──
+        await (async function test9B_SIGINT() {
+          const subTmpSIGINT = fs.mkdtempSync(path.join(epic9Tmp, 'sigint-'));
+          try {
+            const binDir = path.join(subTmpSIGINT, 'bin');
+            makeKwDirs(subTmpSIGINT);
+            fs.mkdirSync(path.join(subTmpSIGINT, 'kaola-workflow', '.tickers'), { recursive: true });
+            makeGhShim(binDir, '#!/bin/sh\nexit 0\n');
+            writeLock(subTmpSIGINT, 'proj-sigint', 'sess-sigint', { issue_number: null, claim_comment_id: null });
+            const pidFileSIGINT = path.join(subTmpSIGINT, 'kaola-workflow', '.tickers', 'sess-sigint.pid');
+            const child = spawn(process.execPath, [claimScript9, 'ticker', '--session', 'sess-sigint', '--interval', '999999999'], {
+              cwd: subTmpSIGINT,
+              env: { ...process.env, PATH: binDir + path.delimiter + PATH, HOME: subTmpSIGINT }
+            });
+            try {
+              let childPid = null;
+              for (let i = 0; i < 30; i++) {
+                await sleep(100);
+                if (fs.existsSync(pidFileSIGINT)) {
+                  const raw = fs.readFileSync(pidFileSIGINT, 'utf8').trim();
+                  const p = parseInt(raw, 10);
+                  if (Number.isFinite(p) && p > 0) { childPid = p; break; }
+                }
+              }
+              assert(childPid !== null, 'SIGINT test: ticker did not write live PID within 3s');
+              process.kill(childPid, 'SIGINT');
+              const { code } = await waitExit(child, 3000);
+              assert(code === 0, 'SIGINT test: ticker exited with code ' + code + ', expected 0');
+              assert(!fs.existsSync(pidFileSIGINT), 'SIGINT test: PID file not removed after SIGINT');
+            } finally {
+              try { child.kill('SIGKILL'); } catch (_) {}
+            }
+          } finally {
+            fs.rmSync(subTmpSIGINT, { recursive: true, force: true });
+          }
+        })();
+
       } finally {
         fs.rmSync(epic9Tmp, { recursive: true, force: true });
+      }
+    }
+
+    // LOW-3: corpus-grep — every phase shim must contain liveness check
+    {
+      const shimPaths = [
+        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase1.md'),
+        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase2.md'),
+        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase3.md'),
+        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase4.md'),
+        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase5.md'),
+        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase6.md'),
+        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-research', 'SKILL.md'),
+        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-execute', 'SKILL.md'),
+        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-ideation', 'SKILL.md'),
+        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-plan', 'SKILL.md'),
+        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-review', 'SKILL.md'),
+        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md'),
+      ];
+      const LIVENESS_CANONICAL = 'kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null';
+      for (const shimPath of shimPaths) {
+        const shimContent = fs.readFileSync(shimPath, 'utf8');
+        assert(shimContent.includes(LIVENESS_CANONICAL), 'LOW-3: missing liveness check in ' + path.basename(shimPath));
       }
     }
 
@@ -1728,4 +1816,4 @@ exit 0
   }
 }
 
-main();
+main().catch(e => { console.error(e); process.exitCode = 1; });

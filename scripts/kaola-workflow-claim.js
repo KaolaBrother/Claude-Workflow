@@ -180,8 +180,8 @@ function updateLeaseInPlace(stateFile, lockData) {
   if (!/^## Lease\s*$/m.test(content)) { process.stderr.write('updateLeaseInPlace: ## Lease section missing in ' + stateFile + '\n'); return; }
 
   const updated = content
-    .replace(/^expires:.*$/m, 'expires: ' + lockData.expires)
-    .replace(/^last_heartbeat:.*$/m, 'last_heartbeat: ' + lockData.last_heartbeat);
+    .replace(/^expires:.*$/gm, 'expires: ' + lockData.expires)
+    .replace(/^last_heartbeat:.*$/gm, 'last_heartbeat: ' + lockData.last_heartbeat);
 
   fs.writeFileSync(stateFile, updated);
 }
@@ -225,10 +225,10 @@ function handleTiebreakerYield(root, args, tbResult) {
     const branches = execFileSync('git', ['branch', '--list', 'workflow/issue-' + args.issue + '-*'], { encoding: 'utf8' }).trim();
     if (branches) {
       const branch = branches.split('\n')[0].trim().replace(/^\*\s*/, '');
-      execFileSync('git', ['push', 'origin', branch], { encoding: 'utf8' });
+      execFileSync('git', ['push', 'origin', '--', branch], { encoding: 'utf8' });
       postReleaseComment(args.issue, args.session, ':branch pushed → ' + branch);
     }
-  } catch (_) {}
+  } catch (e) { process.stderr.write('adoption push failed: ' + e.message + '\n'); }
   process.exitCode = 1;
   return true;
 }
@@ -456,7 +456,7 @@ function acquirePidFile(pidPath) {
   }
   fs.writeSync(fd, String(process.pid) + '\n');
   fs.closeSync(fd);
-  return fd;
+  return true;
 }
 
 function runTick(tickCtx) {
@@ -464,7 +464,7 @@ function runTick(tickCtx) {
   const tickCount = tickCtx.tickCountRef.value;
   const locks = readLockFiles(tickCtx.root);
   const match = locks.find(function(l) { return l.session_id === tickCtx.session; });
-  if (!match || match.session_id !== tickCtx.session) {
+  if (!match) {
     try { fs.unlinkSync(tickCtx.pidPath); } catch (_) {}
     process.exit(0);
     return;
@@ -491,7 +491,7 @@ function runTick(tickCtx) {
     }
   }
 
-  if (tickCount === 1 && match.claim_comment_id && match.issue_number) {
+  if (tickCount === 1 && match.claim_comment_id && Number.isFinite(match.issue_number)) {
     const tbResult = runTiebreakerCheck(match.issue_number, tickCtx.session, match.claim_comment_id);
     if (tbResult !== 'stay' && tbResult.yield) {
       releaseSession(tickCtx.root, tickCtx.session, 'ticker-late-yield');
@@ -520,10 +520,9 @@ function cmdTicker() {
   fs.mkdirSync(tickersDir, { recursive: true });
   const pidPath = path.join(tickersDir, args.session + '.pid');
   if (acquirePidFile(pidPath) === null) return;
-  process.on('SIGTERM', function() {
-    try { fs.unlinkSync(pidPath); } catch (_) {}
-    process.exit(0);
-  });
+  function gracefulShutdown() { try { fs.unlinkSync(pidPath); } catch (_) {} process.exit(0); }
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT',  gracefulShutdown);
   const tickCtx = { root, session: args.session, pidPath, intervalMs, tickCountRef: { value: 0 } };
   runTick(tickCtx);
 }

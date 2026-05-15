@@ -32,7 +32,7 @@ If a claim session is active, ensure the background heartbeat ticker is running:
 ```bash
 [ -n "${KAOLA_SESSION_ID:-}" ] && {
   _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
-  if [ ! -f "$_TICKER_PID_FILE" ]; then
+  if [ ! -f "$_TICKER_PID_FILE" ] || ! kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
     nohup node "${CLAUDE_PLUGIN_ROOT:-./}/scripts/kaola-workflow-claim.js" ticker \
       --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
     disown
