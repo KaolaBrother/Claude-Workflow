@@ -3233,6 +3233,123 @@ exit 0
       }
     }
 
+    // Epic Case 14a — Priority label ranking: P0 beats P1 beats P2 beats P3
+    {
+      const claimScript14a = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+      const tmp14a = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic14a-'));
+      try {
+        execFileSync('git', ['init', '-q', '-b', 'main', tmp14a]);
+        const bin14a = path.join(tmp14a, 'bin');
+        fs.mkdirSync(bin14a, { recursive: true });
+        const gh14a = path.join(bin14a, 'gh');
+        fs.writeFileSync(gh14a, `#!/bin/sh
+if [ "$1" = "issue" ] && [ "$2" = "list" ]; then
+  printf '[{"number":301,"title":"p3 issue","state":"OPEN","labels":[{"name":"P3"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/301"},{"number":302,"title":"p2 issue","state":"OPEN","labels":[{"name":"P2"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/302"},{"number":303,"title":"p1 issue","state":"OPEN","labels":[{"name":"P1"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/303"},{"number":304,"title":"p0 issue","state":"OPEN","labels":[{"name":"P0"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/304"},{"number":305,"title":"queued issue","state":"OPEN","labels":[{"name":"workflow:queued"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/305"}]'
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  num="$3"
+  printf '{"number":%s,"title":"issue %s","body":"","labels":[],"state":"OPEN"}' "$num" "$num"
+  exit 0
+fi
+if [ "$1" = "label" ] && [ "$2" = "create" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  echo "https://github.com/test/repo/issues/$3#issuecomment-$3"
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then printf '[]'; exit 0; fi
+exit 0
+`);
+        fs.chmodSync(gh14a, 0o755);
+        const env14a = { ...process.env, PATH: bin14a + path.delimiter + (process.env.PATH || ''), HOME: tmp14a };
+
+        const first14a = JSON.parse(execFileSync(process.execPath, [
+          claimScript14a, 'startup',
+          '--session', 'sess-14a',
+          '--runtime', 'codex'
+        ], { cwd: tmp14a, encoding: 'utf8', env: env14a }).trim());
+
+        assert(first14a.issue === 305,
+          '14a: workflow:queued issue 305 must beat P0 issue 304, got: ' + JSON.stringify(first14a));
+        assert(Array.isArray(first14a.ranking) && first14a.ranking.length === 5,
+          '14a: ranking must contain all 5 issues, got: ' + JSON.stringify(first14a.ranking));
+        const r304 = first14a.ranking.find(function(r) { return r.issue === 304; });
+        assert(r304 && r304.tier === 0 && r304.priority_label === 'P0' && r304.override_label === null,
+          '14a: ranking entry for issue 304 must be tier 0/P0, got: ' + JSON.stringify(r304));
+        const r301 = first14a.ranking.find(function(r) { return r.issue === 301; });
+        assert(r301 && r301.tier === 3 && r301.priority_label === 'P3' && r301.override_label === null,
+          '14a: ranking entry for issue 301 must be tier 3/P3, got: ' + JSON.stringify(r301));
+        const r305 = first14a.ranking.find(function(r) { return r.issue === 305; });
+        assert(r305 && r305.tier === 4 && r305.priority_label === null && r305.override_label === null,
+          '14a: ranking entry for issue 305 (queued, no P-label) must be tier 4/null, got: ' + JSON.stringify(r305));
+      } finally {
+        fs.rmSync(tmp14a, { recursive: true, force: true });
+      }
+    }
+
+    // Epic Case 14b — Top-tier override: hotfix label beats P0
+    {
+      const claimScript14b = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+      const tmp14b = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic14b-'));
+      try {
+        execFileSync('git', ['init', '-q', '-b', 'main', tmp14b]);
+        const bin14b = path.join(tmp14b, 'bin');
+        fs.mkdirSync(bin14b, { recursive: true });
+        const gh14b = path.join(bin14b, 'gh');
+        fs.writeFileSync(gh14b, `#!/bin/sh
+if [ "$1" = "issue" ] && [ "$2" = "list" ]; then
+  printf '[{"number":401,"title":"hotfix issue","state":"OPEN","labels":[{"name":"hotfix"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/401"},{"number":402,"title":"p0 issue","state":"OPEN","labels":[{"name":"P0"}],"updatedAt":"2026-05-15T00:00:00Z","url":"https://github.com/test/repo/issues/402"}]'
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  num="$3"
+  printf '{"number":%s,"title":"issue %s","body":"","labels":[],"state":"OPEN"}' "$num" "$num"
+  exit 0
+fi
+if [ "$1" = "label" ] && [ "$2" = "create" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then exit 0; fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  echo "https://github.com/test/repo/issues/$3#issuecomment-$3"
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+if [ "$1" = "api" ]; then printf '[]'; exit 0; fi
+exit 0
+`);
+        fs.chmodSync(gh14b, 0o755);
+        // Write project-local config declaring 'hotfix' as a top-tier label
+        fs.mkdirSync(path.join(tmp14b, 'kaola-workflow'), { recursive: true });
+        fs.writeFileSync(path.join(tmp14b, 'kaola-workflow', 'config.json'),
+          JSON.stringify({ priority_top_tier_labels: ['hotfix'] }));
+        const env14b = { ...process.env, PATH: bin14b + path.delimiter + (process.env.PATH || ''), HOME: tmp14b };
+
+        const first14b = JSON.parse(execFileSync(process.execPath, [
+          claimScript14b, 'startup',
+          '--session', 'sess-14b',
+          '--runtime', 'codex'
+        ], { cwd: tmp14b, encoding: 'utf8', env: env14b }).trim());
+
+        assert(first14b.issue === 401,
+          '14b: hotfix issue 401 must beat P0 issue 402, got: ' + JSON.stringify(first14b));
+        const r401 = first14b.ranking.find(function(r) { return r.issue === 401; });
+        assert(r401 && r401.override_label === 'hotfix' && r401.priority_label === null,
+          '14b: ranking entry for issue 401 must have override_label=hotfix, priority_label=null, got: ' + JSON.stringify(r401));
+        const r402 = first14b.ranking.find(function(r) { return r.issue === 402; });
+        assert(r402 && r402.priority_label === 'P0' && r402.override_label === null,
+          '14b: ranking entry for issue 402 must have priority_label=P0, override_label=null, got: ' + JSON.stringify(r402));
+      } finally {
+        fs.rmSync(tmp14b, { recursive: true, force: true });
+      }
+    }
+
     // coordRoot precursor sub-case: validates getCoordRoot() across primary and linked worktrees
     {
       const coordTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-coordroot-'));

@@ -9,6 +9,7 @@ const OFFLINE = process.env.KAOLA_WORKFLOW_OFFLINE === '1';
 const CLAIM_LABEL = 'workflow:in-progress';
 const RECENT_HEARTBEAT_MS = 30 * 60 * 1000;
 const RECENT_CLAUDE_SESSION_MS = 30 * 60 * 1000;
+const PRIORITY_TIER_BY_LABEL = { P0: 0, P1: 1, P2: 2, P3: 3 };
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
@@ -918,11 +919,49 @@ function issueHasLabel(issue, labelName) {
   return issueLabelNames(issue).includes(labelName);
 }
 
-function sortIssueRecords(issues) {
+function readPriorityConfig(root) {
+  function safeReadLabels(filePath) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+      const arr = cfg.priority_top_tier_labels;
+      if (Array.isArray(arr)) return arr.filter(function(x) { return typeof x === 'string' && x.length > 0; });
+      return [];
+    } catch (_) { return []; }
+  }
+  const globalCfgPath = path.join(os.homedir(), '.config', 'kaola-workflow', 'config.json');
+  const localCfgPath = path.join(root, 'kaola-workflow', 'config.json');
+  return safeReadLabels(globalCfgPath).concat(safeReadLabels(localCfgPath));
+}
+
+function parsePriorityTier(issue, topTierLabels) {
+  const labels = issueLabelNames(issue);
+  for (let i = 0; i < labels.length; i++) {
+    if (topTierLabels.indexOf(labels[i]) !== -1) {
+      return { tier: 0, priority_label: null, override_label: labels[i] };
+    }
+  }
+  let minTier = 4;
+  let minLabel = null;
+  for (let i = 0; i < labels.length; i++) {
+    const t = PRIORITY_TIER_BY_LABEL[labels[i]];
+    if (t !== undefined && t < minTier) {
+      minTier = t;
+      minLabel = labels[i];
+    }
+  }
+  return { tier: minTier, priority_label: minLabel, override_label: null };
+}
+
+function sortIssueRecords(issues, opts) {
+  // opts.topTierLabels: labels forced to tier 0; omit opts for backward-compat (all tier 4)
+  const topTierLabels = (opts && Array.isArray(opts.topTierLabels)) ? opts.topTierLabels : [];
   return issues.slice().sort(function(a, b) {
     const aq = issueHasLabel(a, 'workflow:queued') ? 0 : 1;
     const bq = issueHasLabel(b, 'workflow:queued') ? 0 : 1;
     if (aq !== bq) return aq - bq;
+    const at = parsePriorityTier(a, topTierLabels).tier;
+    const bt = parsePriorityTier(b, topTierLabels).tier;
+    if (at !== bt) return at - bt;
     return Number(a.number || 0) - Number(b.number || 0);
   });
 }
@@ -1178,12 +1217,20 @@ function cmdStartup() {
     '--runtime must be "claude" or "codex"');
 
   const root = getRoot();
+  const topTierLabels = readPriorityConfig(root);
   const coordRoot = getCoordRoot();
   if (process.env.KAOLA_KERNEL_SESSION_SKIP !== '1') enforcePlatformSessionOrExit(args.session, coordRoot, args);
   const classifierScript = path.join(path.dirname(__filename), 'kaola-workflow-classifier.js');
   const issueFetch = fetchOpenIssueRecords(root);
+  const sortedIssues = issueFetch.issues.length > 0
+    ? sortIssueRecords(issueFetch.issues, { topTierLabels })
+    : issueFetch.issues;
+  const ranking = sortedIssues.map(function(issue) {
+    const t = parsePriorityTier(issue, topTierLabels);
+    return { issue: Number(issue.number), tier: t.tier, priority_label: t.priority_label, override_label: t.override_label };
+  });
   const sync = issueFetch.status === 'ok'
-    ? syncIssuesToRoadmap(root, issueFetch.issues)
+    ? syncIssuesToRoadmap(root, sortedIssues)
     : (issueFetch.status === 'offline'
       ? { issue_sync: 'offline', roadmap_sync: 'offline', created: 0, updated: 0 }
       : { issue_sync: 'failed', roadmap_sync: 'skipped', created: 0, updated: 0 });
@@ -1207,13 +1254,14 @@ function cmdStartup() {
       verdict: 'owned',
       claim: 'owned',
       skipped: skipped,
-      blocked: blocked
+      blocked: blocked,
+      ranking: ranking
     });
     process.stdout.write(JSON.stringify(receipt) + '\n');
     return;
   }
 
-  const pick = runStartupClaimFirstAvailable(__filename, classifierScript, args, issueFetch.issues, skipped, blocked);
+  const pick = runStartupClaimFirstAvailable(__filename, classifierScript, args, sortedIssues, skipped, blocked);
   if (!pick.pick) {
     const receipt = writeStartupReceipt(coordRoot, args.session, {
       runtime: args.runtime || 'claude',
@@ -1227,7 +1275,8 @@ function cmdStartup() {
       verdict: 'none',
       claim: 'none',
       skipped: skipped,
-      blocked: blocked
+      blocked: blocked,
+      ranking: ranking
     });
     process.stderr.write('startup: no unclaimed work available for session ' + args.session + '\n');
     process.stdout.write(JSON.stringify(receipt) + '\n');
@@ -1247,7 +1296,8 @@ function cmdStartup() {
     verdict: pick.verdict,
     claim: 'acquired',
     skipped: skipped,
-    blocked: blocked
+    blocked: blocked,
+    ranking: ranking
   });
   process.stdout.write(JSON.stringify(receipt) + '\n');
 }

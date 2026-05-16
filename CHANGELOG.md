@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added — Startup Priority Label Ranking (issue #35)
+
+- `startup` now ranks open issues by P0/P1/P2/P3 GitHub labels before claiming (P0 highest, tier 0). Issues without priority labels are treated as tier 4 (lowest). Startup receipt includes a `ranking` array listing `{ issue, tier, priority_label, override_label }` for every candidate issue.
+- Two-layer priority config: global `~/.config/kaola-workflow/config.json` and project-local `<repo>/kaola-workflow/config.json` may both supply `priority_top_tier_labels` arrays; the union of both arrays forces any matching label to tier 0, overriding P-label ranking. `priority_label` is `null` when an override label wins.
+- Sort key order: `workflow:queued` label always wins first; then priority tier (0=P0 through 3=P3, 4=unlabeled); then issue number ascending.
+
 ### Fixed — Phase 6 Archive Automation And Orphaned Project GC (issue #34)
 
 Three archive-related bugs fixed with new `cmdFinalize` subcommand and improved sweep second pass:

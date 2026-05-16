@@ -342,6 +342,30 @@ Exact file-path overlap returns `red`, including shared-infrastructure files suc
 
 When an issue receives a `yellow` verdict (shared infrastructure warning), a cache file is written to `kaola-workflow/{project}/.cache/parallel-classifier.md` to flag the caution for the phase team.
 
+### Startup Issue Priority Ranking
+
+When `startup` selects the next issue to claim, it sorts candidates by the following keys in order:
+
+1. **`workflow:queued` label** — queued issues always win, regardless of priority tier.
+2. **Priority tier** — P0 (highest) → P1 → P2 → P3 → unlabeled (lowest). Determined by GitHub label names.
+3. **Issue number** — ascending (lowest number wins among equal-priority issues).
+
+A `ranking` array is included in every startup receipt, listing `{ issue, tier, priority_label, override_label }` for all candidate issues.
+
+**Top-tier override labels** — any label listed in `priority_top_tier_labels` is forced to tier 0, overriding P-label ranking. When an override label fires, `priority_label` is `null` and `override_label` is the matched label name.
+
+Configure top-tier labels in either config layer (union of both arrays applies):
+
+```json
+// ~/.config/kaola-workflow/config.json  (global)
+// <repo>/kaola-workflow/config.json     (project-local)
+{
+  "priority_top_tier_labels": ["hotfix", "Engine Showcase Gap"]
+}
+```
+
+Both config files are read-only on startup; missing or malformed files silently return an empty label list.
+
 ### PR Sink
 
 Use `/workflow-next-pr` instead of `/workflow-next` when Phase 6 should open a GitHub PR and wait for merge rather than performing a local fast-forward merge.
