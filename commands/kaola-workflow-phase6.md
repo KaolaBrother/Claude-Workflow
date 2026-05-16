@@ -300,6 +300,20 @@ evidence such as:
 no public behavior, API, setup, architecture, roadmap, or docs impact
 ```
 
+```bash
+# Resolve linked worktree path for this session
+_COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
+if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
+_LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/{project}.lock"
+ACTIVE_WORKTREE_PATH=""
+if [ -f "$_LOCK_FILE" ]; then
+  ACTIVE_WORKTREE_PATH="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
+fi
+[ -z "$ACTIVE_WORKTREE_PATH" ] && ACTIVE_WORKTREE_PATH="$(pwd)"
+```
+
+Invoke `doc-updater` with changed files, checklist, and `Working directory: ${ACTIVE_WORKTREE_PATH}`.
+
 Write agent output to:
 
 ```text
@@ -509,6 +523,35 @@ fi
 If either check fails, do not stage; release the project under another lease,
 or coordinate manually. Do not attempt to bypass this guard.
 
+## Step 8a - Artifact Mirror
+
+Before staging, mirror Phase 6 artifacts from the main worktree into the linked worktree (if active):
+
+```bash
+# Artifact mirror: copy Phase 6 artifacts from main worktree to linked worktree.
+# Mirror MUST run after all Phase 6 artifact writes.
+_COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
+if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
+_LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/{project}.lock"
+ACTIVE_WORKTREE_PATH="$(pwd)"
+if [ -f "$_LOCK_FILE" ]; then
+  _WT="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
+  [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
+fi
+if [ "$ACTIVE_WORKTREE_PATH" != "$(pwd)" ]; then
+  mkdir -p "$ACTIVE_WORKTREE_PATH/kaola-workflow/{project}/"
+  cp -R "kaola-workflow/{project}/." "$ACTIVE_WORKTREE_PATH/kaola-workflow/{project}/"
+  git status --porcelain | while IFS= read -r line; do
+    f="${line:3}"
+    case "$f" in kaola-workflow/*) continue;; esac
+    if [ -f "$(pwd)/$f" ]; then
+      mkdir -p "$ACTIVE_WORKTREE_PATH/$(dirname "$f")"
+      cp "$(pwd)/$f" "$ACTIVE_WORKTREE_PATH/$f"
+    fi
+  done
+fi
+```
+
 ## Step 8 - Commit Gate
 
 The sink must only receive committed work. Before dispatching to `sink-merge`
@@ -519,10 +562,18 @@ conventional commit on the workflow branch.
 Minimum gate:
 
 ```bash
-git status --short
-git add <approved-files-only>
-git commit -m "chore: finalize {project}"
-git status --short
+_COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
+if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
+_LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/{project}.lock"
+ACTIVE_WORKTREE_PATH="$(pwd)"
+if [ -f "$_LOCK_FILE" ]; then
+  _WT="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
+  [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
+fi
+git -C "$ACTIVE_WORKTREE_PATH" status --short
+git -C "$ACTIVE_WORKTREE_PATH" add <approved-files-only>
+git -C "$ACTIVE_WORKTREE_PATH" commit -m "chore: finalize {project}"
+git -C "$ACTIVE_WORKTREE_PATH" status --short
 ```
 
 If there is nothing to commit, verify the branch already contains the final

@@ -390,7 +390,7 @@ async function main() {
       );
 
       // Step 1 — Claim
-      const sessionId = 'test-session-' + Date.now();
+      const sessionId = 'a1000000-0000-4000-a000-000000000001';
       const claimResult = execFileSync(process.execPath, [
         path.join(root, 'scripts/kaola-workflow-claim.js'),
         'claim', '--session', sessionId, '--project', 'epic-test-project', '--issue', '3'
@@ -2370,7 +2370,7 @@ exit 0
 `);
 
           const stale25h = new Date(Date.now() - 25 * 3600 * 1000).toISOString();
-          writeLock(subTmp, 'proj9c1', 'sess-9c1', {
+          writeLock(subTmp, 'proj9c1', 'c1000000-0000-4000-a000-000000000001', {
             issue_number: 8,
             claim_comment_id: '555',
             expires: stale25h,
@@ -2731,7 +2731,7 @@ exit 0
         'Cross-Session Staging Guard',
         'BLOCKED: cross-session staging',
         'BLOCKED: split your commit',
-        'git commit -m',
+        'git -C "$ACTIVE_WORKTREE_PATH" commit -m',
       ];
       for (const src of guardSources) {
         const text = fs.readFileSync(src, 'utf8');
@@ -2739,7 +2739,7 @@ exit 0
           assert(text.includes(needle),
             'Epic Case 11: ' + path.basename(src) + ' missing guard marker "' + needle + '"');
         }
-        assert(text.indexOf('git commit -m') < text.indexOf('kaola-workflow-sink-merge.js'),
+        assert(text.indexOf('git -C "$ACTIVE_WORKTREE_PATH" commit -m') < text.indexOf('kaola-workflow-sink-merge.js'),
           'Epic Case 11: commit gate must appear before sink dispatch in ' + path.basename(src));
       }
     }
@@ -3993,6 +3993,7 @@ exit 0
       // AC3 — enforcement exits 3 on SID mismatch
       const r3 = spawnSync(process.execPath, [claimScript, 'claim', '--session', 'sess-claimed', '--project', 'proj-ac3'], {
         encoding: 'utf8',
+        cwd: tmp,
         env: { ...process.env, HOME: tmp, KAOLA_WORKFLOW_OFFLINE: '1', KAOLA_ENFORCE_PLATFORM_SESSION: '1', KAOLA_KERNEL_SESSION_SKIP: '1', KAOLA_SESSION_ID: 'sid-derived' }
       });
       assert(r3.status === 3, 'AC3: enforcement exits 3 on SID mismatch, got ' + r3.status);
@@ -4009,6 +4010,7 @@ exit 0
       // AC7 — enforcement off: commands succeed (backward compat)
       const r7 = spawnSync(process.execPath, [claimScript, 'claim', '--session', 'sess-ac7', '--project', 'proj-ac7'], {
         encoding: 'utf8',
+        cwd: tmp,
         env: { ...process.env, HOME: tmp, KAOLA_WORKFLOW_OFFLINE: '1' }  // no enforcement
       });
       assert(r7.status === 0, 'AC7: claim succeeds with enforcement off, got ' + r7.status);
@@ -4017,6 +4019,7 @@ exit 0
       const coordRootAc8 = tmp;  // use tmp as coordRoot via KAOLA_COORD_ROOT
       const r8 = spawnSync(process.execPath, [claimScript, 'claim', '--session', 'sess-ac8', '--project', 'proj-ac8', '--platform-override'], {
         encoding: 'utf8',
+        cwd: tmp,
         env: { ...process.env, HOME: tmp, KAOLA_WORKFLOW_OFFLINE: '1', KAOLA_ENFORCE_PLATFORM_SESSION: '1', KAOLA_KERNEL_SESSION_SKIP: '1', KAOLA_SESSION_ID: 'sid-different', KAOLA_COORD_ROOT: coordRootAc8 }
       });
       assert(r8.status === 0, 'AC8: --platform-override bypasses enforcement, got ' + r8.status);
@@ -4339,9 +4342,61 @@ exit 0
       }
     }
 
+    // Gap3-B: synthetic session sweep — isSyntheticTestSession predicate
+    {
+      const sweepTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-sweep-'));
+      try {
+        const locksDir = path.join(sweepTmp, 'kaola-workflow', '.locks');
+        fs.mkdirSync(locksDir, { recursive: true });
+        // Synthetic session (non-UUID4) — should be swept
+        const syntheticLock = { project: 'proj-synthetic', session_id: 'synthetic-test-sid',
+          machine_id: 'm1', claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          last_heartbeat: new Date().toISOString(), issue_number: null, claim_comment_id: null, sink: 'merge' };
+        fs.writeFileSync(path.join(locksDir, 'proj-synthetic.lock'), JSON.stringify(syntheticLock, null, 2) + '\n');
+        // Real UUID4 session with fresh timestamps — must NOT be swept
+        const realSid = '12345678-1234-4234-89ab-123456789abc';
+        const realLock = { project: 'proj-real', session_id: realSid, machine_id: 'm1',
+          claimed_at: new Date().toISOString(), expires: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          last_heartbeat: new Date().toISOString(), issue_number: null, claim_comment_id: null, sink: 'merge' };
+        fs.writeFileSync(path.join(locksDir, 'proj-real.lock'), JSON.stringify(realLock, null, 2) + '\n');
+        const claimScript = path.join(root, 'scripts/kaola-workflow-claim.js');
+        spawnSync(process.execPath, [claimScript, 'sweep'], {
+          encoding: 'utf8', cwd: sweepTmp,
+          env: { ...process.env, HOME: sweepTmp, KAOLA_WORKFLOW_OFFLINE: '1', KAOLA_COORD_ROOT: sweepTmp }
+        });
+        assert(!fs.existsSync(path.join(locksDir, 'proj-synthetic.lock')), 'Gap3-B: synthetic-session lock must be swept');
+        assert(fs.existsSync(path.join(locksDir, 'proj-real.lock')), 'Gap3-B: UUID4-session lock with fresh timestamps must NOT be swept');
+      } finally {
+        fs.rmSync(sweepTmp, { recursive: true, force: true });
+      }
+    }
+
+    // Gap1+2 structural assertions: verify phase files contain required patterns
+    {
+      const phase6Path = path.join(root, 'commands', 'kaola-workflow-phase6.md');
+      const skillPath = path.join(root, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
+      for (const [label, filePath] of [['phase6.md', phase6Path], ['SKILL.md', skillPath]]) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        assert(content.includes('ACTIVE_WORKTREE_PATH='), label + ': must contain ACTIVE_WORKTREE_PATH= assignment');
+        assert(content.includes('Mirror MUST run after'), label + ': must contain Mirror MUST run after comment');
+        assert(content.includes('git -C "$ACTIVE_WORKTREE_PATH"'), label + ': must contain git -C "$ACTIVE_WORKTREE_PATH"');
+      }
+    }
+
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
+    try {
+      const cwdKw = path.join(process.cwd(), 'kaola-workflow');
+      if (fs.existsSync(cwdKw)) {
+        for (const d of fs.readdirSync(cwdKw)) {
+          if (/^proj-ac/.test(d)) {
+            fs.rmSync(path.join(cwdKw, d), { recursive: true, force: true });
+          }
+        }
+      }
+    } catch (_) {}
   }
 }
 

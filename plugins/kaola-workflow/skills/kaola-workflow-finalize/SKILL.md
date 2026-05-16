@@ -71,7 +71,19 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
 
 1. Final validation: run the full relevant project commands once against the final candidate state. Save output to `.cache/final-validation.md`.
 2. Acceptance check: verify Phase 1 success criteria, Phase 3 tasks, tests, review status, and absence of debug artifacts.
-3. Documentation update: use the `doc-updater` Codex agent role when documentation changes are needed and subagents are available; otherwise update docs in the current session. Update docs only when behavior, API, setup, architecture, env, roadmap, or user-facing workflow changed. Save output to `.cache/doc-updater.md` or write a no-impact reason.
+   ```bash
+   # Resolve linked worktree path for this session
+   _COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
+   if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
+   _LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/${KAOLA_PROJECT}.lock"
+   ACTIVE_WORKTREE_PATH=""
+   if [ -f "$_LOCK_FILE" ]; then
+     ACTIVE_WORKTREE_PATH="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
+   fi
+   [ -z "$ACTIVE_WORKTREE_PATH" ] && ACTIVE_WORKTREE_PATH="$(pwd)"
+   ```
+
+3. Documentation update: use the `doc-updater` Codex agent role when documentation changes are needed and subagents are available; otherwise update docs in the current session. Pass `Working directory: ${ACTIVE_WORKTREE_PATH}` to the doc-updater agent. Update docs only when behavior, API, setup, architecture, env, roadmap, or user-facing workflow changed. Save output to `.cache/doc-updater.md` or write a no-impact reason.
 4. Documentation Docking: compare changed files with `README.md`, API docs, architecture docs, changelog, `.env.example`, roadmap, and issue comments when relevant. Save `.cache/doc-docking.md` with verdict `DOCKED` or `BLOCKED`.
 5. Closure decision: scan all phase files for deferred items or user decisions. Ask before reorganizing issues or roadmap.
 6. Refresh `kaola-workflow/ROADMAP.md`.
@@ -129,15 +141,50 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
    If either check fails, do not stage; release the project under another
    lease, or coordinate manually. Do not attempt to bypass this guard.
 
+   Before mirroring artifacts, resolve the linked worktree and copy Phase 6 artifacts:
+
+   ```bash
+   # Artifact mirror: copy Phase 6 artifacts from main worktree to linked worktree.
+   # Mirror MUST run after all Phase 6 artifact writes.
+   _COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
+   if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
+   _LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/${KAOLA_PROJECT}.lock"
+   ACTIVE_WORKTREE_PATH="$(pwd)"
+   if [ -f "$_LOCK_FILE" ]; then
+     _WT="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
+     [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
+   fi
+   if [ "$ACTIVE_WORKTREE_PATH" != "$(pwd)" ]; then
+     mkdir -p "$ACTIVE_WORKTREE_PATH/kaola-workflow/${KAOLA_PROJECT}/"
+     cp -R "kaola-workflow/${KAOLA_PROJECT}/." "$ACTIVE_WORKTREE_PATH/kaola-workflow/${KAOLA_PROJECT}/"
+     git status --porcelain | while IFS= read -r line; do
+       f="${line:3}"
+       case "$f" in kaola-workflow/*) continue;; esac
+       if [ -f "$(pwd)/$f" ]; then
+         mkdir -p "$ACTIVE_WORKTREE_PATH/$(dirname "$f")"
+         cp "$(pwd)/$f" "$ACTIVE_WORKTREE_PATH/$f"
+       fi
+     done
+   fi
+   ```
+
    Before sink dispatch, stage only approved implementation, docs, roadmap,
    archive, and workflow artifacts for this project, then create the final
    conventional commit on the workflow branch:
 
    ```bash
-   git status --short
-   git add <approved-files-only>
-   git commit -m "chore: finalize ${KAOLA_PROJECT}"
-   git status --short
+   _COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
+   if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
+   _LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/${KAOLA_PROJECT}.lock"
+   ACTIVE_WORKTREE_PATH="$(pwd)"
+   if [ -f "$_LOCK_FILE" ]; then
+     _WT="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
+     [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
+   fi
+   git -C "$ACTIVE_WORKTREE_PATH" status --short
+   git -C "$ACTIVE_WORKTREE_PATH" add <approved-files-only>
+   git -C "$ACTIVE_WORKTREE_PATH" commit -m "chore: finalize ${KAOLA_PROJECT}"
+   git -C "$ACTIVE_WORKTREE_PATH" status --short
    ```
 
    If there is nothing to commit, verify and record that the branch already

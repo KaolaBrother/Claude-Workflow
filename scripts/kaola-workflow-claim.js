@@ -577,6 +577,12 @@ function shouldSweep(lock) {
     new Date(lock.last_heartbeat).getTime() < cutoff;
 }
 
+// Design intent: production session_ids from crypto.randomUUID() never start with 'synthetic-'.
+// Sessions with the 'synthetic-' prefix are test-only and swept unconditionally.
+function isSyntheticTestSession(lock) {
+  return !lock || !lock.session_id || String(lock.session_id).startsWith('synthetic-');
+}
+
 function worktreePathFor(root, project) {
   return path.join(path.dirname(root), path.basename(root) + '.kw', project);
 }
@@ -1806,8 +1812,9 @@ function cmdSweep() {
       lock = JSON.parse(fs.readFileSync(fp, 'utf8'));
     } catch (_) { continue; }
 
-    if (!shouldSweep(lock)) continue;
-    if (!isRemoteStale(lock)) continue;
+    const synthetic = isSyntheticTestSession(lock);
+    if (!synthetic && !shouldSweep(lock)) continue;
+    if (!synthetic && !isRemoteStale(lock)) continue;
 
     if (!OFFLINE && lock.issue_number != null) {
       try {
