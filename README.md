@@ -288,7 +288,7 @@ fall back to the manual support directory.
 | `kaola-workflow-repair-state.js` | Reconstruct workflow state from phase artifacts | Init / Resume |
 | `kaola-workflow-claim.js` | Multi-session lease management (claim, release, heartbeat, ticker, sweep, status, patch-branch, watch-pr, bootstrap); `--runtime claude\|codex` flag on claim and bootstrap | All phases |
 | `kaola-workflow-sink-merge.js` | Branch-per-issue auto-merge sink — rebase-then-ff-merge sequence | Phase 6 |
-| `kaola-workflow-roadmap.js` | ROADMAP.md regenerator — generate/migrate/validate/init-issue subcommands; reads `kaola-workflow/.roadmap/issue-{N}.md` per-issue files | Phase 1, Phase 6 |
+| `kaola-workflow-roadmap.js` | ROADMAP.md regenerator — generate/migrate/validate/init-issue/project-name subcommands; reads `kaola-workflow/.roadmap/issue-{N}.md` per-issue files | Phase 1, Phase 6 |
 | `kaola-workflow-classifier.js` | Parallel-work classifier — classifies open issues as green/yellow/red/blocked before claim; reads lock files, issue file sets, and active remote claim markers | Startup (Step 0) |
 | `kaola-workflow-sink-pr.js` | PR-based sink — pushes branch, opens GitHub PR via `gh pr create`, records PR URL; optionally enables auto-merge | Phase 6 |
 

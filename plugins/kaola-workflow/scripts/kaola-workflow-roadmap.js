@@ -8,7 +8,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
 function field(content, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const m = content.match(new RegExp('^' + escaped + ':\\s*(.+)$', 'm'));
+  const m = content.match(new RegExp('^' + escaped + ':[ \\t]*(.+)$', 'm'));
   return m ? m[1].trim() : '';
 }
 
@@ -211,13 +211,39 @@ function cmdInitIssue(argv) {
   process.stdout.write('created: issue-' + n + '.md\n');
 }
 
+function cmdProjectName(argv) {
+  const args = parseArgs(argv);
+  const n = Number(args['issue']);
+  if (!Number.isInteger(n) || n <= 0) {
+    process.stderr.write('--issue must be a positive integer\n');
+    process.exitCode = 1;
+    return;
+  }
+  const root = getRoot();
+  const filePath = path.join(roadmapDir(root), 'issue-' + n + '.md');
+  let content;
+  try {
+    content = fs.readFileSync(filePath, 'utf8');
+  } catch (_) {
+    process.exitCode = 1;
+    return;
+  }
+  const name = field(content, 'workflow_project').replace(/\|/g, '').trim();
+  if (!name || name === '—') {
+    process.exitCode = 1;
+    return;
+  }
+  process.stdout.write(name + '\n');
+}
+
 function main() {
   const sub = process.argv[2];
   if (!sub || sub === 'generate') { cmdGenerate(); return; }
   if (sub === 'migrate') { cmdMigrate(); return; }
   if (sub === 'validate') { cmdValidate(); return; }
   if (sub === 'init-issue') { cmdInitIssue(process.argv.slice(3)); return; }
-  throw new Error('Unknown subcommand: ' + sub + '. Use generate, migrate, validate, or init-issue.');
+  if (sub === 'project-name') { cmdProjectName(process.argv.slice(3)); return; }
+  throw new Error('Unknown subcommand: ' + sub + '. Use generate, migrate, validate, init-issue, or project-name.');
 }
 
 if (require.main === module) {

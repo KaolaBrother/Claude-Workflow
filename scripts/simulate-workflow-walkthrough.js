@@ -783,6 +783,91 @@ async function main() {
       } finally {
         fs.rmSync(epic5cTmp, { recursive: true, force: true });
       }
+
+      // Sub-test G: project-name subcommand
+      {
+        const epic5gTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic5g-'));
+        try {
+          const roadmapDir5G = path.join(epic5gTmp, 'kaola-workflow', '.roadmap');
+          fs.mkdirSync(roadmapDir5G, { recursive: true });
+
+          // 5G-a: workflow_project is a real slug → exit 0, slug on stdout
+          execFileSync(process.execPath, [roadmapScriptPath, 'init-issue',
+            '--issue', '38', '--title', 'test-issue', '--status', 'open',
+            '--workflow-project', 'guard-handoff', '--next-step', 'ready',
+          ], { cwd: epic5gTmp, encoding: 'utf8' });
+          const out5Ga = execFileSync(process.execPath,
+            [roadmapScriptPath, 'project-name', '--issue', '38'],
+            { cwd: epic5gTmp, encoding: 'utf8' }).trim();
+          assert(out5Ga === 'guard-handoff', 'Epic Case 5G-a: project-name must return slug, got ' + out5Ga);
+
+          // 5G-b: init-issue without --workflow-project → placeholder '—' → exit 1, no stdout
+          execFileSync(process.execPath, [roadmapScriptPath, 'init-issue',
+            '--issue', '39', '--title', 'no-slug', '--status', 'open', '--next-step', 'ready',
+          ], { cwd: epic5gTmp, encoding: 'utf8' });
+          let exit5Gb = 0;
+          let stdout5Gb = '';
+          try {
+            stdout5Gb = execFileSync(process.execPath,
+              [roadmapScriptPath, 'project-name', '--issue', '39'],
+              { cwd: epic5gTmp, encoding: 'utf8' });
+          } catch (e) { exit5Gb = e.status || 1; }
+          assert(exit5Gb === 1, 'Epic Case 5G-b: placeholder workflow_project must exit 1, got ' + exit5Gb);
+          assert(stdout5Gb.trim() === '', 'Epic Case 5G-b: placeholder must produce no stdout');
+
+          // 5G-c: no file for issue 999 → exit 1
+          let exit5Gc = 0;
+          try {
+            execFileSync(process.execPath,
+              [roadmapScriptPath, 'project-name', '--issue', '999'],
+              { cwd: epic5gTmp, encoding: 'utf8' });
+          } catch (e) { exit5Gc = e.status || 1; }
+          assert(exit5Gc === 1, 'Epic Case 5G-c: missing file must exit 1, got ' + exit5Gc);
+
+          // 5G-d: blank workflow_project field → exit 1
+          const blankIssuePath = path.join(roadmapDir5G, 'issue-40.md');
+          fs.writeFileSync(blankIssuePath,
+            'issue: #40\ntitle: blank-test\nstatus: open\nworkflow_project: \nnext_step: ready\n');
+          let exit5Gd = 0;
+          try {
+            execFileSync(process.execPath,
+              [roadmapScriptPath, 'project-name', '--issue', '40'],
+              { cwd: epic5gTmp, encoding: 'utf8' });
+          } catch (e) { exit5Gd = e.status || 1; }
+          assert(exit5Gd === 1, 'Epic Case 5G-d: blank workflow_project must exit 1, got ' + exit5Gd);
+        } finally {
+          fs.rmSync(epic5gTmp, { recursive: true, force: true });
+        }
+      }
+
+      // Sub-test H: buildSinkBranchName unit tests via export guard
+      {
+        const { buildSinkBranchName } = require(path.join(__dirname, 'kaola-workflow-claim.js'));
+
+        // 5H-1: project equals 'issue-38' fallback → no suffix
+        assert(
+          buildSinkBranchName(38, 'issue-38') === 'workflow/issue-38',
+          'Epic Case 5H-1: issue-N project must produce no suffix, got ' + buildSinkBranchName(38, 'issue-38')
+        );
+
+        // 5H-2: normal project slug → appended
+        assert(
+          buildSinkBranchName(38, 'guard-handoff') === 'workflow/issue-38-guard-handoff',
+          'Epic Case 5H-2: slug must be appended, got ' + buildSinkBranchName(38, 'guard-handoff')
+        );
+
+        // 5H-3: project already carries issue-N prefix → dedup
+        assert(
+          buildSinkBranchName(38, 'issue-38-guard') === 'workflow/issue-38-guard',
+          'Epic Case 5H-3: existing prefix must not double, got ' + buildSinkBranchName(38, 'issue-38-guard')
+        );
+
+        // 5H-4: null issueNumber with fallback branch
+        assert(
+          buildSinkBranchName(null, 'epic7a', 'workflow/issue-42-epic7a') === 'workflow/issue-42-epic7a',
+          'Epic Case 5H-4: null issue must use fallbackBranch, got ' + buildSinkBranchName(null, 'epic7a', 'workflow/issue-42-epic7a')
+        );
+      }
     }
 
     // Epic Case 6: parallel-classifier — sub-tests 6A–6F + 6E'
@@ -1124,6 +1209,10 @@ exit 0
         assert(lock7G.sink === 'pr', '7G: lock.sink must be "pr" when --sink pr passed, got ' + lock7G.sink);
         const state7G = fs.readFileSync(path.join(projDir7G, 'workflow-state.md'), 'utf8');
         assert(state7G.includes('sink: pr'), '7G: ## Sink block must contain "sink: pr"');
+        // Regression: branch must not double the issue-N segment
+        const branch7Gmatch = state7G.match(/^branch: (.+)$/m);
+        assert(branch7Gmatch, '7G regression: ## Sink must contain a branch: line');
+        assert(!/issue-42-issue-42/.test(branch7Gmatch[1]), '7G regression: branch must not duplicate issue-42 segment, got ' + branch7Gmatch[1]);
         // cleanup for next sub-tests
         fs.unlinkSync(path.join(locksDir, 'epic7g.lock'));
 
@@ -1153,6 +1242,9 @@ exit 0
         const lock7AResult = JSON.parse(fs.readFileSync(path.join(locksDir, 'epic7a.lock'), 'utf8'));
         assert(lock7AResult.pr_url === 'https://github.com/test/repo/pull/42', '7A: lock.pr_url must be set');
         assert(lock7AResult.pr_number === 42, '7A: lock.pr_number must be 42');
+        // Regression: Sink branch name must not duplicate the issue-N prefix
+        assert(!/issue-42-issue-42/.test(state7A), '7A regression: Sink block must not contain doubled issue-42 segment');
+        assert(/^branch: workflow\/issue-42-epic7a$/m.test(state7A), '7A regression: Sink branch must be workflow/issue-42-epic7a');
         // cleanup
         execFileSync('git', ['branch', '-D', 'workflow/issue-42-epic7a'], { cwd: workDir });
         fs.unlinkSync(path.join(locksDir, 'epic7a.lock'));

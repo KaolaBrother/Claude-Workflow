@@ -20,7 +20,7 @@ function isSafeName(name) {
 
 function field(content, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = content.match(new RegExp('^' + escaped + ':\\s*(.+)$', 'm'));
+  const match = content.match(new RegExp('^' + escaped + ':[ \\t]*(.+)$', 'm'));
   return match ? match[1].trim() : '';
 }
 
@@ -378,10 +378,19 @@ function shouldSweep(lock) {
     new Date(lock.last_heartbeat).getTime() < cutoff;
 }
 
+function buildSinkBranchName(issueNumber, project, fallbackBranch) {
+  if (issueNumber == null) {
+    return fallbackBranch || ('workflow/' + (project || 'unknown'));
+  }
+  const base = 'workflow/issue-' + issueNumber;
+  if (!project || project === 'issue-' + issueNumber) return base;
+  const prefix = 'issue-' + issueNumber + '-';
+  const suffix = project.startsWith(prefix) ? project.slice(prefix.length) : project;
+  return suffix ? base + '-' + suffix : base;
+}
+
 function buildSinkBlock(lockData) {
-  const branchName = lockData.issue_number != null
-    ? 'workflow/issue-' + lockData.issue_number + '-' + lockData.project
-    : (lockData.branch || 'workflow/' + lockData.project);
+  const branchName = buildSinkBranchName(lockData.issue_number, lockData.project, lockData.branch);
   const lines = [
     '## Sink',
     'branch: ' + branchName,
@@ -695,14 +704,16 @@ function generateRoadmap(root) {
   }
 }
 
-function projectNameForIssue(classifierScript, issueNumber) {
+function projectNameForIssue(_classifierScript, issueNumber) {
   try {
-    const name = execFileSync(process.execPath, [path.join(path.dirname(classifierScript), 'kaola-workflow-roadmap.js'), 'project-name', '--issue', String(issueNumber)], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    }).trim();
-    if (name) return name;
-  } catch (_) {}
+    const content = fs.readFileSync(roadmapIssuePath(getRoot(), issueNumber), 'utf8');
+    const name = field(content, 'workflow_project').replace(/\|/g, '').trim();
+    if (name && name !== '—') return name;
+  } catch (err) {
+    if (err && err.code !== 'ENOENT') {
+      process.stderr.write('warn: projectNameForIssue(' + issueNumber + ') failed: ' + err.message + '\n');
+    }
+  }
   return 'issue-' + issueNumber;
 }
 
@@ -731,15 +742,7 @@ function pickFirstActionableIssue(classifierScript, issues) {
       const raw = execFileSync(process.execPath, [classifierScript, 'classify', '--issue', String(N)], { encoding: 'utf8' });
       const result = JSON.parse(raw);
       if (result.verdict === 'green' || result.verdict === 'yellow') {
-        let proj = 'issue-' + N;
-        try {
-          const name = execFileSync(process.execPath, [path.join(path.dirname(classifierScript), 'kaola-workflow-roadmap.js'), 'project-name', '--issue', String(N)], {
-            encoding: 'utf8',
-            stdio: ['ignore', 'pipe', 'ignore']
-          }).trim();
-          if (name) proj = name;
-        } catch (_) {}
-        return { pick: N, project: proj, verdict: result.verdict };
+        return { pick: N, project: projectNameForIssue(classifierScript, N), verdict: result.verdict };
       }
     } catch (_) {}
   }
@@ -1501,9 +1504,7 @@ function cmdWatchPr() {
     }
 
     const state = (prData.state || '').toUpperCase();
-    const branchName = lock.branch || (lock.issue_number != null
-      ? 'workflow/issue-' + lock.issue_number + '-' + lock.project
-      : 'workflow/' + lock.project);
+    const branchName = lock.branch || buildSinkBranchName(lock.issue_number, lock.project);
 
     if (state === 'MERGED') {
       releaseSession(root, lock.session_id, 'merged');
@@ -1547,4 +1548,8 @@ function main() {
   throw new Error('unknown subcommand: ' + sub);
 }
 
-try { main(); } catch (err) { process.stderr.write(err.message + '\n'); process.exitCode = 1; }
+if (require.main === module) {
+  try { main(); } catch (err) { process.stderr.write(err.message + '\n'); process.exitCode = 1; }
+} else {
+  module.exports = { buildSinkBranchName };
+}
