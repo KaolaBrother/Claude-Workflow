@@ -313,7 +313,6 @@ function startupReceiptHandoffBlocker(receipt, sessionId, project) {
       reason: startupReceiptFailureReason(receipt, sessionId, project)
     };
   }
-  if (receipt.claim === 'none') return null;
   if (!startupReceiptAuthorizesProject(receipt, sessionId, project)) {
     return {
       type: 'startup-receipt',
@@ -1024,7 +1023,9 @@ function fileMtimeMs(filePath) {
 }
 
 function claudeProjectDirForRoot(root) {
-  const encoded = path.resolve(root).replace(/[\\/]/g, '-');
+  // Match Claude Code's on-disk encoding: every '/', '\\', and '.' in the
+  // resolved repo path becomes '-'. Observed format under ~/.claude/projects/.
+  const encoded = path.resolve(root).replace(/[./\\]/g, '-');
   return path.join(os.homedir(), '.claude', 'projects', encoded);
 }
 

@@ -1694,6 +1694,116 @@ exit 0
           }
         }
 
+        // 8L: claim:none receipt cannot silently take over a dead-looking project.
+        // Regression for issue #26 Bug 1 (claim:none exemption in startupReceiptHandoffBlocker).
+        {
+          const epic8lTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8l-'));
+          try {
+            fs.mkdirSync(path.join(epic8lTmp, 'kaola-workflow', '.locks'), { recursive: true });
+            fs.mkdirSync(path.join(epic8lTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+            fs.mkdirSync(path.join(epic8lTmp, 'kaola-workflow', 'issue-99'), { recursive: true });
+
+            // Owner lock that is fully expired with stale heartbeat and no ticker/JSONL.
+            fs.writeFileSync(path.join(epic8lTmp, 'kaola-workflow', '.locks', 'issue-99.lock'),
+              JSON.stringify({
+                project: 'issue-99',
+                issue_number: 99,
+                session_id: 'sess-8l-owner',
+                machine_id: 'machine-old',
+                expires: '2020-01-01T00:00:00.000Z',
+                last_heartbeat: '2020-01-01T00:00:00.000Z',
+                runtime: 'claude'
+              }, null, 2) + '\n');
+            fs.writeFileSync(path.join(epic8lTmp, 'kaola-workflow', 'issue-99', 'workflow-state.md'),
+              'status: active\nsession_id: sess-8l-owner\n\n## Lease\nsession_id: sess-8l-owner\n');
+            // claim:none startup receipt for the new session.
+            fs.writeFileSync(path.join(epic8lTmp, 'kaola-workflow', '.sessions', 'sess-8l-new.startup.json'),
+              JSON.stringify({
+                startup_completed: true,
+                session: 'sess-8l-new',
+                project: null,
+                issue: null,
+                selected_issue: null,
+                selected_project: null,
+                verdict: 'none',
+                claim: 'none',
+                skipped: [{ issue: 99, verdict: 'skipped', reason: 'already claimed' }]
+              }, null, 2) + '\n');
+
+            const r8lCan = spawnSync(process.execPath, [
+              claimScript, 'can-handoff', '--project', 'issue-99', '--session', 'sess-8l-new'
+            ], {
+              cwd: epic8lTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8lTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8lCan.status === 2,
+              '8L-a: can-handoff must reject claim:none receipt even when owner looks dead, got ' + r8lCan.status + '\nstdout: ' + r8lCan.stdout);
+            assert(r8lCan.stdout.includes('startup-receipt'),
+              '8L-a: can-handoff must report startup-receipt blocker for claim:none, got: ' + r8lCan.stdout);
+
+            const r8lDefault = spawnSync(process.execPath, [
+              claimScript, 'handoff', '--project', 'issue-99', '--session', 'sess-8l-new'
+            ], {
+              cwd: epic8lTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8lTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8lDefault.status === 2,
+              '8L-b: default handoff must reject claim:none receipt, got ' + r8lDefault.status + '\nstderr: ' + r8lDefault.stderr);
+
+            const r8lForce = spawnSync(process.execPath, [
+              claimScript, 'handoff', '--project', 'issue-99', '--session', 'sess-8l-new', '--force-live-takeover'
+            ], {
+              cwd: epic8lTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8lTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8lForce.status === 0,
+              '8L-c: --force-live-takeover must still allow recovery, got ' + r8lForce.status + '\nstderr: ' + r8lForce.stderr);
+            const r8lForceState = fs.readFileSync(path.join(epic8lTmp, 'kaola-workflow', 'issue-99', 'workflow-state.md'), 'utf8');
+            assert(r8lForceState.includes('session_id: sess-8l-new'),
+              '8L-c: forced handoff must update workflow-state lease');
+          } finally {
+            fs.rmSync(epic8lTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 8M: liveness lookup must match Claude Code's actual encoding when the
+        // repo root contains a '.' segment (regression for issue #26 Bug 2).
+        {
+          const epic8mParent = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8m-'));
+          // Embed a dotted path segment that mirrors real-world worktrees like ".claude-worktrees/".
+          const epic8mTmp = path.join(epic8mParent, '.worktree', 'live-owner');
+          fs.mkdirSync(epic8mTmp, { recursive: true });
+          try {
+            runClaim(epic8mTmp, 'sess-8m-owner', 77, 'epic8m');
+
+            // Compute the encoded directory the way Claude Code itself stores JSONL files:
+            // replace both path separators AND '.' with '-' from the resolved repo root.
+            // Use realpath so macOS symlinks like /var -> /private/var match the child's
+            // post-`git rev-parse --show-toplevel` view of the root.
+            const claudeEncoded = fs.realpathSync(epic8mTmp).replace(/[./\\]/g, '-');
+            const claudeDir8m = path.join(fs.realpathSync(epic8mParent), '.claude', 'projects', claudeEncoded);
+            fs.mkdirSync(claudeDir8m, { recursive: true });
+            fs.writeFileSync(path.join(claudeDir8m, 'sess-8m-owner.jsonl'), '{}\n');
+
+            const r8mCan = spawnSync(process.execPath, [
+              claimScript, 'can-handoff', '--project', 'epic8m', '--session', 'sess-8m-new'
+            ], {
+              cwd: epic8mTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8mParent, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8mCan.status === 2,
+              '8M-a: can-handoff must reject when JSONL exists at the dotted-path encoding, got ' + r8mCan.status + '\nstdout: ' + r8mCan.stdout);
+            assert(r8mCan.stdout.includes('claude-session-jsonl'),
+              '8M-a: liveness check must find JSONL under Claude-encoded dotted path, got: ' + r8mCan.stdout);
+          } finally {
+            fs.rmSync(epic8mParent, { recursive: true, force: true });
+          }
+        }
+
         // 8I: bootstrap without a preexisting session id claims one issue;
         // a second fresh bootstrap skips the locked issue and claims the next.
         {
