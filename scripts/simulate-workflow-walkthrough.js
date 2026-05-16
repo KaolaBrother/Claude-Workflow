@@ -1608,7 +1608,7 @@ exit 0
           }
         }
 
-        // 8K: session lookup validates current ownership; handoff is explicit.
+        // 8K: session lookup validates current ownership; handoff is explicit and guarded.
         {
           const epic8kTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8k-'));
           try {
@@ -1633,27 +1633,62 @@ exit 0
             });
             assert(r8kIntruder.status === 2, '8K-b: foreign lock owner must be occupied, got ' + r8kIntruder.status);
 
-            fs.unlinkSync(path.join(epic8kTmp, 'kaola-workflow', '.locks', 'epic8k.lock'));
-            const r8kState = spawnSync(process.execPath, [
-              claimScript, 'session', '--project', 'epic8k', '--session', 'sess-8k'
+            // Create a matching local Claude session JSONL for the current live owner.
+            const claudeDir8k = path.join(epic8kTmp, '.claude', 'projects', fs.realpathSync(epic8kTmp).replace(/[\\/]/g, '-'));
+            fs.mkdirSync(claudeDir8k, { recursive: true });
+            fs.writeFileSync(path.join(claudeDir8k, 'sess-8k.jsonl'), '{}\n');
+
+            const r8kCanHandoff = spawnSync(process.execPath, [
+              claimScript, 'can-handoff', '--project', 'epic8k', '--session', 'sess-8k-new'
             ], {
               cwd: epic8kTmp,
               encoding: 'utf8',
               env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
-            assert(r8kState.status === 0, '8K-c: matching state-only owner must validate, got ' + r8kState.status + '\nstderr: ' + r8kState.stderr);
-            assert(r8kState.stdout.trim() === 'sess-8k', '8K-c: expected sess-8k from workflow-state validation, got: ' + r8kState.stdout);
+            assert(r8kCanHandoff.status === 2, '8K-d: can-handoff must reject live owner, got ' + r8kCanHandoff.status);
+            assert(r8kCanHandoff.stdout.includes('claude-session-jsonl'),
+              '8K-d: can-handoff must report local Claude session evidence, got: ' + r8kCanHandoff.stdout);
 
-            const r8kHandoff = spawnSync(process.execPath, [
+            const r8kHandoffRejected = spawnSync(process.execPath, [
               claimScript, 'handoff', '--project', 'epic8k', '--session', 'sess-8k-new'
             ], {
               cwd: epic8kTmp,
               encoding: 'utf8',
               env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
-            assert(r8kHandoff.status === 0, '8K-d: explicit handoff must succeed, got ' + r8kHandoff.status + '\nstderr: ' + r8kHandoff.stderr);
+            assert(r8kHandoffRejected.status === 2,
+              '8K-e: default handoff must reject live owner, got ' + r8kHandoffRejected.status + '\nstderr: ' + r8kHandoffRejected.stderr);
+
+            const r8kHandoff = spawnSync(process.execPath, [
+              claimScript, 'handoff', '--project', 'epic8k', '--session', 'sess-8k-new', '--force-live-takeover'
+            ], {
+              cwd: epic8kTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8kHandoff.status === 0, '8K-f: force handoff must succeed, got ' + r8kHandoff.status + '\nstderr: ' + r8kHandoff.stderr);
             const handedOffState = fs.readFileSync(path.join(epic8kTmp, 'kaola-workflow', 'epic8k', 'workflow-state.md'), 'utf8');
-            assert(handedOffState.includes('session_id: sess-8k-new'), '8K-d: handoff must update workflow-state lease');
+            assert(handedOffState.includes('session_id: sess-8k-new'), '8K-f: force handoff must update workflow-state lease');
+            const r8kHandoffReceipt = spawnSync(process.execPath, [
+              claimScript, 'verify-startup', '--project', 'epic8k', '--session', 'sess-8k-new'
+            ], {
+              cwd: epic8kTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8kHandoffReceipt.status === 0,
+              '8K-f: force handoff must write an owned startup receipt, got ' + r8kHandoffReceipt.status + '\nstderr: ' + r8kHandoffReceipt.stderr);
+
+            fs.unlinkSync(path.join(epic8kTmp, 'kaola-workflow', '.locks', 'epic8k.lock'));
+            const r8kState = spawnSync(process.execPath, [
+              claimScript, 'session', '--project', 'epic8k', '--session', 'sess-8k-new'
+            ], {
+              cwd: epic8kTmp,
+              encoding: 'utf8',
+              env: { ...process.env, HOME: epic8kTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
+            });
+            assert(r8kState.status === 0, '8K-g: matching state-only owner must validate, got ' + r8kState.status + '\nstderr: ' + r8kState.stderr);
+            assert(r8kState.stdout.trim() === 'sess-8k-new', '8K-g: expected sess-8k-new from workflow-state validation, got: ' + r8kState.stdout);
           } finally {
             fs.rmSync(epic8kTmp, { recursive: true, force: true });
           }
@@ -2913,6 +2948,20 @@ exit 0
         assert(roadmap.includes('| #201 | queued startup | open |'), '14A: ROADMAP must include synced issue 201');
         assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.locks', 'issue-201.lock')),
           '14A: startup must claim issue 201');
+        const verifyFirst = spawnSync(process.execPath, [
+          claimScript, 'verify-startup',
+          '--session', 'sess-startup-a',
+          '--project', 'issue-201'
+        ], { cwd: startupTmp, encoding: 'utf8', env });
+        assert(verifyFirst.status === 0,
+          '14A: verify-startup must authorize the acquired project, got ' + verifyFirst.status + '\nstderr: ' + verifyFirst.stderr);
+        const verifyFirstWrongProject = spawnSync(process.execPath, [
+          claimScript, 'verify-startup',
+          '--session', 'sess-startup-a',
+          '--project', 'issue-203'
+        ], { cwd: startupTmp, encoding: 'utf8', env });
+        assert(verifyFirstWrongProject.status === 2,
+          '14A: verify-startup must reject a different project for the same receipt, got ' + verifyFirstWrongProject.status);
 
         const second = JSON.parse(execFileSync(process.execPath, [
           claimScript, 'startup',
@@ -2927,6 +2976,39 @@ exit 0
           '14B: receipt must record dependency-blocked issue 202');
         assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.sessions', 'sess-startup-b.startup.json')),
           '14B: second startup receipt must be written');
+        const verifySecondForFirst = spawnSync(process.execPath, [
+          claimScript, 'verify-startup',
+          '--session', 'sess-startup-b',
+          '--project', 'issue-201'
+        ], { cwd: startupTmp, encoding: 'utf8', env });
+        assert(verifySecondForFirst.status === 2,
+          '14B: second startup receipt must not authorize the already-claimed issue 201, got ' + verifySecondForFirst.status);
+        const verifySecond = spawnSync(process.execPath, [
+          claimScript, 'verify-startup',
+          '--session', 'sess-startup-b',
+          '--project', 'issue-203'
+        ], { cwd: startupTmp, encoding: 'utf8', env });
+        assert(verifySecond.status === 0,
+          '14B: second startup receipt must authorize issue 203, got ' + verifySecond.status + '\nstderr: ' + verifySecond.stderr);
+
+        const third = spawnSync(process.execPath, [
+          claimScript, 'startup',
+          '--session', 'sess-startup-c',
+          '--runtime', 'codex'
+        ], { cwd: startupTmp, encoding: 'utf8', env });
+        assert(third.status === 1, '14C: no-work startup must exit 1, got ' + third.status + '\nstderr: ' + third.stderr);
+        const thirdReceipt = JSON.parse(third.stdout.trim());
+        assert(thirdReceipt.claim === 'none' && thirdReceipt.startup_completed === true,
+          '14C: no-work startup must still write a claim:none receipt, got: ' + JSON.stringify(thirdReceipt));
+        const verifyThird = spawnSync(process.execPath, [
+          claimScript, 'verify-startup',
+          '--session', 'sess-startup-c',
+          '--project', 'issue-201'
+        ], { cwd: startupTmp, encoding: 'utf8', env });
+        assert(verifyThird.status === 2,
+          '14C: claim:none receipt must not authorize phase work, got ' + verifyThird.status);
+        assert(verifyThird.stdout.includes('did not acquire or own any project'),
+          '14C: claim:none verifier must explain the startup receipt gap, got: ' + verifyThird.stdout);
       } finally {
         fs.rmSync(startupTmp, { recursive: true, force: true });
       }

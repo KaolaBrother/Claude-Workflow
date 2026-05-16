@@ -1,5 +1,17 @@
 # Changelog
 
+## 3.1.8 - 2026-05-16 (Claude Code) / Codex 1.1.8 - 2026-05-16
+
+### Fixed
+
+- **Guarded handoff recovery**: `kaola-workflow-claim.js handoff` now rejects normal takeover when the requested session already has a startup receipt for another project, the previous owner has a live local Claude session JSONL, the lock is unexpired, the heartbeat is recent, or the ticker PID is alive. Successful handoff writes a new owned startup receipt for the recovering session.
+- **Startup receipt enforcement**: added `verify-startup` and wired all phase commands and Codex phase skills to fail before phase work when a session has `claim: "none"` or a receipt for a different project.
+- **Router no-work stop**: `/workflow-next` and Codex `kaola-workflow-next` now stop on `claim: "none"` instead of inferring recovery from skipped already-claimed work.
+
+### Tests
+
+- Added root and packaged Codex simulations for guarded `can-handoff`, blocked default handoff, explicit forced takeover, receipt-project mismatch rejection, and `claim:none` verifier rejection.
+
 ## 3.1.7 - 2026-05-15 (Claude Code) / Codex 1.1.7 - 2026-05-15
 
 ### Fixed

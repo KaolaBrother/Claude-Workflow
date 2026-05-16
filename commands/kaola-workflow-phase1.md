@@ -53,10 +53,16 @@ fi
 ## Startup Receipt Guard
 
 For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
-exists and records this project or an owned/acquired claim before doing phase
-work. If the receipt is missing, stale, or belongs to another session, run
-`kaola-workflow-claim.js startup --session "$KAOLA_SESSION_ID" --runtime claude`
-or stop instead of continuing.
+exists and authorizes this exact project with `claim: "owned"` or
+`claim: "acquired"` before doing phase work. Run the script-level verifier and
+stop on failure:
+
+```bash
+node "$_CLAIM_JS" verify-startup --session "$KAOLA_SESSION_ID" --project "{project}" >/dev/null || {
+  echo "Kaola-Workflow: startup receipt does not authorize {project}; run startup or explicit recovery instead."
+  exit 1
+}
+```
 
 If `$ARGUMENTS` is an existing project, read:
 

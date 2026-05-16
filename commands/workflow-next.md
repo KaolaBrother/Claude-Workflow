@@ -72,13 +72,12 @@ else
 fi
 ```
 
-If `STARTUP_OUT` is JSON, its `session` field is the active session id to
-carry through the rest of this workflow session. A verdict of `owned` means
-route that owned project instead of claiming new work. If the startup script is
-unavailable, stop for repair. If startup reports no unclaimed work for the current session, stop with that message unless the user
-explicitly requested recovery/handoff for a specific unfinished project.
-Do not proceed to project selection when the startup receipt is missing or
-malformed.
+If `STARTUP_OUT` is JSON, its `session` field is the active session id. A
+verdict of `owned` routes that owned project. If startup is unavailable or the
+startup receipt is missing/malformed, stop for repair. If startup returns
+`claim: "none"`, normal routing must stop; do not inspect active project folders
+and recover/handoff them from a skipped `already claimed` entry unless the user
+explicitly requested recovery for a specific unfinished project.
 
 ## Startup Step 1 - Git Freshness
 
@@ -156,11 +155,16 @@ task is available, ask the user what to implement. New work starts with:
 Multiple sessions may hold leases simultaneously when each targets a distinct project. Session A on `issue-3` and Session B on `issue-4` are coexistent. The pre-commit guard blocks only commits that stage files from a project owned by a different session.
 
 Use explicit recovery/handoff only when a user intentionally switches a new
-session to an unfinished project:
+session to an unfinished project. Check handoff eligibility first; live local
+Claude sessions, unexpired locks, recent heartbeats, and receipts for a
+different project block normal handoff:
 
 ```bash
+node "$CLAIM_JS" can-handoff --project <project> --session "$KAOLA_SESSION_ID"
 node "$CLAIM_JS" handoff --project <project> --session "$KAOLA_SESSION_ID"
 ```
+
+Use `--force-live-takeover` only for explicitly requested dangerous recovery.
 
 ## Resume Detection
 

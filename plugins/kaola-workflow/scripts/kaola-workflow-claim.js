@@ -7,6 +7,8 @@ const { execFileSync } = require('child_process');
 
 const OFFLINE = process.env.KAOLA_WORKFLOW_OFFLINE === '1';
 const CLAIM_LABEL = 'workflow:in-progress';
+const RECENT_HEARTBEAT_MS = 30 * 60 * 1000;
+const RECENT_CLAUDE_SESSION_MS = 30 * 60 * 1000;
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
@@ -99,6 +101,7 @@ function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--json') { args.json = true; continue; }
+    if (argv[i] === '--force-live-takeover') { args.forceLiveTakeover = true; continue; }
     if (argv[i] === '--session' && argv[i + 1]) { args.session = argv[++i]; continue; }
     if (argv[i] === '--project' && argv[i + 1]) { args.project = argv[++i]; continue; }
     if (argv[i] === '--issue' && argv[i + 1]) { args.issue = parseInt(argv[++i], 10); continue; }
@@ -131,6 +134,15 @@ function locksDir(root) { return path.join(root, 'kaola-workflow', '.locks'); }
 function sessionsDir(root) { return path.join(root, 'kaola-workflow', '.sessions'); }
 function lockPath(root, project) { return path.join(locksDir(root), project + '.lock'); }
 function sessionPath(root, sessionId) { return path.join(sessionsDir(root), sessionId + '.json'); }
+function tickerPidPath(root, sessionId) { return path.join(root, 'kaola-workflow', '.tickers', sessionId + '.pid'); }
+
+function readJsonFile(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (_) {
+    return null;
+  }
+}
 
 function readLockFiles(root) {
   const dir = locksDir(root);
@@ -149,12 +161,7 @@ function readLockFiles(root) {
 }
 
 function readSessionFile(root, sessionId) {
-  try {
-    const raw = fs.readFileSync(sessionPath(root, sessionId), 'utf8');
-    return JSON.parse(raw);
-  } catch (_) {
-    return null;
-  }
+  return readJsonFile(sessionPath(root, sessionId));
 }
 
 function readStateSession(root, project) {
@@ -272,6 +279,68 @@ function issueAlreadyClaimed(root, issue) {
 
 function startupReceiptPath(root, sessionId) {
   return path.join(sessionsDir(root), sessionId + '.startup.json');
+}
+
+function readStartupReceipt(root, sessionId) {
+  return readJsonFile(startupReceiptPath(root, sessionId));
+}
+
+function startupReceiptAuthorizesProject(receipt, sessionId, project) {
+  if (!receipt || receipt.startup_completed !== true) return false;
+  if (receipt.session !== sessionId) return false;
+  if (receipt.claim === 'acquired') {
+    return receipt.selected_project === project && receipt.project === project;
+  }
+  if (receipt.claim === 'owned') {
+    return receipt.project === project || receipt.selected_project === project;
+  }
+  return false;
+}
+
+function startupReceiptFailureReason(receipt, sessionId, project) {
+  if (!receipt) return 'startup receipt missing for session ' + sessionId;
+  if (receipt.startup_completed !== true) return 'startup receipt is not completed';
+  if (receipt.session !== sessionId) return 'startup receipt belongs to ' + receipt.session;
+  if (receipt.claim === 'none') return 'startup receipt did not acquire or own any project';
+  return 'startup receipt does not authorize project ' + project;
+}
+
+function startupReceiptHandoffBlocker(receipt, sessionId, project) {
+  if (!receipt) return null;
+  if (receipt.startup_completed !== true || receipt.session !== sessionId) {
+    return {
+      type: 'startup-receipt',
+      reason: startupReceiptFailureReason(receipt, sessionId, project)
+    };
+  }
+  if (receipt.claim === 'none') return null;
+  if (!startupReceiptAuthorizesProject(receipt, sessionId, project)) {
+    return {
+      type: 'startup-receipt',
+      reason: startupReceiptFailureReason(receipt, sessionId, project)
+    };
+  }
+  return null;
+}
+
+function cmdVerifyStartup() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(args.session, '--session <id> required for verify-startup');
+  assert(args.project, '--project <name> required for verify-startup');
+  assertSafeSession(args.session, '--session');
+  assert(isSafeName(args.project), '--project must be a simple folder name with no path separators');
+
+  const root = getRoot();
+  const receipt = readStartupReceipt(root, args.session);
+  const authorized = startupReceiptAuthorizesProject(receipt, args.session, args.project);
+  const result = {
+    authorized,
+    session: args.session,
+    project: args.project,
+    reason: authorized ? 'authorized' : startupReceiptFailureReason(receipt, args.session, args.project)
+  };
+  process.stdout.write(JSON.stringify(result) + '\n');
+  if (!authorized) process.exitCode = 2;
 }
 
 function writeStartupReceipt(root, sessionId, data) {
@@ -935,6 +1004,110 @@ function lockDataFromState(root, args, machineId, now) {
   };
 }
 
+function isPidAlive(pid) {
+  const n = Number(pid);
+  if (!Number.isInteger(n) || n <= 0) return false;
+  try {
+    process.kill(n, 0);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function fileMtimeMs(filePath) {
+  try {
+    return fs.statSync(filePath).mtime.getTime();
+  } catch (_) {
+    return 0;
+  }
+}
+
+function claudeProjectDirForRoot(root) {
+  const encoded = path.resolve(root).replace(/[\\/]/g, '-');
+  return path.join(os.homedir(), '.claude', 'projects', encoded);
+}
+
+function claudeSessionPathForRoot(root, sessionId) {
+  return path.join(claudeProjectDirForRoot(root), sessionId + '.jsonl');
+}
+
+function localOwnerLiveness(root, ownerSession, lock, now) {
+  const evidence = [];
+  const claudeSessionPath = claudeSessionPathForRoot(root, ownerSession);
+  const claudeMtime = fileMtimeMs(claudeSessionPath);
+  if (claudeMtime && (now.getTime() - claudeMtime) <= RECENT_CLAUDE_SESSION_MS) {
+    evidence.push({
+      type: 'claude-session-jsonl',
+      path: claudeSessionPath,
+      age_ms: now.getTime() - claudeMtime
+    });
+  }
+
+  const tickerPath = tickerPidPath(root, ownerSession);
+  let tickerPid = '';
+  try { tickerPid = fs.readFileSync(tickerPath, 'utf8').trim(); } catch (_) {}
+  if (tickerPid && isPidAlive(tickerPid)) {
+    evidence.push({ type: 'ticker-pid', path: tickerPath, pid: Number(tickerPid) });
+  }
+
+  if (lock && lock.expires && new Date(lock.expires).getTime() > now.getTime()) {
+    evidence.push({ type: 'lock-not-expired', expires: lock.expires });
+  }
+
+  if (lock && lock.last_heartbeat) {
+    const hb = new Date(lock.last_heartbeat).getTime();
+    if (Number.isFinite(hb) && (now.getTime() - hb) <= RECENT_HEARTBEAT_MS) {
+      evidence.push({ type: 'recent-heartbeat', last_heartbeat: lock.last_heartbeat, age_ms: now.getTime() - hb });
+    }
+  }
+
+  return evidence;
+}
+
+function handoffDecision(root, args, existing, previous, now) {
+  const force = args.forceLiveTakeover === true;
+  const blockers = [];
+  const receipt = readStartupReceipt(root, args.session);
+  const receiptBlocker = startupReceiptHandoffBlocker(receipt, args.session, args.project);
+  if (!force && receiptBlocker) {
+    blockers.push(receiptBlocker);
+  }
+
+  if (previous && previous !== args.session) {
+    const liveness = localOwnerLiveness(root, previous, existing, now);
+    for (const item of liveness) blockers.push(item);
+  }
+
+  return {
+    allowed: force || blockers.length === 0,
+    forced: force,
+    project: args.project,
+    requested_session: args.session,
+    previous_session: previous || null,
+    blockers
+  };
+}
+
+function cmdCanHandoff() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(args.project, '--project <name> required for can-handoff');
+  assert(args.session, '--session <id> required for can-handoff');
+  assert(isSafeName(args.project), '--project must be a simple folder name with no path separators');
+  assertSafeSession(args.session, '--session');
+
+  const root = getRoot();
+  const now = new Date();
+  const lp = lockPath(root, args.project);
+  const existing = readJsonFile(lp);
+  const previous = existing && isSafeName(existing.session_id)
+    ? existing.session_id
+    : sessionForProject(root, args.project);
+  const decision = handoffDecision(root, args, existing, previous, now);
+  process.stdout.write(JSON.stringify(decision, null, 2) + '\n');
+  if (!decision.allowed) process.exitCode = 2;
+}
+
 function cmdHandoff() {
   const args = parseArgs(process.argv.slice(3));
   assert(args.project, '--project <name> required for handoff');
@@ -950,11 +1123,19 @@ function cmdHandoff() {
   fs.mkdirSync(locksDir(root), { recursive: true });
 
   const lp = lockPath(root, args.project);
-  let existing = null;
-  try { existing = JSON.parse(fs.readFileSync(lp, 'utf8')); } catch (_) {}
+  const existing = readJsonFile(lp);
   const previous = existing && isSafeName(existing.session_id)
     ? existing.session_id
     : sessionForProject(root, args.project);
+
+  const decision = handoffDecision(root, args, existing, previous, now);
+  if (!decision.allowed) {
+    process.stderr.write('handoff rejected: ' + decision.blockers.map(function(item) {
+      return item.type + (item.reason ? ': ' + item.reason : '');
+    }).join('; ') + '\n');
+    process.exitCode = 2;
+    return;
+  }
 
   let lockData;
   if (existing) {
@@ -979,6 +1160,24 @@ function cmdHandoff() {
 
   const stateFile = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
   updateSinkLease(stateFile, lockData);
+  writeStartupReceipt(root, args.session, {
+    runtime: lockData.runtime || args.runtime || 'claude',
+    issue_sync: 'handoff',
+    roadmap_sync: 'unchanged',
+    issue_source: 'handoff',
+    project: args.project,
+    issue: lockData.issue_number,
+    selected_issue: lockData.issue_number,
+    selected_project: args.project,
+    verdict: 'owned',
+    claim: 'owned',
+    skipped: [],
+    blocked: [],
+    handoff: {
+      previous_session: previous || null,
+      forced: decision.forced
+    }
+  });
 
   const safeCommentId = /^\d+$/.test(String(lockData.claim_comment_id || '')) ? String(lockData.claim_comment_id) : null;
   if (!OFFLINE && safeCommentId) {
@@ -1329,8 +1528,9 @@ function cmdWatchPr() {
 
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|handoff|patch-branch|watch-pr|bootstrap|startup>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|can-handoff|handoff|verify-startup|patch-branch|watch-pr|bootstrap|startup>');
   if (sub === 'claim') return cmdClaim();
+  if (sub === 'can-handoff') return cmdCanHandoff();
   if (sub === 'handoff') return cmdHandoff();
   if (sub === 'release') return cmdRelease();
   if (sub === 'heartbeat') return cmdHeartbeat();
@@ -1342,6 +1542,7 @@ function main() {
   if (sub === 'watch-pr') return cmdWatchPr();
   if (sub === 'bootstrap') return cmdBootstrap();
   if (sub === 'startup') return cmdStartup();
+  if (sub === 'verify-startup') return cmdVerifyStartup();
   throw new Error('unknown subcommand: ' + sub);
 }
 

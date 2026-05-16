@@ -57,8 +57,15 @@ If no free issue exists, stop with the startup no-unclaimed-work message.
 If the startup script is unavailable, stop for repair.
 Do not proceed to project selection when the startup receipt is missing or
 malformed.
-Use `handoff --project <project> --session "$KAOLA_SESSION_ID"` only for
-explicit recovery when the user intentionally transfers unfinished work.
+If startup returns `claim: "none"`, stop normal routing. Do not inspect active
+project folders and recover/handoff them from a skipped `already claimed`
+entry.
+Use `can-handoff --project <project> --session "$KAOLA_SESSION_ID"` followed by
+`handoff --project <project> --session "$KAOLA_SESSION_ID"` only for explicit
+recovery when the user intentionally transfers unfinished work. Live local owner
+evidence and startup receipts for a different project block normal handoff. Use
+`--force-live-takeover` only when the user explicitly requests dangerous manual
+recovery of live work.
 
 Classify local and remote Git state:
 

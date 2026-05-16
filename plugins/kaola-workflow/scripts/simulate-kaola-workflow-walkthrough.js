@@ -474,7 +474,7 @@ exit 0
         assert(!log.includes('--title'), 'Case 5f: claim must not mutate issue title, got: ' + log);
       }
 
-      // Case 5g: session lookup validates the current owner; handoff is explicit.
+      // Case 5g: session lookup validates the current owner; handoff is explicit and guarded.
       {
         const case5gDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5g-'));
         try {
@@ -499,16 +499,47 @@ exit 0
           } catch (e) { intruderCode = e.status || 1; }
           assert(intruderCode === 2, 'Case 5g-b: foreign owner must be occupied, got: ' + intruderCode);
 
-          fs.unlinkSync(path.join(case5gDir, 'kaola-workflow', '.locks', 'plugin-session.lock'));
-          const fromState = execFileSync(process.execPath, [
-            claimScript, 'session', '--project', 'plugin-session', '--session', 'sess-plugin-5g'
-          ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } }).trim();
-          assert(fromState === 'sess-plugin-5g', 'Case 5g-c: matching state-only owner must validate, got: ' + fromState);
+          const claudeDir5g = path.join(case5gDir, '.claude', 'projects', fs.realpathSync(case5gDir).replace(/[\\/]/g, '-'));
+          fs.mkdirSync(claudeDir5g, { recursive: true });
+          write(path.join(claudeDir5g, 'sess-plugin-5g.jsonl'), '{}\n');
+
+          let canHandoffCode = 0;
+          let canHandoffOut = '';
+          try {
+            canHandoffOut = execFileSync(process.execPath, [
+              claimScript, 'can-handoff', '--project', 'plugin-session', '--session', 'sess-plugin-5g-new'
+            ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          } catch (e) {
+            canHandoffCode = e.status || 1;
+            canHandoffOut = e.stdout || '';
+          }
+          assert(canHandoffCode === 2, 'Case 5g-d: can-handoff must reject live owner, got: ' + canHandoffCode);
+          assert(canHandoffOut.includes('claude-session-jsonl'),
+            'Case 5g-d: can-handoff must report local Claude session evidence, got: ' + canHandoffOut);
+
+          let rejectedCode = 0;
+          try {
+            execFileSync(process.execPath, [
+              claimScript, 'handoff', '--project', 'plugin-session', '--session', 'sess-plugin-5g-new'
+            ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          } catch (e) { rejectedCode = e.status || 1; }
+          assert(rejectedCode === 2, 'Case 5g-e: default handoff must reject live owner, got: ' + rejectedCode);
 
           const handoff = execFileSync(process.execPath, [
-            claimScript, 'handoff', '--project', 'plugin-session', '--session', 'sess-plugin-5g-new'
+            claimScript, 'handoff', '--project', 'plugin-session', '--session', 'sess-plugin-5g-new', '--force-live-takeover'
           ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
-          assert(JSON.parse(handoff).session === 'sess-plugin-5g-new', 'Case 5g-d: handoff must return new session');
+          assert(JSON.parse(handoff).session === 'sess-plugin-5g-new', 'Case 5g-f: force handoff must return new session');
+          const handoffReceipt = execFileSync(process.execPath, [
+            claimScript, 'verify-startup', '--project', 'plugin-session', '--session', 'sess-plugin-5g-new'
+          ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } }).trim();
+          assert(JSON.parse(handoffReceipt).authorized === true,
+            'Case 5g-f: force handoff must write an owned startup receipt, got: ' + handoffReceipt);
+
+          fs.unlinkSync(path.join(case5gDir, 'kaola-workflow', '.locks', 'plugin-session.lock'));
+          const fromState = execFileSync(process.execPath, [
+            claimScript, 'session', '--project', 'plugin-session', '--session', 'sess-plugin-5g-new'
+          ], { cwd: case5gDir, encoding: 'utf8', env: { ...process.env, HOME: case5gDir, KAOLA_WORKFLOW_OFFLINE: '1' } }).trim();
+          assert(fromState === 'sess-plugin-5g-new', 'Case 5g-g: matching state-only owner must validate, got: ' + fromState);
         } finally {
           fs.rmSync(case5gDir, { recursive: true, force: true });
         }
@@ -889,6 +920,23 @@ exit 0
           'Case 5k-a: startup receipt missing');
         assert(fs.existsSync(path.join(startupDir, 'kaola-workflow', '.roadmap', 'issue-952.md')),
           'Case 5k-a: issue-ahead-of-roadmap file missing');
+        const verifyFirst = execFileSync(process.execPath, [
+          claimScript, 'verify-startup',
+          '--session', 'sess-plugin-startup-a',
+          '--project', 'issue-951'
+        ], { cwd: startupDir, encoding: 'utf8', env: startupEnv }).trim();
+        assert(JSON.parse(verifyFirst).authorized === true,
+          'Case 5k-a: verify-startup must authorize the acquired project, got: ' + verifyFirst);
+        let verifyWrongCode = 0;
+        try {
+          execFileSync(process.execPath, [
+            claimScript, 'verify-startup',
+            '--session', 'sess-plugin-startup-a',
+            '--project', 'issue-953'
+          ], { cwd: startupDir, encoding: 'utf8', env: startupEnv });
+        } catch (e) { verifyWrongCode = e.status || 1; }
+        assert(verifyWrongCode === 2,
+          'Case 5k-a: verify-startup must reject a different project for the same receipt, got: ' + verifyWrongCode);
         const second = JSON.parse(execFileSync(process.execPath, [
           claimScript, 'startup',
           '--session', 'sess-plugin-startup-b',
@@ -898,6 +946,55 @@ exit 0
           'Case 5k-b: second startup must skip 951, block 952, and claim 953, got: ' + JSON.stringify(second));
         assert(second.skipped.some(item => item.issue === 951), 'Case 5k-b: skipped receipt must include 951');
         assert(second.blocked.some(item => item.issue === 952), 'Case 5k-b: blocked receipt must include 952');
+        let verifySecondForFirstCode = 0;
+        try {
+          execFileSync(process.execPath, [
+            claimScript, 'verify-startup',
+            '--session', 'sess-plugin-startup-b',
+            '--project', 'issue-951'
+          ], { cwd: startupDir, encoding: 'utf8', env: startupEnv });
+        } catch (e) { verifySecondForFirstCode = e.status || 1; }
+        assert(verifySecondForFirstCode === 2,
+          'Case 5k-b: second startup receipt must not authorize issue 951, got: ' + verifySecondForFirstCode);
+        const verifySecond = execFileSync(process.execPath, [
+          claimScript, 'verify-startup',
+          '--session', 'sess-plugin-startup-b',
+          '--project', 'issue-953'
+        ], { cwd: startupDir, encoding: 'utf8', env: startupEnv }).trim();
+        assert(JSON.parse(verifySecond).authorized === true,
+          'Case 5k-b: second startup receipt must authorize issue 953, got: ' + verifySecond);
+
+        let thirdCode = 0;
+        let thirdStdout = '';
+        try {
+          thirdStdout = execFileSync(process.execPath, [
+            claimScript, 'startup',
+            '--session', 'sess-plugin-startup-c',
+            '--runtime', 'codex'
+          ], { cwd: startupDir, encoding: 'utf8', env: startupEnv });
+        } catch (e) {
+          thirdCode = e.status || 1;
+          thirdStdout = e.stdout || '';
+        }
+        assert(thirdCode === 1, 'Case 5k-c: no-work startup must exit 1, got: ' + thirdCode);
+        const thirdReceipt = JSON.parse(thirdStdout.trim());
+        assert(thirdReceipt.claim === 'none' && thirdReceipt.startup_completed === true,
+          'Case 5k-c: no-work startup must write a claim:none receipt, got: ' + JSON.stringify(thirdReceipt));
+        let verifyThirdCode = 0;
+        let verifyThirdOut = '';
+        try {
+          verifyThirdOut = execFileSync(process.execPath, [
+            claimScript, 'verify-startup',
+            '--session', 'sess-plugin-startup-c',
+            '--project', 'issue-951'
+          ], { cwd: startupDir, encoding: 'utf8', env: startupEnv });
+        } catch (e) {
+          verifyThirdCode = e.status || 1;
+          verifyThirdOut = e.stdout || '';
+        }
+        assert(verifyThirdCode === 2, 'Case 5k-c: claim:none receipt must not authorize phase work, got: ' + verifyThirdCode);
+        assert(verifyThirdOut.includes('did not acquire or own any project'),
+          'Case 5k-c: claim:none verifier must explain the startup receipt gap, got: ' + verifyThirdOut);
       }
 
       // Case 5j: locks are isolated by project — all claimed projects must still exist independently

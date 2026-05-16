@@ -52,6 +52,8 @@ for (const file of phaseCommands) {
   assert(exists(file), `${file} is missing`);
   assertIncludes(file, 'workflow-state.md');
   assertIncludes(file, 'Required Agent Compliance');
+  assertIncludes(file, 'verify-startup');
+  assertIncludes(file, 'startup receipt does not authorize');
 }
 
 assert(exists('commands/workflow-next.md'), 'commands/workflow-next.md is missing');
@@ -215,6 +217,11 @@ assertIncludes('install.sh', 'kaola-workflow-sink-merge.js');
 assertIncludes('scripts/kaola-workflow-claim.js', 'workflow/issue-');
 assertIncludes('scripts/kaola-workflow-claim.js', 'CODEX_THREAD_ID');
 assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdHandoff');
+assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdCanHandoff');
+assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdVerifyStartup');
+assertIncludes('scripts/kaola-workflow-claim.js', 'claudeSessionPathForRoot');
+assertIncludes('scripts/kaola-workflow-claim.js', 'RECENT_CLAUDE_SESSION_MS');
+assertIncludes('scripts/kaola-workflow-claim.js', '--force-live-takeover');
 assertIncludes('scripts/kaola-workflow-claim.js', 'function runBootstrapClaimFirstAvailable');
 assertIncludes('scripts/kaola-workflow-claim.js', 'function cmdStartup');
 assertIncludes('scripts/kaola-workflow-claim.js', 'startupReceiptPath');
@@ -222,6 +229,8 @@ assertIncludes('scripts/kaola-workflow-claim.js', 'syncIssuesToRoadmap');
 assertIncludes('scripts/kaola-workflow-claim.js', 'workflow:queued');
 assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 13: true parallel bootstrap coordination');
 assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 14: startup transaction');
+assertIncludes('scripts/simulate-workflow-walkthrough.js', 'can-handoff must reject live owner');
+assertIncludes('scripts/simulate-workflow-walkthrough.js', 'claim:none receipt must not authorize phase work');
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.js');
 assertIncludes('commands/workflow-next.md', 'Branch:');
 assertIncludes('scripts/kaola-workflow-sink-merge.js', 'MAX_AUTOMERGE_RETRIES');
@@ -261,8 +270,11 @@ assertIncludes('commands/workflow-next.md', 'STARTUP_OUT');
 assertIncludes('commands/workflow-next.md', 'startup receipt');
 assertIncludes('commands/workflow-next.md', 'startup unavailable');
 assertIncludes('commands/workflow-next.md', 'stop for repair');
+assertIncludes('commands/workflow-next.md', 'claim: "none"');
 assertIncludes('commands/workflow-next.md', 'Parallel decision:');
+assertIncludes('commands/workflow-next.md', 'can-handoff');
 assertIncludes('commands/workflow-next.md', 'handoff --project');
+assertIncludes('commands/workflow-next.md', '--force-live-takeover');
 for (const file of phaseCommands) {
   assertIncludes(file, 'Startup Receipt Guard');
   assertIncludes(file, '.startup.json');
