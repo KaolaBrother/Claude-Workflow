@@ -1,5 +1,6 @@
 .DS_Store
 node_modules/
+.claude/
 kaola-workflow/.locks/
 kaola-workflow/.sessions/
 kaola-workflow/.tickers/
