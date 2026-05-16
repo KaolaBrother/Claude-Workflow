@@ -545,6 +545,111 @@ exit 0
         }
       }
 
+      // Case 5i: claim:none receipt cannot silently take over a dead-looking project.
+      // Regression for issue #26 Bug 1 (claim:none exemption in startupReceiptHandoffBlocker).
+      {
+        const case5iDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5i-'));
+        try {
+          fs.mkdirSync(path.join(case5iDir, 'kaola-workflow', '.locks'), { recursive: true });
+          fs.mkdirSync(path.join(case5iDir, 'kaola-workflow', '.sessions'), { recursive: true });
+          fs.mkdirSync(path.join(case5iDir, 'kaola-workflow', 'issue-99'), { recursive: true });
+
+          write(path.join(case5iDir, 'kaola-workflow', '.locks', 'issue-99.lock'),
+            JSON.stringify({
+              project: 'issue-99',
+              issue_number: 99,
+              session_id: 'sess-5i-owner',
+              machine_id: 'machine-old',
+              expires: '2020-01-01T00:00:00.000Z',
+              last_heartbeat: '2020-01-01T00:00:00.000Z',
+              runtime: 'claude'
+            }, null, 2) + '\n');
+          write(path.join(case5iDir, 'kaola-workflow', 'issue-99', 'workflow-state.md'),
+            'status: active\nsession_id: sess-5i-owner\n\n## Lease\nsession_id: sess-5i-owner\n');
+          write(path.join(case5iDir, 'kaola-workflow', '.sessions', 'sess-5i-new.startup.json'),
+            JSON.stringify({
+              startup_completed: true,
+              session: 'sess-5i-new',
+              project: null,
+              issue: null,
+              selected_issue: null,
+              selected_project: null,
+              verdict: 'none',
+              claim: 'none',
+              skipped: [{ issue: 99, verdict: 'skipped', reason: 'already claimed' }]
+            }, null, 2) + '\n');
+
+          let r5iCanCode = 0;
+          let r5iCanOut = '';
+          try {
+            r5iCanOut = execFileSync(process.execPath, [
+              claimScript, 'can-handoff', '--project', 'issue-99', '--session', 'sess-5i-new'
+            ], { cwd: case5iDir, encoding: 'utf8', env: { ...process.env, HOME: case5iDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          } catch (e) { r5iCanCode = e.status || 1; r5iCanOut = e.stdout || ''; }
+          assert(r5iCanCode === 2,
+            'Case 5i-a: can-handoff must reject claim:none receipt even when owner looks dead, got ' + r5iCanCode + '\nstdout: ' + r5iCanOut);
+          assert(r5iCanOut.includes('startup-receipt'),
+            'Case 5i-a: can-handoff must report startup-receipt blocker for claim:none, got: ' + r5iCanOut);
+
+          let r5iDefaultCode = 0;
+          try {
+            execFileSync(process.execPath, [
+              claimScript, 'handoff', '--project', 'issue-99', '--session', 'sess-5i-new'
+            ], { cwd: case5iDir, encoding: 'utf8', env: { ...process.env, HOME: case5iDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          } catch (e) { r5iDefaultCode = e.status || 1; }
+          assert(r5iDefaultCode === 2,
+            'Case 5i-b: default handoff must reject claim:none receipt, got ' + r5iDefaultCode);
+
+          execFileSync(process.execPath, [
+            claimScript, 'handoff', '--project', 'issue-99', '--session', 'sess-5i-new', '--force-live-takeover'
+          ], { cwd: case5iDir, encoding: 'utf8', env: { ...process.env, HOME: case5iDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          const r5iForceState = fs.readFileSync(path.join(case5iDir, 'kaola-workflow', 'issue-99', 'workflow-state.md'), 'utf8');
+          assert(r5iForceState.includes('session_id: sess-5i-new'),
+            'Case 5i-c: forced handoff must update workflow-state lease');
+        } finally {
+          fs.rmSync(case5iDir, { recursive: true, force: true });
+        }
+      }
+
+      // Case 5j: liveness lookup must match Claude Code's encoding when the repo
+      // root contains a '.' segment (regression for issue #26 Bug 2).
+      {
+        const case5jParent = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-case5j-'));
+        const case5jDir = path.join(case5jParent, '.worktree', 'live-owner');
+        fs.mkdirSync(case5jDir, { recursive: true });
+        try {
+          execFileSync('git', ['init', case5jDir], { encoding: 'utf8' });
+          execFileSync('git', ['-C', case5jDir, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+          execFileSync(process.execPath, [
+            claimScript, 'claim',
+            '--session', 'sess-5j-owner',
+            '--issue', '77',
+            '--project', 'plugin5j',
+            '--branch', 'workflow/issue-77-plugin5j'
+          ], { cwd: case5jDir, encoding: 'utf8', env: { ...process.env, HOME: case5jDir, KAOLA_WORKFLOW_OFFLINE: '1' } });
+
+          // Encode the way Claude Code stores its JSONL: realpath + '/', '\\', '.' -> '-'.
+          const claudeEncoded = fs.realpathSync(case5jDir).replace(/[./\\]/g, '-');
+          const claudeDir5j = path.join(fs.realpathSync(case5jParent), '.claude', 'projects', claudeEncoded);
+          fs.mkdirSync(claudeDir5j, { recursive: true });
+          write(path.join(claudeDir5j, 'sess-5j-owner.jsonl'), '{}\n');
+
+          let r5jCanCode = 0;
+          let r5jCanOut = '';
+          try {
+            r5jCanOut = execFileSync(process.execPath, [
+              claimScript, 'can-handoff', '--project', 'plugin5j', '--session', 'sess-5j-new'
+            ], { cwd: case5jDir, encoding: 'utf8', env: { ...process.env, HOME: case5jParent, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          } catch (e) { r5jCanCode = e.status || 1; r5jCanOut = e.stdout || ''; }
+          assert(r5jCanCode === 2,
+            'Case 5j-a: can-handoff must reject when JSONL exists at the dotted-path encoding, got ' + r5jCanCode + '\nstdout: ' + r5jCanOut);
+          assert(r5jCanOut.includes('claude-session-jsonl'),
+            'Case 5j-a: liveness check must find JSONL under Claude-encoded dotted path, got: ' + r5jCanOut);
+        } finally {
+          fs.rmSync(case5jParent, { recursive: true, force: true });
+        }
+      }
+
       // Case 5h: cross-session phase matrix for the Codex plugin scripts.
       {
         const matrixDir = path.join(case5Dir, 'matrix');
