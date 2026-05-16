@@ -4467,6 +4467,7 @@ exit 0
 
         // Assert 2: kaola-workflow/test-proj/ does NOT exist
         assert(!fs.existsSync(projDir34a), '34-A: kaola-workflow/test-proj/ must not exist after finalize');
+        assert(fs.existsSync(path.join(locksDir34a, 'test-proj.lock')), '34-A: lock file must survive finalize (required for idempotency check)');
 
         // Assert 3: stdout JSON has archived: true
         const finalizeJson34a = JSON.parse(finalizeOut.trim());
@@ -4551,6 +4552,7 @@ exit 0
         assert(fs.existsSync(archivedOrphan), '34-B: archive/orphan-proj/workflow-state.md must exist');
         const orphanContent = fs.readFileSync(archivedOrphan, 'utf8');
         assert(orphanContent.includes('status: abandoned'), '34-B: orphan archived state must contain status: abandoned');
+        assert(orphanContent.includes('step: complete'), '34-B: orphan archived state must contain step: complete');
 
         // Assert 2: kaola-workflow/orphan-proj/ does NOT exist
         assert(!fs.existsSync(orphanDir), '34-B: kaola-workflow/orphan-proj/ must not exist after sweep');
@@ -4574,11 +4576,10 @@ exit 0
         const content = fs.readFileSync(filePath, 'utf8');
         assert(content.includes('finalize'), label + ' 34-C: must contain "finalize"');
         const step8bIdx = content.indexOf('Step 8b');
-        const commitGateIdx = content.indexOf('Step 8 - Commit Gate');
+        const commitIdx = content.indexOf('git -C "$ACTIVE_WORKTREE_PATH" add');
         assert(step8bIdx !== -1, label + ' 34-C: must contain "Step 8b"');
-        if (commitGateIdx !== -1) {
-          assert(step8bIdx < commitGateIdx, label + ' 34-C: Step 8b must appear before "Step 8 - Commit Gate"');
-        }
+        assert(commitIdx !== -1, label + ' 34-C: must contain git -C add line');
+        assert(step8bIdx < commitIdx, label + ' 34-C: Step 8b must appear before the git add commit gate');
       }
     }
 

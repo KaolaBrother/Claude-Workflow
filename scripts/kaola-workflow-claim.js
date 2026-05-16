@@ -1659,9 +1659,13 @@ function archiveProjectDir(root, project, statusValue) {
   try {
     let content = fs.readFileSync(stateFile, 'utf8');
     content = content.replace(/^status:\s*\S+.*$/m, 'status: ' + statusValue);
+    if (!/^status:/m.test(content)) content += '\nstatus: ' + statusValue;
     content = content.replace(/^step:\s*\S+.*$/m, 'step: complete');
+    if (!/^step:/m.test(content)) content += '\nstep: complete';
     fs.writeFileSync(stateFile, content);
-  } catch (_) {}
+  } catch (e) {
+    process.stderr.write('archiveProjectDir: state update failed for ' + project + ': ' + e.message + '\n');
+  }
   const archiveBase = path.join(root, 'kaola-workflow', 'archive');
   fs.mkdirSync(archiveBase, { recursive: true });
   let destDir = path.join(archiveBase, project);
@@ -1921,7 +1925,7 @@ function cmdSweep() {
       try { return fs.readFileSync(path.join(dirPath, 'workflow-state.md'), 'utf8'); } catch (_) { return ''; }
     })();
     if (field(stateContent, 'status') !== 'active') continue;
-    if (fs.existsSync(lockPath(coordRoot, entry.name))) continue;
+    if (fs.existsSync(lockPath(coordRoot, entry.name)) || fs.existsSync(lockPath(root, entry.name))) continue;
     const expiresStr = field(stateContent, 'expires');
     if (!expiresStr) continue;
     const expiresMs = new Date(expiresStr).getTime();
