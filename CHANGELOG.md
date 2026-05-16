@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.2.0 - 2026-05-16 (Claude Code) / Codex 1.2.0 - 2026-05-16
+
+### Added — Multi-session Worktree-Per-Session Isolation
+
+- **Shared coordination state (coordRoot)**: Lock files, session files, and ticker state are now stored in `<repo>/.git/kaola-workflow/` (discovered via `git rev-parse --git-common-dir`) instead of the worktree-local `<worktree>/kaola-workflow/`. All linked worktrees of the same repository now share the same coordination state, ensuring a session is uniquely bound to an issue across all worktrees on the same machine or across machines accessing the same repository.
+- **Backwards-compatible migration**: Added `migrateLegacyCoordState()` helper that runs on every startup. Idempotently moves lock, session, and ticker files from the legacy `<worktree>/kaola-workflow/` location to coordRoot. No manual migration needed.
+- **Per-session git worktrees**: At claim time, `cmdClaim()` now auto-provisions a git worktree at `<repo-parent>/<repo-name>.kw/<project>/` via `provisionWorktree()`. The worktree path is stored in the lock file as `worktree_path`.
+- **New environment variable**: `KAOLA_WORKTREE_PATH` — set by the claim transaction after worktree provisioning. All workflow phases that run in a worktree should check and use this env var (the 6 SKILL.md files include a Session Heartbeat block that changes directory: `cd "$KAOLA_WORKTREE_PATH" 2>/dev/null || true`).
+- **Worktree lifecycle management**: 
+  - `removeWorktree()` removes worktree on PR MERGED, sink-merge success, or explicit release
+  - Dirty worktrees are renamed to `.abandoned-<ISO-timestamp>` for manual cleanup
+  - Removal of own current working directory is deferred to `.pending-removal/<project>.json`
+  - `drainPendingRemovals()` processes deferred removals during startup/sweep
+  - `cmdWatchPr()` calls `removeWorktree()` on MERGED and CLOSED
+  - `sink-merge.js` calls `removeWorktree()` before branch deletion
+  - `cmdSweep()` runs `drainPendingRemovals()` + `git worktree prune`
+- **Pre-commit hook update**: Hook now resolves lock files from coordRoot via `COORD_ROOT=$(git rev-parse --git-common-dir)`.
+
+### Documentation
+
+- **Multi-Session Support expansion**: README.md now includes subsections for Shared Coordination State, Per-Session Git Worktrees, and backwards-compatible migration guidance.
+
+### Tests
+
+- **Epic Case 15**: Worktree provisioning on claim; path stored in lock file; `KAOLA_WORKTREE_PATH` exported correctly.
+- **Epic Case 16**: Worktree removal on PR MERGED and sink-merge success; dirty worktree renamed to `.abandoned-<ISO>`; deferred removal processing in sweep.
+
 ## 3.1.10 - 2026-05-16 (Claude Code) / Codex 1.1.10 - 2026-05-16
 
 ### Fixed

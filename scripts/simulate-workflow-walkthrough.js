@@ -7,6 +7,23 @@ const { execFileSync, spawn, spawnSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const project = 'simulated-feature';
 
+function coordRootFor(dir) {
+  try {
+    const raw = execFileSync('git', ['rev-parse', '--git-common-dir'],
+      { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const resolved = path.resolve(dir, raw);
+    try { return fs.realpathSync(resolved); } catch (_) { return resolved; }
+  } catch (_) {
+    return path.join(dir, '.git');
+  }
+}
+function locksDirFor(dir) { return path.join(coordRootFor(dir), 'kaola-workflow', '.locks'); }
+function sessionsDirFor(dir) { return path.join(coordRootFor(dir), 'kaola-workflow', '.sessions'); }
+function tickersDirFor(dir) { return path.join(coordRootFor(dir), 'kaola-workflow', '.tickers'); }
+function readLockFileViaPath(p) {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return null; }
+}
+
 function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
@@ -364,8 +381,8 @@ async function main() {
     // Epic Case 1: claim → heartbeat → status → second-claim-blocked → sweep → release
     const epicTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic1-'));
     try {
-      fs.mkdirSync(path.join(epicTmp, 'kaola-workflow', '.locks'), { recursive: true });
-      fs.mkdirSync(path.join(epicTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+      fs.mkdirSync(path.join(locksDirFor(epicTmp)), { recursive: true });
+      fs.mkdirSync(path.join(sessionsDirFor(epicTmp)), { recursive: true });
       fs.mkdirSync(path.join(epicTmp, 'kaola-workflow', 'epic-test-project'), { recursive: true });
       fs.writeFileSync(
         path.join(epicTmp, 'kaola-workflow', 'epic-test-project', 'workflow-state.md'),
@@ -380,7 +397,7 @@ async function main() {
       ], { cwd: epicTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
 
       // Step 2 — Verify lock file exists
-      const lockPath = path.join(epicTmp, 'kaola-workflow', '.locks', 'epic-test-project.lock');
+      const lockPath = path.join(locksDirFor(epicTmp), 'epic-test-project.lock');
       assert(fs.existsSync(lockPath), 'Epic Case 1: lock file must exist after claim');
       const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
       assert(lock.session_id === sessionId, 'Epic Case 1: lock.session_id must match');
@@ -877,7 +894,7 @@ async function main() {
 
       const epic6Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic6-'));
       try {
-        const locksDir = path.join(epic6Tmp, 'kaola-workflow', '.locks');
+        const locksDir = locksDirFor(epic6Tmp);
         fs.mkdirSync(locksDir, { recursive: true });
         const roadmapDir = path.join(epic6Tmp, 'kaola-workflow', '.roadmap');
         fs.mkdirSync(roadmapDir, { recursive: true });
@@ -1145,8 +1162,8 @@ async function main() {
 
         // kaola-workflow directories
         const kwDir = path.join(workDir, 'kaola-workflow');
-        const locksDir = path.join(kwDir, '.locks');
-        const sessionsDir = path.join(kwDir, '.sessions');
+        const locksDir = locksDirFor(workDir);
+        const sessionsDir = sessionsDirFor(workDir);
         fs.mkdirSync(locksDir, { recursive: true });
         fs.mkdirSync(sessionsDir, { recursive: true });
 
@@ -1397,7 +1414,7 @@ exit 0
           });
           if (r.status !== 0) throw new Error('runClaim failed (status ' + r.status + ')\nstdout: ' + r.stdout + '\nstderr: ' + r.stderr);
           return {
-            lockPath: path.join(workdir, 'kaola-workflow', '.locks', claimProject + '.lock'),
+            lockPath: path.join(locksDirFor(workdir), claimProject + '.lock'),
             statePath: path.join(workdir, 'kaola-workflow', claimProject, 'workflow-state.md')
           };
         }
@@ -1406,7 +1423,7 @@ exit 0
         if (process.platform !== 'win32') {
           const sessId8a = 'sess-8a-' + Date.now();
           const { lockPath: lp8a } = runClaim(epic8Tmp, sessId8a, 3, 'epic8-proj');
-          const sessionFile8a = path.join(epic8Tmp, 'kaola-workflow', '.sessions', sessId8a + '.json');
+          const sessionFile8a = path.join(sessionsDirFor(epic8Tmp), sessId8a + '.json');
           assert((fs.statSync(lp8a).mode & 0o777) === 0o600, '8A: lock file mode must be 0o600');
           assert((fs.statSync(sessionFile8a).mode & 0o777) === 0o600, '8A: session file mode must be 0o600');
         }
@@ -1415,7 +1432,7 @@ exit 0
         {
           const epic8dTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic8d-'));
           try {
-            const locksDir8d = path.join(epic8dTmp, 'kaola-workflow', '.locks');
+            const locksDir8d = locksDirFor(epic8dTmp);
             fs.mkdirSync(locksDir8d, { recursive: true });
             const now8d = new Date();
             fs.writeFileSync(
@@ -1446,7 +1463,7 @@ exit 0
         {
           const epic8bTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic8b-'));
           try {
-            const locksDir8b = path.join(epic8bTmp, 'kaola-workflow', '.locks');
+            const locksDir8b = locksDirFor(epic8bTmp);
             const projDir8b = path.join(epic8bTmp, 'kaola-workflow', 'epic8b');
             fs.mkdirSync(locksDir8b, { recursive: true });
             fs.mkdirSync(projDir8b, { recursive: true });
@@ -1585,8 +1602,8 @@ exit 0
         {
           const epic8gTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8g-'));
           try {
-            fs.mkdirSync(path.join(epic8gTmp, 'kaola-workflow', '.locks'), { recursive: true });
-            fs.mkdirSync(path.join(epic8gTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+            fs.mkdirSync(locksDirFor(epic8gTmp), { recursive: true });
+            fs.mkdirSync(sessionsDirFor(epic8gTmp), { recursive: true });
 
             // 8G-a: default runtime ('claude') when --runtime is not passed
             const r8ga = spawnSync(process.execPath, [
@@ -1599,7 +1616,7 @@ exit 0
               env: { ...process.env, HOME: epic8gTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
             assert(r8ga.status === 0, '8G-a: claim must succeed, got ' + r8ga.status + '\nstderr: ' + r8ga.stderr);
-            const lock8ga = JSON.parse(fs.readFileSync(path.join(epic8gTmp, 'kaola-workflow', '.locks', 'proj-8g-a.lock'), 'utf8'));
+            const lock8ga = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic8gTmp), 'proj-8g-a.lock'), 'utf8'));
             assert(lock8ga.runtime === 'claude', '8G-a: lock must include runtime=claude by default, got: ' + lock8ga.runtime);
 
             // 8G-b: explicit --runtime codex wins
@@ -1614,7 +1631,7 @@ exit 0
               env: { ...process.env, HOME: epic8gTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
             assert(r8gb.status === 0, '8G-b: claim must succeed, got ' + r8gb.status + '\nstderr: ' + r8gb.stderr);
-            const lock8gb = JSON.parse(fs.readFileSync(path.join(epic8gTmp, 'kaola-workflow', '.locks', 'proj-8g-b.lock'), 'utf8'));
+            const lock8gb = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic8gTmp), 'proj-8g-b.lock'), 'utf8'));
             assert(lock8gb.runtime === 'codex', '8G-b: lock must include runtime=codex, got: ' + lock8gb.runtime);
           } finally {
             fs.rmSync(epic8gTmp, { recursive: true, force: true });
@@ -1625,8 +1642,8 @@ exit 0
         {
           const epic8gcTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8gc-'));
           try {
-            fs.mkdirSync(path.join(epic8gcTmp, 'kaola-workflow', '.locks'), { recursive: true });
-            fs.mkdirSync(path.join(epic8gcTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+            fs.mkdirSync(locksDirFor(epic8gcTmp), { recursive: true });
+            fs.mkdirSync(sessionsDirFor(epic8gcTmp), { recursive: true });
             const r8gc = spawnSync(process.execPath, [
               path.join(root, 'scripts/kaola-workflow-claim.js'), 'claim',
               '--session', 'sess-8gc',
@@ -1651,8 +1668,8 @@ exit 0
           try {
             // Minimal git repo so getRoot() works
             execFileSync('git', ['init', epic8gdTmp], { encoding: 'utf8' });
-            fs.mkdirSync(path.join(epic8gdTmp, 'kaola-workflow', '.locks'), { recursive: true });
-            fs.mkdirSync(path.join(epic8gdTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+            fs.mkdirSync(locksDirFor(epic8gdTmp), { recursive: true });
+            fs.mkdirSync(sessionsDirFor(epic8gdTmp), { recursive: true });
             // Directly invoke claim (the bootstrap inner call path) without --runtime
             const r8gd = spawnSync(process.execPath, [
               path.join(root, 'scripts/kaola-workflow-claim.js'), 'claim',
@@ -1664,7 +1681,7 @@ exit 0
               env: { ...process.env, HOME: epic8gdTmp, KAOLA_WORKFLOW_OFFLINE: '1' }
             });
             assert(r8gd.status === 0, '8G-d: claim without --runtime must succeed, got ' + r8gd.status + '\nstderr: ' + r8gd.stderr);
-            const lock8gd = JSON.parse(fs.readFileSync(path.join(epic8gdTmp, 'kaola-workflow', '.locks', 'proj-8gd.lock'), 'utf8'));
+            const lock8gd = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic8gdTmp), 'proj-8gd.lock'), 'utf8'));
             assert(lock8gd.runtime === 'claude', '8G-d: lock.runtime must be "claude" (not "undefined"), got: ' + lock8gd.runtime);
           } finally {
             fs.rmSync(epic8gdTmp, { recursive: true, force: true });
@@ -1771,7 +1788,7 @@ exit 0
             assert(r8kHandoffReceipt.status === 0,
               '8K-f: force handoff must write an owned startup receipt, got ' + r8kHandoffReceipt.status + '\nstderr: ' + r8kHandoffReceipt.stderr);
 
-            fs.unlinkSync(path.join(epic8kTmp, 'kaola-workflow', '.locks', 'epic8k.lock'));
+            fs.unlinkSync(path.join(locksDirFor(epic8kTmp), 'epic8k.lock'));
             const r8kState = spawnSync(process.execPath, [
               claimScript, 'session', '--project', 'epic8k', '--session', 'sess-8k-new'
             ], {
@@ -1791,12 +1808,12 @@ exit 0
         {
           const epic8lTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-epic8l-'));
           try {
-            fs.mkdirSync(path.join(epic8lTmp, 'kaola-workflow', '.locks'), { recursive: true });
-            fs.mkdirSync(path.join(epic8lTmp, 'kaola-workflow', '.sessions'), { recursive: true });
+            fs.mkdirSync(locksDirFor(epic8lTmp), { recursive: true });
+            fs.mkdirSync(sessionsDirFor(epic8lTmp), { recursive: true });
             fs.mkdirSync(path.join(epic8lTmp, 'kaola-workflow', 'issue-99'), { recursive: true });
 
             // Owner lock that is fully expired with stale heartbeat and no ticker/JSONL.
-            fs.writeFileSync(path.join(epic8lTmp, 'kaola-workflow', '.locks', 'issue-99.lock'),
+            fs.writeFileSync(path.join(locksDirFor(epic8lTmp), 'issue-99.lock'),
               JSON.stringify({
                 project: 'issue-99',
                 issue_number: 99,
@@ -1809,7 +1826,7 @@ exit 0
             fs.writeFileSync(path.join(epic8lTmp, 'kaola-workflow', 'issue-99', 'workflow-state.md'),
               'status: active\nsession_id: sess-8l-owner\n\n## Lease\nsession_id: sess-8l-owner\n');
             // claim:none startup receipt for the new session.
-            fs.writeFileSync(path.join(epic8lTmp, 'kaola-workflow', '.sessions', 'sess-8l-new.startup.json'),
+            fs.writeFileSync(path.join(sessionsDirFor(epic8lTmp), 'sess-8l-new.startup.json'),
               JSON.stringify({
                 startup_completed: true,
                 session: 'sess-8l-new',
@@ -1971,8 +1988,8 @@ exit 0
             assert(out8i2.issue === 12, '8I-b: second bootstrap must skip locked issue 11 and pick 12, got ' + out8i2.issue);
             assert(out8i2.session && out8i2.session !== out8i1.session, '8I-b: second bootstrap must generate an independent session');
 
-            const lock11 = JSON.parse(fs.readFileSync(path.join(epic8iTmp, 'kaola-workflow', '.locks', 'issue-11.lock'), 'utf8'));
-            const lock12 = JSON.parse(fs.readFileSync(path.join(epic8iTmp, 'kaola-workflow', '.locks', 'issue-12.lock'), 'utf8'));
+            const lock11 = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic8iTmp), 'issue-11.lock'), 'utf8'));
+            const lock12 = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic8iTmp), 'issue-12.lock'), 'utf8'));
             assert(lock11.issue_number === 11 && lock11.session_id === out8i1.session, '8I: issue 11 lock must belong to first generated session');
             assert(lock12.issue_number === 12 && lock12.session_id === out8i2.session, '8I: issue 12 lock must belong to second generated session');
           } finally {
@@ -2038,7 +2055,7 @@ exit 0
             assert(log8j.includes('issue edit 19 --add-assignee @me'), '8J: claim must try to assign @me, got: ' + log8j);
             assert(log8j.includes('issue comment 19'), '8J: claim must still post sentinel comment, got: ' + log8j);
             assert(!log8j.includes('--title'), '8J: claim must not mutate issue title, got: ' + log8j);
-            const lock8j = JSON.parse(fs.readFileSync(path.join(epic8jTmp, 'kaola-workflow', '.locks', 'epic8j.lock'), 'utf8'));
+            const lock8j = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic8jTmp), 'epic8j.lock'), 'utf8'));
             assert(lock8j.claim_comment_id === '1900', '8J: lock must record sentinel comment id, got: ' + lock8j.claim_comment_id);
           } finally {
             fs.rmSync(epic8jTmp, { recursive: true, force: true });
@@ -2058,8 +2075,8 @@ exit 0
         const PATH = process.env.PATH || '';
 
         function makeKwDirs(dir) {
-          fs.mkdirSync(path.join(dir, 'kaola-workflow', '.locks'), { recursive: true });
-          fs.mkdirSync(path.join(dir, 'kaola-workflow', '.sessions'), { recursive: true });
+          fs.mkdirSync(locksDirFor(dir), { recursive: true });
+          fs.mkdirSync(sessionsDirFor(dir), { recursive: true });
         }
 
         function makeGhShim(binDir, script) {
@@ -2085,7 +2102,7 @@ exit 0
             pr_url: null,
             pr_number: null
           }, overrides);
-          const lockPath = path.join(dir, 'kaola-workflow', '.locks', project + '.lock');
+          const lockPath = path.join(locksDirFor(dir), project + '.lock');
           fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
           return lock;
         }
@@ -2135,7 +2152,7 @@ exit 0
           });
 
           assert(r9a1.status === 1, '9A1: loser claim must exit 1 (yield), got ' + r9a1.status + '\nstdout:' + r9a1.stdout + '\nstderr:' + r9a1.stderr);
-          const lockExists9a1 = fs.existsSync(path.join(subTmp, 'kaola-workflow', '.locks', 'proj9a1.lock'));
+          const lockExists9a1 = fs.existsSync(path.join(locksDirFor(subTmp), 'proj9a1.lock'));
           assert(!lockExists9a1, '9A1: lock file must not exist after yield');
           const callLogContent9a1 = fs.existsSync(callLog) ? fs.readFileSync(callLog, 'utf8') : '';
           assert(callLogContent9a1.includes(':yielded'), '9A1: gh call log must contain :yielded comment, got: ' + callLogContent9a1);
@@ -2185,7 +2202,7 @@ exit 0
           });
 
           assert(r9a2.status === 0, '9A2: sole-claimer must exit 0, got ' + r9a2.status + '\nstderr:' + r9a2.stderr);
-          const lockPath9a2 = path.join(subTmp, 'kaola-workflow', '.locks', 'proj9a2.lock');
+          const lockPath9a2 = path.join(locksDirFor(subTmp), 'proj9a2.lock');
           assert(fs.existsSync(lockPath9a2), '9A2: lock file must exist after successful claim');
           const lock9a2 = JSON.parse(fs.readFileSync(lockPath9a2, 'utf8'));
           assert(lock9a2.claim_comment_id === '300', '9A2: claim_comment_id must be 300, got ' + lock9a2.claim_comment_id);
@@ -2196,7 +2213,7 @@ exit 0
           const subTmp = path.join(epic9Tmp, '9a3');
           const binDir = path.join(subTmp, 'bin');
           makeKwDirs(subTmp);
-          fs.mkdirSync(path.join(subTmp, 'kaola-workflow', '.tickers'), { recursive: true });
+          fs.mkdirSync(tickersDirFor(subTmp), { recursive: true });
 
           makeGhShim(binDir, `#!/bin/sh
 # repo view → owner/name
@@ -2219,8 +2236,8 @@ exit 0
             claim_comment_id: '500'
           });
 
-          const lockPath9a3 = path.join(subTmp, 'kaola-workflow', '.locks', 'proj9a3.lock');
-          const pidFile9a3 = path.join(subTmp, 'kaola-workflow', '.tickers', 'sess-9a3-loser.pid');
+          const lockPath9a3 = path.join(locksDirFor(subTmp), 'proj9a3.lock');
+          const pidFile9a3 = path.join(tickersDirFor(subTmp), 'sess-9a3-loser.pid');
 
           // Spawn ticker with fast interval so tick 1 fires quickly
           const r9a3 = spawnSync(process.execPath, [
@@ -2244,7 +2261,7 @@ exit 0
           const subTmp = path.join(epic9Tmp, '9b1');
           const binDir = path.join(subTmp, 'bin');
           makeKwDirs(subTmp);
-          fs.mkdirSync(path.join(subTmp, 'kaola-workflow', '.tickers'), { recursive: true });
+          fs.mkdirSync(tickersDirFor(subTmp), { recursive: true });
 
           makeGhShim(binDir, `#!/bin/sh
 exit 0
@@ -2254,7 +2271,7 @@ exit 0
           writeLock(subTmp, 'proj9b1', 'sess-9b1', { issue_number: null, claim_comment_id: null });
 
           // Write a PID file with our own (live) PID
-          const pidFile9b1 = path.join(subTmp, 'kaola-workflow', '.tickers', 'sess-9b1.pid');
+          const pidFile9b1 = path.join(tickersDirFor(subTmp), 'sess-9b1.pid');
           fs.writeFileSync(pidFile9b1, String(process.pid) + '\n');
 
           // Spawn ticker — should detect live PID and exit early (idempotency)
@@ -2280,7 +2297,7 @@ exit 0
           const subTmp = path.join(epic9Tmp, '9b2');
           const binDir = path.join(subTmp, 'bin');
           makeKwDirs(subTmp);
-          fs.mkdirSync(path.join(subTmp, 'kaola-workflow', '.tickers'), { recursive: true });
+          fs.mkdirSync(tickersDirFor(subTmp), { recursive: true });
 
           makeGhShim(binDir, `#!/bin/sh
 exit 0
@@ -2290,7 +2307,7 @@ exit 0
           writeLock(subTmp, 'proj9b2', 'sess-9b2', { issue_number: null, claim_comment_id: null });
 
           // Write stale PID file with nonexistent PID
-          const pidFile9b2 = path.join(subTmp, 'kaola-workflow', '.tickers', 'sess-9b2.pid');
+          const pidFile9b2 = path.join(tickersDirFor(subTmp), 'sess-9b2.pid');
           fs.writeFileSync(pidFile9b2, '99999999\n');
 
           // Spawn ticker asynchronously so we can probe it while it lives
@@ -2360,7 +2377,7 @@ exit 0
             last_heartbeat: stale25h
           });
 
-          const lockPath9c1 = path.join(subTmp, 'kaola-workflow', '.locks', 'proj9c1.lock');
+          const lockPath9c1 = path.join(locksDirFor(subTmp), 'proj9c1.lock');
           spawnSync(process.execPath, [claimScript9, 'sweep'], {
             cwd: subTmp,
             encoding: 'utf8',
@@ -2399,7 +2416,7 @@ exit 0
             last_heartbeat: stale25h
           });
 
-          const lockPath9c2 = path.join(subTmp, 'kaola-workflow', '.locks', 'proj9c2.lock');
+          const lockPath9c2 = path.join(locksDirFor(subTmp), 'proj9c2.lock');
           spawnSync(process.execPath, [claimScript9, 'sweep'], {
             cwd: subTmp,
             encoding: 'utf8',
@@ -2448,7 +2465,7 @@ exit 0
           try {
             const binDir = path.join(subTmp, 'bin');
             makeKwDirs(subTmp);
-            fs.mkdirSync(path.join(subTmp, 'kaola-workflow', '.tickers'), { recursive: true });
+            fs.mkdirSync(tickersDirFor(subTmp), { recursive: true });
             const callLog9e = path.join(subTmp, 'gh-calls.log');
             makeGhShim(binDir, `#!/bin/sh
 echo "$@" >> "${callLog9e}"
@@ -2542,7 +2559,7 @@ exit 0
           });
 
           assert(r9f.status === 0, '9F: patch-branch must succeed, got ' + r9f.status + '\nstderr:' + r9f.stderr);
-          const lock9f = JSON.parse(fs.readFileSync(path.join(subTmp, 'kaola-workflow', '.locks', 'proj9f.lock'), 'utf8'));
+          const lock9f = JSON.parse(fs.readFileSync(path.join(locksDirFor(subTmp), 'proj9f.lock'), 'utf8'));
           assert(lock9f.branch === nextBranch9f, '9F: lock branch must be patched');
           const state9f = fs.readFileSync(state9fPath, 'utf8');
           assert(state9f.includes('branch: ' + nextBranch9f), '9F: state branch must be patched');
@@ -2560,10 +2577,10 @@ exit 0
           try {
             const binDir = path.join(subTmpSIGINT, 'bin');
             makeKwDirs(subTmpSIGINT);
-            fs.mkdirSync(path.join(subTmpSIGINT, 'kaola-workflow', '.tickers'), { recursive: true });
+            fs.mkdirSync(tickersDirFor(subTmpSIGINT), { recursive: true });
             makeGhShim(binDir, '#!/bin/sh\nexit 0\n');
             writeLock(subTmpSIGINT, 'proj-sigint', 'sess-sigint', { issue_number: null, claim_comment_id: null });
-            const pidFileSIGINT = path.join(subTmpSIGINT, 'kaola-workflow', '.tickers', 'sess-sigint.pid');
+            const pidFileSIGINT = path.join(tickersDirFor(subTmpSIGINT), 'sess-sigint.pid');
             const child = spawn(process.execPath, [claimScript9, 'ticker', '--session', 'sess-sigint', '--interval', '999999999'], {
               cwd: subTmpSIGINT,
               env: { ...process.env, PATH: binDir + path.delimiter + PATH, HOME: subTmpSIGINT }
@@ -2612,9 +2629,9 @@ exit 0
         execFileSync('git', ['add', 'README.md'], { cwd: epic10Tmp });
         execFileSync('git', ['commit', '-q', '-m', 'init'], { cwd: epic10Tmp });
 
-        fs.mkdirSync(path.join(epic10Tmp, 'kaola-workflow', '.locks'), { recursive: true });
+        fs.mkdirSync(locksDirFor(epic10Tmp), { recursive: true });
         fs.mkdirSync(path.join(epic10Tmp, 'kaola-workflow', 'projA'), { recursive: true });
-        fs.writeFileSync(path.join(epic10Tmp, 'kaola-workflow', '.locks', 'projA.lock'),
+        fs.writeFileSync(path.join(locksDirFor(epic10Tmp), 'projA.lock'),
           JSON.stringify({
             project: 'projA',
             session_id: 'sess-owner',
@@ -2737,7 +2754,7 @@ exit 0
       const epic12Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic12-'));
       try {
         execFileSync('git', ['init', '-q', '-b', 'main', epic12Tmp]);
-        const locksDir12 = path.join(epic12Tmp, 'kaola-workflow', '.locks');
+        const locksDir12 = locksDirFor(epic12Tmp);
         const binDir12 = path.join(epic12Tmp, 'bin');
         fs.mkdirSync(locksDir12, { recursive: true });
         fs.mkdirSync(binDir12, { recursive: true });
@@ -2958,7 +2975,7 @@ exit 0
       try {
         execFileSync('git', ['init', '-q', '-b', 'main', retryTmp]);
         const retryBin = path.join(retryTmp, 'bin');
-        const retryLocks = path.join(retryTmp, 'kaola-workflow', '.locks');
+        const retryLocks = locksDirFor(retryTmp);
         fs.mkdirSync(retryBin, { recursive: true });
         fs.mkdirSync(retryLocks, { recursive: true });
         const retryGh = path.join(retryBin, 'gh');
@@ -3025,7 +3042,7 @@ exit 0
       try {
         execFileSync('git', ['init', '-q', '-b', 'main', parallelTmp]);
         const parallelBin = path.join(parallelTmp, 'bin');
-        const parallelLocks = path.join(parallelTmp, 'kaola-workflow', '.locks');
+        const parallelLocks = locksDirFor(parallelTmp);
         fs.mkdirSync(parallelBin, { recursive: true });
         fs.mkdirSync(parallelLocks, { recursive: true });
         const parallelGh = path.join(parallelBin, 'gh');
@@ -3142,13 +3159,13 @@ exit 0
           '14A: queued issue 201 must be selected first, got: ' + JSON.stringify(first));
         assert(first.issue_sync === 'ok' && first.roadmap_sync === 'ok',
           '14A: startup must sync issues and roadmap before selection');
-        assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.sessions', 'sess-startup-a.startup.json')),
+        assert(fs.existsSync(path.join(sessionsDirFor(startupTmp), 'sess-startup-a.startup.json')),
           '14A: startup receipt must be written');
         assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.roadmap', 'issue-202.md')),
           '14A: startup must create roadmap file for issue ahead of local roadmap');
         const roadmap = fs.readFileSync(path.join(startupTmp, 'kaola-workflow', 'ROADMAP.md'), 'utf8');
         assert(roadmap.includes('| #201 | queued startup | open |'), '14A: ROADMAP must include synced issue 201');
-        assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.locks', 'issue-201.lock')),
+        assert(fs.existsSync(path.join(locksDirFor(startupTmp), 'issue-201.lock')),
           '14A: startup must claim issue 201');
         const verifyFirst = spawnSync(process.execPath, [
           claimScript, 'verify-startup',
@@ -3176,7 +3193,7 @@ exit 0
           '14B: receipt must record claimed issue 201 as skipped');
         assert(second.blocked.some(item => item.issue === 202),
           '14B: receipt must record dependency-blocked issue 202');
-        assert(fs.existsSync(path.join(startupTmp, 'kaola-workflow', '.sessions', 'sess-startup-b.startup.json')),
+        assert(fs.existsSync(path.join(sessionsDirFor(startupTmp), 'sess-startup-b.startup.json')),
           '14B: second startup receipt must be written');
         const verifySecondForFirst = spawnSync(process.execPath, [
           claimScript, 'verify-startup',
@@ -3213,6 +3230,605 @@ exit 0
           '14C: claim:none verifier must explain the startup receipt gap, got: ' + verifyThird.stdout);
       } finally {
         fs.rmSync(startupTmp, { recursive: true, force: true });
+      }
+    }
+
+    // coordRoot precursor sub-case: validates getCoordRoot() across primary and linked worktrees
+    {
+      const coordTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-coordroot-'));
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: coordTmp, encoding: 'utf8' });
+        execFileSync('git', ['-C', coordTmp, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+        const linkedPath = coordTmp + '-linked';
+        execFileSync('git', ['-C', coordTmp, 'worktree', 'add', '--detach', linkedPath, 'HEAD'], { encoding: 'utf8' });
+        try {
+          const mainCoordRoot = fs.realpathSync(coordRootFor(coordTmp));
+          const linkedCoordRoot = fs.realpathSync(coordRootFor(linkedPath));
+          assert(mainCoordRoot === linkedCoordRoot,
+            'coordRoot-precursor: coordRoot from primary (' + mainCoordRoot + ') must equal coordRoot from linked (' + linkedCoordRoot + ')');
+          assert(path.isAbsolute(mainCoordRoot),
+            'coordRoot-precursor: coordRoot must be absolute, got ' + mainCoordRoot);
+          assert(mainCoordRoot.endsWith('.git'),
+            'coordRoot-precursor: coordRoot must end in .git, got ' + mainCoordRoot);
+          assert(mainCoordRoot !== fs.realpathSync(linkedPath),
+            'coordRoot-precursor: coordRoot must not equal the linked worktree path');
+        } finally {
+          execFileSync('git', ['-C', coordTmp, 'worktree', 'remove', '--force', linkedPath], { encoding: 'utf8' });
+        }
+      } finally {
+        fs.rmSync(coordTmp, { recursive: true, force: true });
+      }
+    }
+
+    // coordRoot migration sub-case: migrateLegacyCoordState moves .locks/.sessions from root to coordRoot
+    {
+      const migTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-migrate-'));
+      try {
+        const claimScriptMig = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+        // Create legacy lock file under <root>/kaola-workflow/.locks/ (old layout)
+        const legacyLocksDir = path.join(migTmp, 'kaola-workflow', '.locks');
+        fs.mkdirSync(legacyLocksDir, { recursive: true });
+        const now = Date.now();
+        const legacyLock = {
+          project: 'mig-proj',
+          session_id: 'sess-mig',
+          machine_id: 'test-machine',
+          claimed_at: new Date(now).toISOString(),
+          expires: new Date(now + 2 * 3600 * 1000).toISOString(),
+          last_heartbeat: new Date(now).toISOString(),
+          issue_number: null,
+          claim_comment_id: null,
+          sink: 'merge',
+          pr_url: null,
+          pr_number: null
+        };
+        const legacyLockPath = path.join(legacyLocksDir, 'mig-proj.lock');
+        fs.writeFileSync(legacyLockPath, JSON.stringify(legacyLock, null, 2) + '\n');
+
+        // Now claim a new project — this triggers migrateLegacyCoordState on first cmdClaim run
+        const rMig = spawnSync(process.execPath, [
+          claimScriptMig, 'claim',
+          '--session', 'sess-mig-new',
+          '--project', 'mig-new-proj',
+          '--sink', 'merge'
+        ], {
+          cwd: migTmp,
+          encoding: 'utf8',
+          env: { ...process.env, HOME: migTmp }
+        });
+
+        // migrateLegacyCoordState should have run; for a non-git dir, coordRoot = migTmp/.git
+        const migCoordRoot = coordRootFor(migTmp);
+        const newLocksDir = locksDirFor(migTmp);
+
+        // The legacy lock file must have been moved to coordRoot location
+        assert(!fs.existsSync(legacyLockPath),
+          'migrate: legacy lock file must be removed from root/kaola-workflow/.locks after migration, status=' + rMig.status + '\nstderr:' + rMig.stderr);
+        const newLockPath = path.join(newLocksDir, 'mig-proj.lock');
+        assert(fs.existsSync(newLockPath),
+          'migrate: legacy lock file must appear in coordRoot/kaola-workflow/.locks after migration');
+        const migratedLock = JSON.parse(fs.readFileSync(newLockPath, 'utf8'));
+        assert(migratedLock.project === 'mig-proj',
+          'migrate: migrated lock project must match, got ' + migratedLock.project);
+
+        // New claim lock must also exist in coordRoot
+        assert(rMig.status === 0,
+          'migrate: claim for new project must succeed after migration, got status=' + rMig.status + '\nstderr:' + rMig.stderr);
+        const newClaimLock = path.join(newLocksDir, 'mig-new-proj.lock');
+        assert(fs.existsSync(newClaimLock),
+          'migrate: new project lock must exist in coordRoot after claim');
+      } finally {
+        fs.rmSync(migTmp, { recursive: true, force: true });
+      }
+    }
+
+    // Epic Case 15: Worktree provisioning and resume
+    {
+      const epic15Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic15-'));
+      try {
+        // git init with initial commit (required for worktree add)
+        execFileSync('git', ['init', '-b', 'main'], { cwd: epic15Tmp, encoding: 'utf8' });
+        execFileSync('git', ['-C', epic15Tmp, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+
+        // gh shim: issue list returns [{number:501}]; comment returns URL with id 501;
+        // pr view returns MERGED; repo view returns test/repo; all edits exit 0
+        const binDir15 = path.join(epic15Tmp, 'bin');
+        fs.mkdirSync(binDir15, { recursive: true });
+        const ghShim15 = path.join(binDir15, 'gh');
+        fs.writeFileSync(ghShim15, [
+          '#!/usr/bin/env node',
+          'const args = process.argv.slice(2);',
+          'if (args[0]==="issue"&&args[1]==="list") { process.stdout.write(JSON.stringify([{number:501,title:"t",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/501"}])+"\\n"); process.exit(0); }',
+          'if (args[0]==="issue"&&args[1]==="comment") { process.stdout.write("https://github.com/test/repo/issues/501#issuecomment-501\\n"); process.exit(0); }',
+          'if (args[0]==="issue"&&args[1]==="edit") { process.exit(0); }',
+          'if (args[0]==="pr"&&args[1]==="view") { process.stdout.write(JSON.stringify({state:"MERGED",number:501,headRefName:"workflow/issue-501-issue-501",url:"https://github.com/test/repo/pull/501"})+"\\n"); process.exit(0); }',
+          'if (args[0]==="repo"&&args[1]==="view") { process.stdout.write(JSON.stringify({nameWithOwner:"test/repo"})+"\\n"); process.exit(0); }',
+          'if (args[0]==="api") { process.stdout.write(JSON.stringify([{id:501,body:"<!-- kw:claim session=sess-15a -->"}])+"\\n"); process.exit(0); }',
+          'process.exit(0);'
+        ].join('\n'), { mode: 0o755 });
+
+        const pathSep = process.platform === 'win32' ? ';' : ':';
+        const env15 = { ...process.env, PATH: binDir15 + pathSep + process.env.PATH };
+
+        // 15A (AC1): Fresh claim provisions a worktree
+        const claimResult15a = execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-15a', '--project', 'issue-501', '--issue', '501', '--runtime', 'claude'
+        ], { cwd: epic15Tmp, encoding: 'utf8', env: env15 });
+
+        const lock15a = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic15Tmp), 'issue-501.lock'), 'utf8'));
+        assert(lock15a.worktree_path && lock15a.worktree_path.length > 0,
+          '15A (AC1): lock.worktree_path must be a non-empty string');
+        assert(fs.existsSync(lock15a.worktree_path),
+          '15A (AC1): worktree directory must exist at ' + lock15a.worktree_path);
+        assert(lock15a.branch && lock15a.branch.startsWith('workflow/'),
+          '15A (AC1): lock.branch must start with "workflow/"');
+
+        // 15B (AC2): worktree_path and branch visible in status
+        const statusOut15b = execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'status', '--session', 'sess-15a', '--json'
+        ], { cwd: epic15Tmp, encoding: 'utf8', env: { ...env15, KAOLA_WORKFLOW_OFFLINE: '1' } });
+        const statusArr15b = JSON.parse(statusOut15b);
+        assert(Array.isArray(statusArr15b) && statusArr15b.length >= 1,
+          '15B (AC2): status must return at least 1 entry');
+        const statusEntry15b = statusArr15b.find(e => e.lock && e.lock.project === 'issue-501');
+        assert(statusEntry15b, '15B (AC2): status must have entry for issue-501');
+        assert(statusEntry15b.lock.worktree_path === lock15a.worktree_path,
+          '15B (AC2): status lock.worktree_path must match lock file value');
+
+        // 15C (AC3): coordRoot from main repo equals coordRoot from linked worktree
+        const linkedPath15c = epic15Tmp + '-linked15c';
+        execFileSync('git', ['-C', epic15Tmp, 'branch', 'linked-branch-15c'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', epic15Tmp, 'worktree', 'add', linkedPath15c, 'linked-branch-15c'], { encoding: 'utf8' });
+        try {
+          const mainCoordRoot15c = coordRootFor(epic15Tmp);
+          const linkedCoordRoot15c = coordRootFor(linkedPath15c);
+          assert(mainCoordRoot15c === linkedCoordRoot15c,
+            '15C (AC3): coordRoot from primary (' + mainCoordRoot15c + ') must equal coordRoot from linked (' + linkedCoordRoot15c + ')');
+          assert(mainCoordRoot15c !== linkedPath15c,
+            '15C (AC3): coordRoot must not equal the linked worktree path');
+          // Lock written in 15A is accessible via resolved coordRoot from linked worktree
+          const lockViaLinked = readLockFileViaPath(path.join(linkedCoordRoot15c, 'kaola-workflow', '.locks', 'issue-501.lock'));
+          assert(lockViaLinked && lockViaLinked.session_id === 'sess-15a',
+            '15C (AC3): lock must be accessible from linked worktree coordRoot');
+        } finally {
+          execFileSync('git', ['-C', epic15Tmp, 'worktree', 'remove', '--force', linkedPath15c], { encoding: 'utf8' });
+        }
+
+        // 15D (AC4): Same-session re-claim reuses existing worktree
+        const reClaimResult15d = execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-15a', '--project', 'issue-501', '--issue', '501', '--runtime', 'claude'
+        ], { cwd: epic15Tmp, encoding: 'utf8', env: { ...env15, KAOLA_WORKFLOW_OFFLINE: '1' } });
+        const lock15d = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic15Tmp), 'issue-501.lock'), 'utf8'));
+        assert(fs.existsSync(lock15d.worktree_path),
+          '15D (AC4): re-claim must reuse existing worktree (it must still exist)');
+        assert(lock15d.worktree_path === lock15a.worktree_path,
+          '15D (AC4): re-claim must not change worktree_path');
+
+        // 15E (AC5/AC11): Missing worktree → loud failure with recovery instructions
+        fs.rmSync(lock15a.worktree_path, { recursive: true, force: true });
+        // Also prune stale worktree reference
+        try { execFileSync('git', ['-C', epic15Tmp, 'worktree', 'prune'], { encoding: 'utf8' }); } catch (_) {}
+
+        let exit15e = 0;
+        let stderr15e = '';
+        try {
+          execFileSync(process.execPath, [
+            path.join(root, 'scripts/kaola-workflow-claim.js'),
+            'claim', '--session', 'sess-15a', '--project', 'issue-501', '--issue', '501', '--runtime', 'claude'
+          ], { cwd: epic15Tmp, encoding: 'utf8', env: { ...env15, KAOLA_WORKFLOW_OFFLINE: '1' } });
+        } catch (e) { exit15e = e.status || 1; stderr15e = e.stderr || ''; }
+        assert(exit15e === 2,
+          '15E (AC11): claim with missing worktree must exit 2, got ' + exit15e);
+        assert(stderr15e.includes('worktree missing at'),
+          '15E (AC11): stderr must include "worktree missing at", got: ' + stderr15e);
+        assert(stderr15e.includes('git worktree add'),
+          '15E (AC11): stderr must include recovery instruction "git worktree add"');
+
+        // Restore worktree for 15F
+        execFileSync('git', ['-C', epic15Tmp, 'worktree', 'add', lock15a.worktree_path, lock15a.branch],
+          { encoding: 'utf8' });
+
+        // 15F (AC6/AC12): Branch pre-exists → git worktree add without -b
+        // Release sess-15a, then claim again with different session
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'release', '--session', 'sess-15a'
+        ], { cwd: epic15Tmp, encoding: 'utf8', env: { ...env15, KAOLA_WORKFLOW_OFFLINE: '1' } });
+
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-15f', '--project', 'issue-501-f', '--issue', '501', '--runtime', 'claude'
+        ], { cwd: epic15Tmp, encoding: 'utf8', env: env15 });
+        const lock15f = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic15Tmp), 'issue-501-f.lock'), 'utf8'));
+        assert(lock15f.worktree_path && fs.existsSync(lock15f.worktree_path),
+          '15F (AC6/AC12): new claim must provision a new worktree that exists');
+
+        // Cleanup 15F worktree
+        try { execFileSync('git', ['-C', epic15Tmp, 'worktree', 'remove', '--force', '--', lock15f.worktree_path], { encoding: 'utf8' }); } catch (_) {}
+
+        // 15G (legacy lock re-claim): pre-Phase-4 lock without worktree_path must resume successfully
+        {
+          const legacyProject = 'issue-legacy';
+          const legacySession = 'sess-15g';
+          const legacyIssueNumber = 999;
+          const legacyClaimedAt = '2026-01-01T00:00:00.000Z';
+
+          // Write legacy lock (no worktree_path, no branch)
+          const legacyLockPath15g = path.join(locksDirFor(epic15Tmp), legacyProject + '.lock');
+          const legacyLock15g = {
+            project: legacyProject,
+            session_id: legacySession,
+            issue_number: legacyIssueNumber,
+            claim_comment_id: 'comment-999',
+            claimed_at: legacyClaimedAt,
+            machine_id: 'test-machine',
+            sink: 'merge',
+            runtime: 'claude'
+          };
+          fs.writeFileSync(legacyLockPath15g, JSON.stringify(legacyLock15g, null, 2) + '\n', { mode: 0o600 });
+
+          // Create workflow-state.md so updateSinkLease has a file to update
+          const kwDir15g = path.join(epic15Tmp, 'kaola-workflow', legacyProject);
+          fs.mkdirSync(kwDir15g, { recursive: true });
+          fs.writeFileSync(path.join(kwDir15g, 'workflow-state.md'), '# workflow-state\n', 'utf8');
+
+          // Also need a session file so the lock is recognized (create sessions dir)
+          const sessDir15g = sessionsDirFor(epic15Tmp);
+          fs.mkdirSync(sessDir15g, { recursive: true });
+
+          // Re-claim using same session → must exit 0 (legacy resume path)
+          let exit15g = 0;
+          let stderr15g = '';
+          try {
+            execFileSync(process.execPath, [
+              path.join(root, 'scripts/kaola-workflow-claim.js'),
+              'claim', '--session', legacySession, '--project', legacyProject, '--issue', String(legacyIssueNumber), '--runtime', 'claude'
+            ], { cwd: epic15Tmp, encoding: 'utf8', env: { ...env15, KAOLA_WORKFLOW_OFFLINE: '1' } });
+          } catch (e) { exit15g = e.status || 1; stderr15g = e.stderr || ''; }
+
+          assert(exit15g === 0,
+            '15G (legacy): re-claim with legacy lock must exit 0, got ' + exit15g + '\nstderr: ' + stderr15g);
+
+          const updatedLock15g = JSON.parse(fs.readFileSync(legacyLockPath15g, 'utf8'));
+          assert('worktree_path' in updatedLock15g,
+            '15G (legacy): updated lock must have worktree_path field');
+          assert(updatedLock15g.branch && updatedLock15g.branch.startsWith('workflow/'),
+            '15G (legacy): updated lock must have branch starting with "workflow/", got: ' + updatedLock15g.branch);
+          assert(updatedLock15g.issue_number === legacyIssueNumber,
+            '15G (legacy): issue_number must be preserved, got ' + updatedLock15g.issue_number);
+          assert(updatedLock15g.claimed_at === legacyClaimedAt,
+            '15G (legacy): claimed_at must be preserved, got ' + updatedLock15g.claimed_at);
+        }
+
+        // 15H (legacy lock re-claim, online): same fix but with provisionWorktree actually running
+        {
+          const legacyProject15h = 'issue-legacy-h';
+          const legacySession15h = 'sess-15h';
+          const legacyIssueNumber15h = 888;
+          const legacyClaimedAt15h = '2026-02-01T00:00:00.000Z';
+
+          // Write legacy lock (no worktree_path, no branch)
+          const legacyLockPath15h = path.join(locksDirFor(epic15Tmp), legacyProject15h + '.lock');
+          const legacyLock15h = {
+            project: legacyProject15h,
+            session_id: legacySession15h,
+            issue_number: legacyIssueNumber15h,
+            claim_comment_id: 'comment-888',
+            claimed_at: legacyClaimedAt15h,
+            machine_id: 'test-machine',
+            sink: 'merge',
+            runtime: 'claude'
+          };
+          fs.writeFileSync(legacyLockPath15h, JSON.stringify(legacyLock15h, null, 2) + '\n', { mode: 0o600 });
+
+          // Create workflow-state.md
+          const kwDir15h = path.join(epic15Tmp, 'kaola-workflow', legacyProject15h);
+          fs.mkdirSync(kwDir15h, { recursive: true });
+          fs.writeFileSync(path.join(kwDir15h, 'workflow-state.md'), '# workflow-state\n', 'utf8');
+
+          // Re-claim online (provisionWorktree must run)
+          let exit15h = 0;
+          let stderr15h = '';
+          try {
+            execFileSync(process.execPath, [
+              path.join(root, 'scripts/kaola-workflow-claim.js'),
+              'claim', '--session', legacySession15h, '--project', legacyProject15h,
+              '--issue', String(legacyIssueNumber15h), '--runtime', 'claude'
+            ], { cwd: epic15Tmp, encoding: 'utf8', env: env15 });
+          } catch (e) { exit15h = e.status || 1; stderr15h = e.stderr || ''; }
+
+          assert(exit15h === 0,
+            '15H (legacy online): re-claim with legacy lock must exit 0, got ' + exit15h + '\nstderr: ' + stderr15h);
+
+          const updatedLock15h = JSON.parse(fs.readFileSync(legacyLockPath15h, 'utf8'));
+          assert(updatedLock15h.worktree_path && updatedLock15h.worktree_path.length > 0,
+            '15H (legacy online): worktree_path must be a non-empty string after upgrade');
+          assert(fs.existsSync(updatedLock15h.worktree_path),
+            '15H (legacy online): worktree directory must exist at ' + updatedLock15h.worktree_path);
+          assert(updatedLock15h.branch && updatedLock15h.branch.startsWith('workflow/'),
+            '15H (legacy online): branch must start with "workflow/", got: ' + updatedLock15h.branch);
+          assert(updatedLock15h.issue_number === legacyIssueNumber15h,
+            '15H (legacy online): issue_number must be preserved, got ' + updatedLock15h.issue_number);
+          assert(updatedLock15h.claimed_at === legacyClaimedAt15h,
+            '15H (legacy online): claimed_at must be preserved, got ' + updatedLock15h.claimed_at);
+
+          // Cleanup worktree
+          try { execFileSync('git', ['-C', epic15Tmp, 'worktree', 'remove', '--force', '--', updatedLock15h.worktree_path], { encoding: 'utf8' }); } catch (_) {}
+        }
+
+      } finally {
+        fs.rmSync(epic15Tmp, { recursive: true, force: true });
+        // Clean up .kw directory if created
+        const kwDir15 = epic15Tmp + '.kw';
+        if (fs.existsSync(kwDir15)) fs.rmSync(kwDir15, { recursive: true, force: true });
+      }
+    }
+
+    // Epic Case 16: Worktree Lifecycle / Sweep / CWD-Protection
+    {
+      const epic16Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic16-'));
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: epic16Tmp, encoding: 'utf8' });
+        execFileSync('git', ['-C', epic16Tmp, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+
+        const binDir16 = path.join(epic16Tmp, 'bin');
+        fs.mkdirSync(binDir16, { recursive: true });
+
+        // gh shim: MERGED for issue-601 URLs, CLOSED for issue-602 URLs, OPEN otherwise
+        const ghShim16 = path.join(binDir16, 'gh');
+        fs.writeFileSync(ghShim16, [
+          '#!/usr/bin/env node',
+          'const args = process.argv.slice(2);',
+          'const joinedArgs = args.join(" ");',
+          'if (args[0]==="issue"&&args[1]==="list") {',
+          '  process.stdout.write(JSON.stringify([',
+          '    {number:601,title:"t601",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/601"},',
+          '    {number:602,title:"t602",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/602"},',
+          '    {number:603,title:"t603",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/603"},',
+          '    {number:604,title:"t604",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/604"},',
+          '    {number:605,title:"t605",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/605"}',
+          '  ])+"\\n"); process.exit(0);',
+          '}',
+          'if (args[0]==="issue"&&(args[1]==="comment"||args[1]==="edit")) { process.stdout.write("https://github.com/test/repo/issues/601#issuecomment-1\\n"); process.exit(0); }',
+          'if (args[0]==="repo"&&args[1]==="view") { process.stdout.write(JSON.stringify({nameWithOwner:"test/repo"})+"\\n"); process.exit(0); }',
+          'if (args[0]==="pr"&&args[1]==="view") {',
+          '  if (joinedArgs.includes("601")) { process.stdout.write(JSON.stringify({state:"MERGED",number:601,headRefName:"workflow/issue-601-issue-601",url:"https://github.com/test/repo/pull/601"})+"\\n"); process.exit(0); }',
+          '  if (joinedArgs.includes("602")) { process.stdout.write(JSON.stringify({state:"CLOSED",number:602,headRefName:"workflow/issue-602-issue-602",url:"https://github.com/test/repo/pull/602"})+"\\n"); process.exit(0); }',
+          '  process.stdout.write(JSON.stringify({state:"OPEN",number:0,headRefName:"workflow/unknown",url:"https://github.com/test/repo/pull/0"})+"\\n"); process.exit(0);',
+          '}',
+          'if (args[0]==="api") { process.stdout.write(JSON.stringify([])+"\\n"); process.exit(0); }',
+          'process.exit(0);'
+        ].join('\n'), { mode: 0o755 });
+
+        const pathSep = process.platform === 'win32' ? ';' : ':';
+        const env16 = { ...process.env, PATH: binDir16 + pathSep + process.env.PATH };
+        const env16Off = { ...env16, KAOLA_WORKFLOW_OFFLINE: '1' };
+
+        // Pre-provision issue-601 and issue-602 (with worktrees)
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-16-merged', '--project', 'issue-601', '--issue', '601', '--runtime', 'claude'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16 });
+        const lock601 = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic16Tmp), 'issue-601.lock'), 'utf8'));
+
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-16-closed', '--project', 'issue-602', '--issue', '602', '--runtime', 'claude'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16 });
+        const lock602 = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic16Tmp), 'issue-602.lock'), 'utf8'));
+
+        // 16A (AC7): watch-pr MERGED removes worktree for issue-601
+        assert(lock601.worktree_path && fs.existsSync(lock601.worktree_path),
+          '16A setup: worktree for issue-601 must exist before watch-pr');
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'watch-pr', '--session', 'sess-16-merged'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16 });
+        assert(!fs.existsSync(path.join(locksDirFor(epic16Tmp), 'issue-601.lock')),
+          '16A (AC7): lock for issue-601 must be gone after watch-pr MERGED');
+        assert(!fs.existsSync(lock601.worktree_path),
+          '16A (AC7): worktree directory for issue-601 must be gone after watch-pr MERGED');
+
+        // 16B (AC8): watch-pr CLOSED removes worktree but does NOT delete branch for issue-602
+        assert(!fs.existsSync(lock602.worktree_path),
+          '16B (AC8): worktree for issue-602 must be gone (processed in same watch-pr run)');
+        assert(!fs.existsSync(path.join(locksDirFor(epic16Tmp), 'issue-602.lock')),
+          '16B (AC8): lock for issue-602 must be gone after watch-pr CLOSED');
+
+        // 16C (AC9 — dirty worktree abandoned):
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-16c', '--project', 'issue-603', '--issue', '603', '--runtime', 'claude'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16 });
+        const lock603 = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic16Tmp), 'issue-603.lock'), 'utf8'));
+        // Write a dirty file inside the worktree
+        fs.writeFileSync(path.join(lock603.worktree_path, 'dirty-file.txt'), 'dirty');
+
+        // Trigger removal via watch-pr with MERGED shim for issue-603
+        // Need to update gh shim to return MERGED for 603
+        fs.writeFileSync(ghShim16, [
+          '#!/usr/bin/env node',
+          'const args = process.argv.slice(2);',
+          'const joinedArgs = args.join(" ");',
+          'if (args[0]==="issue"&&args[1]==="list") {',
+          '  process.stdout.write(JSON.stringify([',
+          '    {number:603,title:"t603",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/603"}',
+          '  ])+"\\n"); process.exit(0);',
+          '}',
+          'if (args[0]==="issue"&&(args[1]==="comment"||args[1]==="edit")) { process.stdout.write("https://github.com/test/repo/issues/603#issuecomment-1\\n"); process.exit(0); }',
+          'if (args[0]==="repo"&&args[1]==="view") { process.stdout.write(JSON.stringify({nameWithOwner:"test/repo"})+"\\n"); process.exit(0); }',
+          'if (args[0]==="pr"&&args[1]==="view") {',
+          '  process.stdout.write(JSON.stringify({state:"MERGED",number:603,headRefName:"workflow/issue-603-issue-603",url:"https://github.com/test/repo/pull/603"})+"\\n"); process.exit(0);',
+          '}',
+          'if (args[0]==="api") { process.stdout.write(JSON.stringify([])+"\\n"); process.exit(0); }',
+          'process.exit(0);'
+        ].join('\n'), { mode: 0o755 });
+
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'watch-pr', '--session', 'sess-16c'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16 });
+        const wtDir603 = path.dirname(lock603.worktree_path);
+        const abandonedEntries = fs.existsSync(wtDir603)
+          ? fs.readdirSync(wtDir603).filter(e => e.includes('.abandoned-'))
+          : [];
+        assert(abandonedEntries.length > 0 || !fs.existsSync(lock603.worktree_path),
+          '16C (AC9): dirty worktree must be abandoned (renamed to .abandoned-*) or removed');
+
+        // 16D (AC10 — CWD-protection defers removal):
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-16d', '--project', 'issue-604', '--issue', '604', '--runtime', 'claude'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16 });
+        const lock604 = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic16Tmp), 'issue-604.lock'), 'utf8'));
+        const wtPath604 = lock604.worktree_path;
+        assert(wtPath604 && fs.existsSync(wtPath604), '16D setup: worktree-604 must exist');
+
+        // Update gh shim for issue-604 MERGED
+        fs.writeFileSync(ghShim16, [
+          '#!/usr/bin/env node',
+          'const args = process.argv.slice(2);',
+          'const joinedArgs = args.join(" ");',
+          'if (args[0]==="issue"&&args[1]==="list") {',
+          '  process.stdout.write(JSON.stringify([',
+          '    {number:604,title:"t604",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/604"}',
+          '  ])+"\\n"); process.exit(0);',
+          '}',
+          'if (args[0]==="issue"&&(args[1]==="comment"||args[1]==="edit")) { process.stdout.write("https://github.com/test/repo/issues/604#issuecomment-1\\n"); process.exit(0); }',
+          'if (args[0]==="repo"&&args[1]==="view") { process.stdout.write(JSON.stringify({nameWithOwner:"test/repo"})+"\\n"); process.exit(0); }',
+          'if (args[0]==="pr"&&args[1]==="view") {',
+          '  process.stdout.write(JSON.stringify({state:"MERGED",number:604,headRefName:"workflow/issue-604-issue-604",url:"https://github.com/test/repo/pull/604"})+"\\n"); process.exit(0);',
+          '}',
+          'if (args[0]==="api") { process.stdout.write(JSON.stringify([])+"\\n"); process.exit(0); }',
+          'process.exit(0);'
+        ].join('\n'), { mode: 0o755 });
+
+        // Run watch-pr with cwd inside the worktree (CWD-protection triggers deferral)
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'watch-pr', '--session', 'sess-16d'
+        ], { cwd: wtPath604, encoding: 'utf8', env: env16 });
+
+        const coordRoot16 = coordRootFor(epic16Tmp);
+        const pendingFile604 = path.join(coordRoot16, 'kaola-workflow', '.pending-removal', 'issue-604.json');
+        const wtStillExists604 = fs.existsSync(wtPath604);
+        assert(fs.existsSync(pendingFile604) || wtStillExists604,
+          '16D (AC10): CWD-protection must defer removal: either .pending-removal entry exists or worktree is still present');
+
+        // 16E (AC11 — drain on sweep):
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'sweep'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16Off });
+        const wtGoneAfterSweep604 = !fs.existsSync(wtPath604);
+        const pendingGoneAfterSweep604 = !fs.existsSync(pendingFile604);
+        assert(wtGoneAfterSweep604 || pendingGoneAfterSweep604,
+          '16E (AC11): sweep must drain pending removal for issue-604 (worktree gone or pending entry deleted)');
+
+        // 16F (AC12 — sweep calls git worktree prune):
+        execFileSync('git', ['-C', epic16Tmp, 'branch', 'orphan-branch-16f'], { encoding: 'utf8' });
+        const orphanPath16f = epic16Tmp + '-orphan16f';
+        execFileSync('git', ['-C', epic16Tmp, 'worktree', 'add', orphanPath16f, 'orphan-branch-16f'], { encoding: 'utf8' });
+        // Delete the directory without git worktree remove (creates stale worktree entry)
+        fs.rmSync(orphanPath16f, { recursive: true, force: true });
+        const beforeSweepList16f = execFileSync('git', ['-C', epic16Tmp, 'worktree', 'list', '--porcelain'],
+          { encoding: 'utf8' });
+        assert(beforeSweepList16f.includes(orphanPath16f),
+          '16F setup: orphan path must appear in worktree list before sweep');
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'sweep'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16Off });
+        const afterSweepList16f = execFileSync('git', ['-C', epic16Tmp, 'worktree', 'list', '--porcelain'],
+          { encoding: 'utf8' });
+        assert(!afterSweepList16f.includes(orphanPath16f),
+          '16F (AC12): orphan path must NOT appear in worktree list after sweep calls git worktree prune');
+
+        // 16G (AC13 — sink-merge removes worktree before branch delete):
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-claim.js'),
+          'claim', '--session', 'sess-16g', '--project', 'issue-605', '--issue', '605', '--runtime', 'claude'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16 });
+        const lock605 = JSON.parse(fs.readFileSync(path.join(locksDirFor(epic16Tmp), 'issue-605.lock'), 'utf8'));
+        assert(lock605.worktree_path && fs.existsSync(lock605.worktree_path),
+          '16G setup: worktree for issue-605 must exist');
+        execFileSync(process.execPath, [
+          path.join(root, 'scripts/kaola-workflow-sink-merge.js'),
+          '--branch', lock605.branch, '--project', 'issue-605', '--issue', '605'
+        ], { cwd: epic16Tmp, encoding: 'utf8', env: env16Off });
+        assert(!fs.existsSync(lock605.worktree_path),
+          '16G (AC13): worktree for issue-605 must be gone after sink-merge');
+
+        // 16H (AC9 — pre-commit hook blocks cross-worktree commit):
+        {
+          const tmpRepo16h = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-16h-'));
+          try {
+            execFileSync('git', ['init', '-b', 'main'], { cwd: tmpRepo16h, encoding: 'utf8' });
+            execFileSync('git', ['-C', tmpRepo16h, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+            // Install the pre-commit hook
+            const hooksDir16h = path.join(tmpRepo16h, '.git', 'hooks');
+            fs.mkdirSync(hooksDir16h, { recursive: true });
+            fs.copyFileSync(
+              path.join(root, 'hooks', 'kaola-workflow-pre-commit.sh'),
+              path.join(hooksDir16h, 'pre-commit')
+            );
+            fs.chmodSync(path.join(hooksDir16h, 'pre-commit'), 0o755);
+            // Set up user config for commit
+            execFileSync('git', ['-C', tmpRepo16h, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+            execFileSync('git', ['-C', tmpRepo16h, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+
+            // Claim project-A as session-A (creates lock at COORD_ROOT path)
+            const coordRoot16h = coordRootFor(tmpRepo16h);
+            const locksDir16h = path.join(coordRoot16h, 'kaola-workflow', '.locks');
+            fs.mkdirSync(locksDir16h, { recursive: true });
+            const lockData16h = {
+              project: 'project-a', session_id: 'sess-16h-a',
+              claimed_at: new Date().toISOString(),
+              expires: new Date(Date.now() + 3600000).toISOString(),
+              last_heartbeat: new Date().toISOString()
+            };
+            fs.writeFileSync(path.join(locksDir16h, 'project-a.lock'), JSON.stringify(lockData16h) + '\n', { mode: 0o600 });
+
+            // Create a linked worktree
+            execFileSync('git', ['-C', tmpRepo16h, 'branch', 'wt-b-branch'], { encoding: 'utf8' });
+            const wtB16h = tmpRepo16h + '-wtB';
+            execFileSync('git', ['-C', tmpRepo16h, 'worktree', 'add', wtB16h, 'wt-b-branch'], { encoding: 'utf8' });
+
+            // Set up git user in linked worktree too
+            execFileSync('git', ['-C', wtB16h, 'config', 'user.email', 'test@example.com'], { encoding: 'utf8' });
+            execFileSync('git', ['-C', wtB16h, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+
+            // Stage kaola-workflow/project-a/workflow-state.md to trigger the hook
+            const kwDir16h = path.join(wtB16h, 'kaola-workflow', 'project-a');
+            fs.mkdirSync(kwDir16h, { recursive: true });
+            fs.writeFileSync(path.join(kwDir16h, 'workflow-state.md'), '# state\nstatus: active\n');
+            execFileSync('git', ['-C', wtB16h, 'add', '.'], { encoding: 'utf8' });
+
+            // Attempt commit from linked worktree with a different KAOLA_SESSION_ID
+            let exit16h = 0;
+            try {
+              execFileSync('git', ['-C', wtB16h, 'commit', '--allow-empty', '-m', 'test'],
+                { encoding: 'utf8', env: { ...process.env, KAOLA_SESSION_ID: 'different-session' } });
+            } catch (e) { exit16h = e.status || 1; }
+            assert(exit16h !== 0,
+              '16H (AC9): pre-commit hook must block cross-session commit from linked worktree, got exit ' + exit16h);
+
+            // Cleanup
+            try { execFileSync('git', ['-C', tmpRepo16h, 'worktree', 'remove', '--force', wtB16h], { encoding: 'utf8' }); } catch (_) {}
+          } finally {
+            fs.rmSync(tmpRepo16h, { recursive: true, force: true });
+            const wtB16hClean = tmpRepo16h + '-wtB';
+            if (fs.existsSync(wtB16hClean)) fs.rmSync(wtB16hClean, { recursive: true, force: true });
+          }
+        }
+
+      } finally {
+        fs.rmSync(epic16Tmp, { recursive: true, force: true });
+        const kwDir16 = epic16Tmp + '.kw';
+        if (fs.existsSync(kwDir16)) fs.rmSync(kwDir16, { recursive: true, force: true });
       }
     }
 

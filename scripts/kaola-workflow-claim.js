@@ -88,6 +88,51 @@ function getRoot() {
   }
 }
 
+function getCoordRoot() {
+  // Returns the canonical git common directory (shared by all worktrees).
+  // On macOS /var is a symlink to /private/var; we intentionally do NOT call
+  // fs.realpathSync here because coordRoot is only used for filesystem I/O
+  // (path.join + fs calls), never for string equality across processes.
+  const root = getRoot();
+  try {
+    const raw = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    return path.resolve(root, raw);
+  } catch (_) {
+    return path.join(root, '.git');
+  }
+}
+
+function migrateLegacyCoordState(root, coordRoot) {
+  for (const subdir of ['.locks', '.sessions', '.tickers']) {
+    const legacyDir = path.join(root, 'kaola-workflow', subdir);
+    let files;
+    try { files = fs.readdirSync(legacyDir); } catch (e) { if (e.code === 'ENOENT') continue; throw e; }
+    for (const f of files) {
+      const legacyPath = path.join(legacyDir, f);
+      const newPath = path.join(coordRoot, 'kaola-workflow', subdir, f);
+      fs.mkdirSync(path.dirname(newPath), { recursive: true });
+      try {
+        fs.linkSync(legacyPath, newPath);
+        fs.unlinkSync(legacyPath);
+      } catch (e) {
+        if (e.code === 'EEXIST') { try { fs.unlinkSync(legacyPath); } catch (_) {} continue; }
+        if (e.code === 'EXDEV') {
+          try {
+            let _fd; try { _fd = fs.openSync(newPath, 'wx'); fs.closeSync(_fd); } catch (e2) { if (e2.code === 'EEXIST') continue; throw e2; }
+            fs.copyFileSync(legacyPath, newPath);
+            fs.unlinkSync(legacyPath);
+          } catch (ex) { process.stderr.write('migrate warn: ' + ex.message + '\n'); }
+          continue;
+        }
+        process.stderr.write('migrate warn: ' + e.message + '\n');
+      }
+    }
+  }
+}
+
 function getMachineId() {
   const p = path.join(os.homedir(), '.config', 'kaola-workflow', 'machine-id');
   try { return fs.readFileSync(p, 'utf8').trim(); } catch (_) {}
@@ -130,11 +175,11 @@ function assertSafeSession(sessionId, label) {
   assert(isSafeName(sessionId), (label || '--session') + ' must be a simple session id with no path separators');
 }
 
-function locksDir(root) { return path.join(root, 'kaola-workflow', '.locks'); }
-function sessionsDir(root) { return path.join(root, 'kaola-workflow', '.sessions'); }
-function lockPath(root, project) { return path.join(locksDir(root), project + '.lock'); }
-function sessionPath(root, sessionId) { return path.join(sessionsDir(root), sessionId + '.json'); }
-function tickerPidPath(root, sessionId) { return path.join(root, 'kaola-workflow', '.tickers', sessionId + '.pid'); }
+function locksDir(coordRoot) { return path.join(coordRoot, 'kaola-workflow', '.locks'); }
+function sessionsDir(coordRoot) { return path.join(coordRoot, 'kaola-workflow', '.sessions'); }
+function lockPath(coordRoot, project) { return path.join(locksDir(coordRoot), project + '.lock'); }
+function sessionPath(coordRoot, sessionId) { return path.join(sessionsDir(coordRoot), sessionId + '.json'); }
+function tickerPidPath(coordRoot, sessionId) { return path.join(coordRoot, 'kaola-workflow', '.tickers', sessionId + '.pid'); }
 
 function readJsonFile(filePath) {
   try {
@@ -144,24 +189,28 @@ function readJsonFile(filePath) {
   }
 }
 
-function readLockFiles(root) {
-  const dir = locksDir(root);
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.lock'))
-    .map(f => {
-      try {
-        const raw = fs.readFileSync(path.join(dir, f), 'utf8');
-        return JSON.parse(raw);
-      } catch (_) {
-        return null;
-      }
-    })
-    .filter(Boolean);
+function readJsonFileWithFallback(newPath, legacyPath) {
+  return readJsonFile(newPath) || readJsonFile(legacyPath);
 }
 
-function readSessionFile(root, sessionId) {
-  return readJsonFile(sessionPath(root, sessionId));
+function readLockFiles(coordRoot, root) {
+  const dir = locksDir(coordRoot);
+  const legacyDir = root ? locksDir(root) : null;
+  const seen = new Set();
+  const result = [];
+  for (const [scanDir] of [[dir], [legacyDir]]) {
+    if (!scanDir || !fs.existsSync(scanDir)) continue;
+    for (const f of fs.readdirSync(scanDir).filter(x => x.endsWith('.lock'))) {
+      if (seen.has(f)) continue;
+      seen.add(f);
+      try { result.push(JSON.parse(fs.readFileSync(path.join(scanDir, f), 'utf8'))); } catch (_) {}
+    }
+  }
+  return result;
+}
+
+function readSessionFile(coordRoot, root, sessionId) {
+  return readJsonFileWithFallback(sessionPath(coordRoot, sessionId), sessionPath(root, sessionId));
 }
 
 function readStateSession(root, project) {
@@ -176,8 +225,14 @@ function readStateSession(root, project) {
   }
 }
 
-function sessionForProject(root, project) {
+function sessionForProject(coordRoot, root, project) {
   assert(isSafeName(project), '--project must be a simple folder name with no path separators');
+  try {
+    const raw = fs.readFileSync(lockPath(coordRoot, project), 'utf8');
+    const lock = JSON.parse(raw);
+    if (isSafeName(lock.session_id)) return lock.session_id;
+  } catch (_) {}
+  // fallback: try legacy root location
   try {
     const raw = fs.readFileSync(lockPath(root, project), 'utf8');
     const lock = JSON.parse(raw);
@@ -231,9 +286,9 @@ function activeStateProjects(root) {
     .filter(Boolean);
 }
 
-function ownedActiveProject(root, sessionId) {
+function ownedActiveProject(coordRoot, root, sessionId) {
   const candidates = [];
-  for (const lock of readLockFiles(root)) {
+  for (const lock of readLockFiles(coordRoot, root)) {
     if (lock.session_id === sessionId && isSafeName(lock.project)) {
       candidates.push({
         project: lock.project,
@@ -272,17 +327,17 @@ function activeStateIssueNumbers(root) {
   return issues;
 }
 
-function issueAlreadyClaimed(root, issue) {
-  return readLockFiles(root).some(lock => lock.issue_number === issue) ||
+function issueAlreadyClaimed(coordRoot, root, issue) {
+  return readLockFiles(coordRoot, root).some(lock => lock.issue_number === issue) ||
     activeStateIssueNumbers(root).has(issue);
 }
 
-function startupReceiptPath(root, sessionId) {
-  return path.join(sessionsDir(root), sessionId + '.startup.json');
+function startupReceiptPath(coordRoot, sessionId) {
+  return path.join(sessionsDir(coordRoot), sessionId + '.startup.json');
 }
 
-function readStartupReceipt(root, sessionId) {
-  return readJsonFile(startupReceiptPath(root, sessionId));
+function readStartupReceipt(coordRoot, root, sessionId) {
+  return readJsonFileWithFallback(startupReceiptPath(coordRoot, sessionId), startupReceiptPath(root, sessionId));
 }
 
 function startupReceiptAuthorizesProject(receipt, sessionId, project) {
@@ -330,7 +385,8 @@ function cmdVerifyStartup() {
   assert(isSafeName(args.project), '--project must be a simple folder name with no path separators');
 
   const root = getRoot();
-  const receipt = readStartupReceipt(root, args.session);
+  const coordRoot = getCoordRoot();
+  const receipt = readStartupReceipt(coordRoot, root, args.session);
   const authorized = startupReceiptAuthorizesProject(receipt, args.session, args.project);
   const result = {
     authorized,
@@ -342,25 +398,26 @@ function cmdVerifyStartup() {
   if (!authorized) process.exitCode = 2;
 }
 
-function writeStartupReceipt(root, sessionId, data) {
-  fs.mkdirSync(sessionsDir(root), { recursive: true });
+function writeStartupReceipt(coordRoot, sessionId, data) {
+  fs.mkdirSync(sessionsDir(coordRoot), { recursive: true });
   const receipt = Object.assign({
     startup_completed: true,
     session: sessionId,
     written_at: new Date().toISOString()
   }, data);
-  fs.writeFileSync(startupReceiptPath(root, sessionId), JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
+  fs.writeFileSync(startupReceiptPath(coordRoot, sessionId), JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
   return receipt;
 }
 
 function cmdSession() {
   const args = parseArgs(process.argv.slice(3));
   const root = getRoot();
+  const coordRoot = getCoordRoot();
   const sessionId = currentSessionId(args);
   assertSafeSession(sessionId, '--session/current platform session id');
 
   if (args.project) {
-    const owner = sessionForProject(root, args.project);
+    const owner = sessionForProject(coordRoot, root, args.project);
     if (!owner) { process.exitCode = 1; return; }
     if (owner !== sessionId) {
       process.stderr.write('session: project ' + args.project + ' is owned by ' + owner + '; current session is ' + sessionId + '\n');
@@ -376,6 +433,118 @@ function shouldSweep(lock) {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
   return new Date(lock.expires).getTime() < cutoff &&
     new Date(lock.last_heartbeat).getTime() < cutoff;
+}
+
+function worktreePathFor(root, project) {
+  return path.join(path.dirname(root), path.basename(root) + '.kw', project);
+}
+
+function provisionWorktree(root, project, branch) {
+  const wtPath = worktreePathFor(root, project);
+  fs.mkdirSync(path.dirname(wtPath), { recursive: true });
+
+  // Check if worktree already exists (resume case AC4)
+  try {
+    const listOut = execFileSync('git', ['worktree', 'list', '--porcelain'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    if (listOut.includes('worktree ' + wtPath + '\n')) {
+      return { path: wtPath };
+    }
+  } catch (_) {}
+
+  // Check if branch exists
+  let branchExists = false;
+  try {
+    const branchOut = execFileSync('git', ['branch', '--list', '--', branch],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    branchExists = branchOut.trim().length > 0;
+  } catch (_) {}
+
+  if (branchExists) {
+    execFileSync('git', ['worktree', 'add', '--', wtPath, branch],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } else {
+    execFileSync('git', ['worktree', 'add', '-b', branch, '--', wtPath, 'HEAD'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  }
+
+  return { path: wtPath };
+}
+
+function removeWorktree(coordRoot, project, lock) {
+  if (!lock || !lock.worktree_path) return { skipped: true };
+  const wtPath = lock.worktree_path;
+
+  let wtReal;
+  try {
+    wtReal = fs.realpathSync(wtPath);
+  } catch (e) {
+    if (e.code === 'ENOENT') return { skipped: true, reason: 'already-removed' };
+    throw e;
+  }
+
+  let cwdReal = '';
+  try { cwdReal = fs.realpathSync(process.cwd()); } catch (_) {}
+
+  // CWD-protection: defer if cwd is inside the worktree
+  if (cwdReal === wtReal || cwdReal.startsWith(wtReal + path.sep)) {
+    const pendingDir = path.join(coordRoot, 'kaola-workflow', '.pending-removal');
+    fs.mkdirSync(pendingDir, { recursive: true });
+    const entryPath = path.join(pendingDir, project + '.json');
+    fs.writeFileSync(entryPath, JSON.stringify({ project, worktree_path: wtPath }) + '\n');
+    return { deferred: true };
+  }
+
+  // Dirty check
+  let isDirty = false;
+  try {
+    const statusOut = execFileSync('git', ['-C', wtPath, 'status', '--porcelain'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    isDirty = statusOut.trim().length > 0;
+  } catch (_) {}
+
+  if (!isDirty) {
+    try {
+      execFileSync('git', ['worktree', 'remove', '--force', '--', wtPath],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (_) {
+      // Worktree may already be gone
+    }
+    return { removed: true };
+  } else {
+    // Abandon dirty worktree
+    const now = new Date();
+    const suffix = '.abandoned-' + now.toISOString().replace(/[:.]/g, '-');
+    const abandonedPath = wtPath + suffix;
+    try {
+      fs.renameSync(wtPath, abandonedPath);
+      try {
+        execFileSync('git', ['worktree', 'prune'],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      } catch (_) {}
+    } catch (e) {
+      process.stderr.write('removeWorktree: rename failed: ' + e.message + '\n');
+    }
+    return { abandoned: true };
+  }
+}
+
+function drainPendingRemovals(coordRoot) {
+  const pendingDir = path.join(coordRoot, 'kaola-workflow', '.pending-removal');
+  let files;
+  try { files = fs.readdirSync(pendingDir).filter(f => f.endsWith('.json')); }
+  catch (e) { if (e.code === 'ENOENT') return; throw e; }
+
+  for (const f of files) {
+    const entryPath = path.join(pendingDir, f);
+    let entry;
+    try { entry = JSON.parse(fs.readFileSync(entryPath, 'utf8')); } catch (_) { continue; }
+    const result = removeWorktree(coordRoot, entry.project, { worktree_path: entry.worktree_path });
+    if (result.removed || result.abandoned || result.skipped) {
+      try { fs.unlinkSync(entryPath); } catch (_) {}
+    }
+    // If deferred again, leave the file for next sweep
+  }
 }
 
 function buildSinkBranchName(issueNumber, project, fallbackBranch) {
@@ -499,8 +668,8 @@ function writeLockFile(lp, lockData) {
   }
 }
 
-function writeSessionFile(root, sessionId, machineId) {
-  fs.mkdirSync(sessionsDir(root), { recursive: true });
+function writeSessionFile(coordRoot, sessionId, machineId) {
+  fs.mkdirSync(sessionsDir(coordRoot), { recursive: true });
   const sess = {
     session_id: sessionId,
     machine_id: machineId,
@@ -508,7 +677,7 @@ function writeSessionFile(root, sessionId, machineId) {
     pid: process.pid,
     started: new Date().toISOString()
   };
-  fs.writeFileSync(sessionPath(root, sessionId), JSON.stringify(sess, null, 2) + '\n', { mode: 0o600 });
+  fs.writeFileSync(sessionPath(coordRoot, sessionId), JSON.stringify(sess, null, 2) + '\n', { mode: 0o600 });
 }
 
 function postGitHubClaim(issueNum, sessionId) {
@@ -529,8 +698,8 @@ function postGitHubClaim(issueNum, sessionId) {
   return m ? m[1] : null;
 }
 
-function handleTiebreakerYield(root, args, tbResult) {
-  releaseSession(root, args.session, 'tiebreaker-yield', { remoteCleanup: false });
+function handleTiebreakerYield(root, coordRoot, args, tbResult) {
+  releaseSession(root, coordRoot, args.session, 'tiebreaker-yield', { remoteCleanup: false });
   const winnerSid = (tbResult.winnerBody.match(/kw:claim sess=([^\s>]+)/) || [])[1] || 'unknown';
   postReleaseComment(args.issue, args.session, ':yielded → ' + winnerSid);
   // Adoption stub: push existing branch if one was already cut
@@ -573,6 +742,8 @@ function buildLockData(args, machineId, now) {
     pr_url: null,
     pr_number: null,
     runtime: args.runtime || 'claude',
+    worktree_path: null,
+    branch: null,
   };
 }
 
@@ -803,9 +974,10 @@ function cmdBootstrap() {
   assertSafeSession(args.session, '--session/current platform session id');
   const classifierScript = path.join(path.dirname(__filename), 'kaola-workflow-classifier.js');
   const root = getRoot();
+  const coordRoot = getCoordRoot();
   runBootstrapSweep(__filename, root);
   runBootstrapWatchPr(__filename, root);
-  const owned = ownedActiveProject(root, args.session);
+  const owned = ownedActiveProject(coordRoot, root, args.session);
   if (owned) {
     process.stdout.write(JSON.stringify({
       project: owned.project,
@@ -855,6 +1027,7 @@ function cmdStartup() {
     '--runtime must be "claude" or "codex"');
 
   const root = getRoot();
+  const coordRoot = getCoordRoot();
   const classifierScript = path.join(path.dirname(__filename), 'kaola-workflow-classifier.js');
   const issueFetch = fetchOpenIssueRecords(root);
   const sync = issueFetch.status === 'ok'
@@ -868,9 +1041,9 @@ function cmdStartup() {
   runBootstrapSweep(__filename, root);
   runBootstrapWatchPr(__filename, root);
 
-  const owned = ownedActiveProject(root, args.session);
+  const owned = ownedActiveProject(coordRoot, root, args.session);
   if (owned) {
-    const receipt = writeStartupReceipt(root, args.session, {
+    const receipt = writeStartupReceipt(coordRoot, args.session, {
       runtime: args.runtime || 'claude',
       issue_sync: sync.issue_sync,
       roadmap_sync: sync.roadmap_sync,
@@ -890,7 +1063,7 @@ function cmdStartup() {
 
   const pick = runStartupClaimFirstAvailable(__filename, classifierScript, args, issueFetch.issues, skipped, blocked);
   if (!pick.pick) {
-    const receipt = writeStartupReceipt(root, args.session, {
+    const receipt = writeStartupReceipt(coordRoot, args.session, {
       runtime: args.runtime || 'claude',
       issue_sync: sync.issue_sync,
       roadmap_sync: sync.roadmap_sync,
@@ -910,7 +1083,7 @@ function cmdStartup() {
     return;
   }
 
-  const receipt = writeStartupReceipt(root, args.session, {
+  const receipt = writeStartupReceipt(coordRoot, args.session, {
     runtime: args.runtime || 'claude',
     issue_sync: sync.issue_sync,
     roadmap_sync: sync.roadmap_sync,
@@ -932,25 +1105,83 @@ function cmdClaim() {
   validateClaimArgs(args);
 
   const root = getRoot();
+  const coordRoot = getCoordRoot();
   const machineId = getMachineId();
   const now = new Date();
 
-  fs.mkdirSync(locksDir(root), { recursive: true });
+  migrateLegacyCoordState(root, coordRoot);
+  fs.mkdirSync(locksDir(coordRoot), { recursive: true });
 
-  if (args.issue != null && issueAlreadyClaimed(root, args.issue)) {
+  const lp = lockPath(coordRoot, args.project);
+
+  // Resume-detection BEFORE issueAlreadyClaimed and writeLockFile
+  const existingLock = readJsonFile(lp);
+  if (existingLock && existingLock.session_id === args.session) {
+    if (existingLock.worktree_path && fs.existsSync(existingLock.worktree_path)) {
+      // AC4: reuse existing worktree
+      process.stderr.write('claim: resuming existing worktree at ' + existingLock.worktree_path + '\n');
+      const stateFile2 = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
+      updateSinkLease(stateFile2, existingLock);
+      return;
+    }
+    if (existingLock.worktree_path && !fs.existsSync(existingLock.worktree_path)) {
+      // AC11: loud failure with actionable recovery instructions
+      process.stderr.write(
+        'worktree missing at ' + existingLock.worktree_path + ' for project ' + args.project + '\n' +
+        'recover with:\n' +
+        '  git worktree add ' + existingLock.worktree_path + ' ' + (existingLock.branch || '<branch>') + '\n' +
+        '  node scripts/kaola-workflow-claim.js patch-branch --project ' + args.project +
+          ' --session ' + args.session + ' --branch ' + (existingLock.branch || '<branch>') + '\n'
+      );
+      process.exitCode = 2;
+      return;
+    }
+    // Legacy: pre-Phase-4 lock has no worktree_path field — upgrade it in place
+    if (!existingLock.worktree_path) {
+      const legacyBranch = buildSinkBranchName(
+        args.issue != null ? args.issue : existingLock.issue_number,
+        args.project,
+        args.branch
+      );
+      let legacyWtPath = null;
+      if (!OFFLINE) {
+        let hasGitHistory = false;
+        try {
+          execFileSync('git', ['rev-parse', 'HEAD'],
+            { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+          hasGitHistory = true;
+        } catch (_) {}
+        if (hasGitHistory) {
+          try {
+            const wtResult = provisionWorktree(root, args.project, legacyBranch);
+            legacyWtPath = wtResult.path;
+          } catch (e) {
+            process.stderr.write('claim: provisionWorktree failed: ' + e.message + '\n');
+            process.exitCode = 2;
+            return;
+          }
+        }
+      }
+      const patchedLock = Object.assign({}, existingLock, { worktree_path: legacyWtPath, branch: legacyBranch });
+      fs.writeFileSync(lp, JSON.stringify(patchedLock, null, 2) + '\n', { mode: 0o600 });
+      const stateFileLegacy = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
+      updateSinkLease(stateFileLegacy, patchedLock);
+      return;
+    }
+  }
+
+  if (args.issue != null && issueAlreadyClaimed(coordRoot, root, args.issue)) {
     process.exitCode = 2;
     return;
   }
 
-  const lp = lockPath(root, args.project);
   const lockData = buildLockData(args, machineId, now);
 
-  for (let i = 0; i < 3; i++) {
-    try { writeLockFile(lp, lockData); break; }
-    catch (e) { if (e.code !== 'EEXIST' || i === 2) { process.exitCode = 2; return; } sleepMs(50); }
-  }
+  // Single O_EXCL attempt — NO retry (retrying changes semantics)
+  try { writeLockFile(lp, lockData); }
+  catch (e) { if (e.code === 'EEXIST' || e.code === 'EACCES') { process.exitCode = 2; return; } throw e; }
 
-  writeSessionFile(root, args.session, machineId);
+  writeSessionFile(coordRoot, args.session, machineId);
 
   let commentId = null;
   if (!OFFLINE && args.issue != null) {
@@ -965,18 +1196,40 @@ function cmdClaim() {
   if (!OFFLINE && args.issue != null && commentId) {
     const tbResult = runTiebreakerCheck(args.issue, args.session, commentId);
     if (tbResult !== 'stay' && tbResult.yield) {
-      handleTiebreakerYield(root, args, tbResult);
+      handleTiebreakerYield(root, coordRoot, args, tbResult);
       return;
     }
   }
 
-  const finalLock = commentId !== null
-    ? Object.assign({}, lockData, { claim_comment_id: commentId })
-    : lockData;
+  // provisionWorktree (after tiebreaker — no worktree created on yield)
+  const branch = buildSinkBranchName(args.issue, args.project, args.branch);
+  let wtPath = null;
+  if (!OFFLINE) {
+    // Check if root is a real git repo with at least one commit before attempting worktree provisioning
+    let hasGitHistory = false;
+    try {
+      execFileSync('git', ['rev-parse', 'HEAD'],
+        { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      hasGitHistory = true;
+    } catch (_) {}
 
-  if (commentId !== null) {
-    fs.writeFileSync(lp, JSON.stringify(finalLock, null, 2) + '\n', { mode: 0o600 });
+    if (hasGitHistory) {
+      try {
+        const wtResult = provisionWorktree(root, args.project, branch);
+        wtPath = wtResult.path;
+      } catch (e) {
+        releaseSession(root, coordRoot, args.session, 'worktree-provision-failed', { remoteCleanup: false });
+        process.stderr.write('claim: provisionWorktree failed: ' + e.message + '\n');
+        process.exitCode = 2;
+        return;
+      }
+    }
   }
+
+  const finalLock = Object.assign({}, lockData,
+    commentId !== null ? { claim_comment_id: commentId } : {},
+    { worktree_path: wtPath, branch });
+  fs.writeFileSync(lp, JSON.stringify(finalLock, null, 2) + '\n', { mode: 0o600 });
 
   const stateFile = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
   updateSinkLease(stateFile, finalLock);
@@ -1036,7 +1289,7 @@ function claudeSessionPathForRoot(root, sessionId) {
   return path.join(claudeProjectDirForRoot(root), sessionId + '.jsonl');
 }
 
-function localOwnerLiveness(root, ownerSession, lock, now) {
+function localOwnerLiveness(root, coordRoot, ownerSession, lock, now) {
   const evidence = [];
   const claudeSessionPath = claudeSessionPathForRoot(root, ownerSession);
   const claudeMtime = fileMtimeMs(claudeSessionPath);
@@ -1048,7 +1301,7 @@ function localOwnerLiveness(root, ownerSession, lock, now) {
     });
   }
 
-  const tickerPath = tickerPidPath(root, ownerSession);
+  const tickerPath = tickerPidPath(coordRoot, ownerSession);
   let tickerPid = '';
   try { tickerPid = fs.readFileSync(tickerPath, 'utf8').trim(); } catch (_) {}
   if (tickerPid && isPidAlive(tickerPid)) {
@@ -1069,17 +1322,17 @@ function localOwnerLiveness(root, ownerSession, lock, now) {
   return evidence;
 }
 
-function handoffDecision(root, args, existing, previous, now) {
+function handoffDecision(root, coordRoot, args, existing, previous, now) {
   const force = args.forceLiveTakeover === true;
   const blockers = [];
-  const receipt = readStartupReceipt(root, args.session);
+  const receipt = readStartupReceipt(coordRoot, root, args.session);
   const receiptBlocker = startupReceiptHandoffBlocker(receipt, args.session, args.project);
   if (!force && receiptBlocker) {
     blockers.push(receiptBlocker);
   }
 
   if (previous && previous !== args.session) {
-    const liveness = localOwnerLiveness(root, previous, existing, now);
+    const liveness = localOwnerLiveness(root, coordRoot, previous, existing, now);
     for (const item of liveness) blockers.push(item);
   }
 
@@ -1101,13 +1354,14 @@ function cmdCanHandoff() {
   assertSafeSession(args.session, '--session');
 
   const root = getRoot();
+  const coordRoot = getCoordRoot();
   const now = new Date();
-  const lp = lockPath(root, args.project);
+  const lp = lockPath(coordRoot, args.project);
   const existing = readJsonFile(lp);
   const previous = existing && isSafeName(existing.session_id)
     ? existing.session_id
-    : sessionForProject(root, args.project);
-  const decision = handoffDecision(root, args, existing, previous, now);
+    : sessionForProject(coordRoot, root, args.project);
+  const decision = handoffDecision(root, coordRoot, args, existing, previous, now);
   process.stdout.write(JSON.stringify(decision, null, 2) + '\n');
   if (!decision.allowed) process.exitCode = 2;
 }
@@ -1122,17 +1376,18 @@ function cmdHandoff() {
     '--runtime must be "claude" or "codex"');
 
   const root = getRoot();
+  const coordRoot = getCoordRoot();
   const machineId = getMachineId();
   const now = new Date();
-  fs.mkdirSync(locksDir(root), { recursive: true });
+  fs.mkdirSync(locksDir(coordRoot), { recursive: true });
 
-  const lp = lockPath(root, args.project);
+  const lp = lockPath(coordRoot, args.project);
   const existing = readJsonFile(lp);
   const previous = existing && isSafeName(existing.session_id)
     ? existing.session_id
-    : sessionForProject(root, args.project);
+    : sessionForProject(coordRoot, root, args.project);
 
-  const decision = handoffDecision(root, args, existing, previous, now);
+  const decision = handoffDecision(root, coordRoot, args, existing, previous, now);
   if (!decision.allowed) {
     process.stderr.write('handoff rejected: ' + decision.blockers.map(function(item) {
       return item.type + (item.reason ? ': ' + item.reason : '');
@@ -1160,11 +1415,11 @@ function cmdHandoff() {
   lockData.machine_id = machineId;
 
   fs.writeFileSync(lp, JSON.stringify(lockData, null, 2) + '\n', { mode: 0o600 });
-  writeSessionFile(root, args.session, machineId);
+  writeSessionFile(coordRoot, args.session, machineId);
 
   const stateFile = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
   updateSinkLease(stateFile, lockData);
-  writeStartupReceipt(root, args.session, {
+  writeStartupReceipt(coordRoot, args.session, {
     runtime: lockData.runtime || args.runtime || 'claude',
     issue_sync: 'handoff',
     roadmap_sync: 'unchanged',
@@ -1202,8 +1457,8 @@ function cmdHandoff() {
   }) + '\n');
 }
 
-function releaseSession(root, sessionId, reason, options) {
-  const locks = readLockFiles(root);
+function releaseSession(root, coordRoot, sessionId, reason, options) {
+  const locks = readLockFiles(coordRoot, root);
   const match = locks.find(l => l.session_id === sessionId);
 
   if (!match) {
@@ -1222,15 +1477,27 @@ function releaseSession(root, sessionId, reason, options) {
     } catch (_) {}
   }
 
-  try { fs.unlinkSync(lockPath(root, match.project)); } catch (_) {}
-  try { fs.unlinkSync(sessionPath(root, sessionId)); } catch (_) {}
+  try { fs.unlinkSync(lockPath(coordRoot, match.project)); } catch (_) {}
+  try { fs.unlinkSync(sessionPath(coordRoot, sessionId)); } catch (_) {}
+
+  // Clear status: active in workflow-state.md so issueAlreadyClaimed no longer
+  // finds this issue via activeStateIssueNumbers after the lock is gone.
+  const stateFile = path.join(root, 'kaola-workflow', match.project, 'workflow-state.md');
+  try {
+    const content = fs.readFileSync(stateFile, 'utf8');
+    const updated = content.replace(/^status:\s*active\s*$/m, 'status: released');
+    if (updated !== content) fs.writeFileSync(stateFile, updated);
+  } catch (_) {}
+
   return true;
 }
 
 function cmdRelease() {
   const args = parseArgs(process.argv.slice(3));
   assert(args.session, '--session <id> required for release');
-  releaseSession(getRoot(), args.session);
+  const root = getRoot();
+  const coordRoot = getCoordRoot();
+  releaseSession(root, coordRoot, args.session);
 }
 
 function cmdHeartbeat() {
@@ -1238,7 +1505,8 @@ function cmdHeartbeat() {
   assert(args.session, '--session <id> required for heartbeat');
 
   const root = getRoot();
-  const locks = readLockFiles(root);
+  const coordRoot = getCoordRoot();
+  const locks = readLockFiles(coordRoot, root);
   const match = locks.find(l => l.session_id === args.session);
 
   if (!match) {
@@ -1255,7 +1523,7 @@ function cmdHeartbeat() {
     expires: new Date(now.getTime() + 30 * 60 * 1000).toISOString()
   });
 
-  const lp = lockPath(root, match.project);
+  const lp = lockPath(coordRoot, match.project);
   fs.writeFileSync(lp, JSON.stringify(updated, null, 2) + '\n');
 
   const stateFile = path.join(root, 'kaola-workflow', match.project, 'workflow-state.md');
@@ -1285,7 +1553,7 @@ function acquirePidFile(pidPath) {
 function runTick(tickCtx) {
   tickCtx.tickCountRef.value++;
   const tickCount = tickCtx.tickCountRef.value;
-  const locks = readLockFiles(tickCtx.root);
+  const locks = readLockFiles(tickCtx.coordRoot, tickCtx.root);
   const match = locks.find(function(l) { return l.session_id === tickCtx.session; });
   if (!match) {
     try { fs.unlinkSync(tickCtx.pidPath); } catch (_) {}
@@ -1298,7 +1566,7 @@ function runTick(tickCtx) {
     last_heartbeat: now.toISOString(),
     expires: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString()
   });
-  const lp = lockPath(tickCtx.root, match.project);
+  const lp = lockPath(tickCtx.coordRoot, match.project);
   fs.writeFileSync(lp, JSON.stringify(updated, null, 2) + '\n');
   const stateFile = path.join(tickCtx.root, 'kaola-workflow', match.project, 'workflow-state.md');
   if (fs.existsSync(stateFile)) updateLeaseInPlace(stateFile, updated);
@@ -1317,7 +1585,7 @@ function runTick(tickCtx) {
   if (tickCount === 1 && match.claim_comment_id && Number.isFinite(match.issue_number)) {
     const tbResult = runTiebreakerCheck(match.issue_number, tickCtx.session, match.claim_comment_id);
     if (tbResult !== 'stay' && tbResult.yield) {
-      releaseSession(tickCtx.root, tickCtx.session, 'ticker-late-yield', { remoteCleanup: false });
+      releaseSession(tickCtx.root, tickCtx.coordRoot, tickCtx.session, 'ticker-late-yield', { remoteCleanup: false });
       try { fs.unlinkSync(tickCtx.pidPath); } catch (_) {}
       process.exit(0);
       return;
@@ -1339,14 +1607,15 @@ function cmdTicker() {
     return 15 * 60 * 1000;
   })();
   const root = getRoot();
-  const tickersDir = path.join(root, 'kaola-workflow', '.tickers');
+  const coordRoot = getCoordRoot();
+  const tickersDir = path.join(coordRoot, 'kaola-workflow', '.tickers');
   fs.mkdirSync(tickersDir, { recursive: true });
-  const pidPath = path.join(tickersDir, args.session + '.pid');
+  const pidPath = tickerPidPath(coordRoot, args.session);
   if (acquirePidFile(pidPath) === null) return;
   function gracefulShutdown() { try { fs.unlinkSync(pidPath); } catch (_) {} process.exit(0); }
   process.on('SIGTERM', gracefulShutdown);
   process.on('SIGINT',  gracefulShutdown);
-  const tickCtx = { root, session: args.session, pidPath, intervalMs, tickCountRef: { value: 0 } };
+  const tickCtx = { root, coordRoot, session: args.session, pidPath, intervalMs, tickCountRef: { value: 0 } };
   runTick(tickCtx);
 }
 
@@ -1364,7 +1633,8 @@ function isRemoteStale(lock) {
 
 function cmdSweep() {
   const root = getRoot();
-  const dir = locksDir(root);
+  const coordRoot = getCoordRoot();
+  const dir = locksDir(coordRoot);
   if (!fs.existsSync(dir)) return;
 
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.lock'));
@@ -1389,12 +1659,19 @@ function cmdSweep() {
     }
     try { fs.unlinkSync(fp); } catch (_) {}
   }
+
+  try {
+    execFileSync('git', ['worktree', 'prune'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  } catch (_) {}
+  drainPendingRemovals(coordRoot);
 }
 
 function cmdStatus() {
   const args = parseArgs(process.argv.slice(3));
   const root = getRoot();
-  const locks = readLockFiles(root);
+  const coordRoot = getCoordRoot();
+  const locks = readLockFiles(coordRoot, root);
 
   const filtered = args.session
     ? locks.filter(l => l.session_id === args.session)
@@ -1404,7 +1681,7 @@ function cmdStatus() {
     if (!isSafeName(lock.session_id)) {
       return { session: null, lock, remote: { assignee: null, has_label: null, sentinel_comment_id: null }, consistent: false, drift: ['session_id unsafe'] };
     }
-    const session = readSessionFile(root, lock.session_id);
+    const session = readSessionFile(coordRoot, root, lock.session_id);
 
     let remote = { assignee: null, has_label: null, sentinel_comment_id: null };
     if (!OFFLINE && lock.issue_number != null) {
@@ -1446,7 +1723,8 @@ function cmdPatchBranch() {
     && args.branch !== '.' && args.branch !== '..', '--branch is invalid');
 
   const root = getRoot();
-  const lp = lockPath(root, args.project);
+  const coordRoot = getCoordRoot();
+  const lp = lockPath(coordRoot, args.project);
   assert(fs.existsSync(lp), 'no lock file for project: ' + args.project);
   const lock = JSON.parse(fs.readFileSync(lp, 'utf8'));
   assert(lock.session_id === args.session, 'session mismatch: lock belongs to ' + lock.session_id);
@@ -1478,7 +1756,8 @@ function cmdWatchPr() {
   if (OFFLINE) return;
   const args = parseArgs(process.argv.slice(3));
   const root = getRoot();
-  const dir = locksDir(root);
+  const coordRoot = getCoordRoot();
+  const dir = locksDir(coordRoot);
   if (!fs.existsSync(dir)) return;
 
   const files = fs.readdirSync(dir).filter(f => f.endsWith('.lock'));
@@ -1487,19 +1766,21 @@ function cmdWatchPr() {
     let lock;
     try { lock = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { continue; }
 
-    if (lock.sink !== 'pr') continue;
-    if (!lock.pr_url || !lock.pr_url.startsWith('https://')) continue;
     if (args.issue != null && lock.issue_number !== args.issue) continue;
     if (!isSafeName(lock.project)) continue;
     if (!isSafeName(lock.session_id)) continue;
 
+    const branchOrUrl = (lock.pr_url && lock.pr_url.startsWith('https://'))
+      ? lock.pr_url
+      : (lock.branch || buildSinkBranchName(lock.issue_number, lock.project));
+
     let prData;
     try {
-      const raw = ghExec(['pr', 'view', '--', lock.pr_url, '--json', 'state,mergedAt,url,number,closedAt']);
+      const raw = ghExec(['pr', 'view', '--', branchOrUrl, '--json', 'state,mergedAt,url,number,closedAt']);
       if (!raw) continue;
       prData = JSON.parse(raw);
     } catch (_) {
-      process.stderr.write('watch-pr: gh pr view failed for ' + lock.pr_url + '\n');
+      process.stderr.write('watch-pr: gh pr view failed for ' + branchOrUrl + '\n');
       continue;
     }
 
@@ -1507,12 +1788,14 @@ function cmdWatchPr() {
     const branchName = lock.branch || buildSinkBranchName(lock.issue_number, lock.project);
 
     if (state === 'MERGED') {
-      releaseSession(root, lock.session_id, 'merged');
+      try { removeWorktree(coordRoot, lock.project, lock); } catch (_) {}
+      releaseSession(root, coordRoot, lock.session_id, 'merged');
       try {
         execFileSync('git', ['branch', '-D', '--', branchName], { encoding: 'utf8' });
       } catch (_) {}
     } else if (state === 'CLOSED') {
-      releaseSession(root, lock.session_id, 'aborted');
+      try { removeWorktree(coordRoot, lock.project, lock); } catch (_) {}
+      releaseSession(root, coordRoot, lock.session_id, 'aborted');
       // Do NOT delete branch on closed-without-merge
     } else {
       // OPEN or unknown: refresh heartbeat + expires
@@ -1551,5 +1834,5 @@ function main() {
 if (require.main === module) {
   try { main(); } catch (err) { process.stderr.write(err.message + '\n'); process.exitCode = 1; }
 } else {
-  module.exports = { buildSinkBranchName };
+  module.exports = { buildSinkBranchName, getCoordRoot, removeWorktree };
 }

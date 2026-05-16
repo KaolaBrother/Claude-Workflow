@@ -78,9 +78,24 @@ function currentSessionId() {
 }
 
 function projectOwner(workflowDir, project) {
-  const lockFile = path.join(workflowDir, '.locks', project + '.lock');
+  // Try coordRoot path first (new storage location), fall back to legacy
+  let lockFilePath;
   try {
-    const lock = JSON.parse(readFile(lockFile));
+    const repoRoot = path.dirname(workflowDir); // workflowDir is root/kaola-workflow, so repoRoot is root
+    const raw = require('child_process').execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    const coordRoot = path.resolve(repoRoot, raw);
+    lockFilePath = path.join(coordRoot, 'kaola-workflow', '.locks', project + '.lock');
+    if (!fs.existsSync(lockFilePath)) {
+      lockFilePath = path.join(workflowDir, '.locks', project + '.lock');
+    }
+  } catch (_) {
+    lockFilePath = path.join(workflowDir, '.locks', project + '.lock');
+  }
+
+  try {
+    const lock = JSON.parse(readFile(lockFilePath));
     if (isSafeName(lock.session_id)) return lock.session_id;
   } catch (_) {}
 

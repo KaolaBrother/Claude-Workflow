@@ -410,6 +410,8 @@ When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact res
 
 Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets a distinct project. Session management is handled by `kaola-workflow-claim.js`:
 
+### Session Leases & Coordination State
+
 - Automatic on startup via `/workflow-next`; it uses `KAOLA_SESSION_ID` when set, otherwise derives it from the host platform (`CODEX_THREAD_ID` in Codex, Claude Code `SessionStart.session_id` via the plugin hook), and generates a fallback only when no platform id is available
 - Manual claim/release: `kaola-workflow-claim.js claim --session <id> --project <name> --issue <N>`
 - Explicit recovery/handoff: check `kaola-workflow-claim.js can-handoff --project <name> --session <id>` first, then use `kaola-workflow-claim.js handoff --project <name> --session <id>` to transfer an unfinished project only when the user intentionally wants to pick it up
@@ -419,6 +421,25 @@ Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets
 - Remote sweeper (`sweep` subcommand) checks GitHub comment `updated_at` — skips active sessions (< 24h), clears stale ones (≥ 24h)
 - Pre-commit hook blocks commits that stage files from a project owned by a different session
 
+**Shared coordination state (coordRoot)**: All linked worktrees of the same repository share lock, session, and ticker state via the canonical git common directory (`<repo>/.git/kaola-workflow/`). Discovered via `git rev-parse --git-common-dir`. This ensures that a session is uniquely bound to an issue across all worktrees on the same machine or across different machines accessing the same repository.
+
+### Per-Session Git Worktrees
+
+When a session claims an issue, `kaola-workflow-claim.js` automatically provisions a dedicated git worktree at `<repo-parent>/<repo-name>.kw/<project>/` via the `provisionWorktree()` helper. The worktree path is stored in the lock file as `worktree_path`, and the environment variable `KAOLA_WORKTREE_PATH` is exported after provisioning.
+
+**Worktree lifecycle management:**
+- `removeWorktree()`: removes worktree on PR MERGED, sink-merge success, or explicit release
+- Dirty worktrees are renamed to `.abandoned-<ISO-timestamp>` and left for manual cleanup
+- Removal of own current working directory is deferred to `.pending-removal/<project>.json` for processing on next startup/sweep
+- `drainPendingRemovals()`: processes deferred removals during startup sweep and after sink completion
+- `cmdWatchPr()`: automatically removes worktree on PR MERGED or CLOSED
+- `sink-merge.js`: removes worktree before final branch deletion
+- `cmdSweep()`: runs `drainPendingRemovals()` followed by `git worktree prune`
+
+**Environment variable**: All workflow phases should use `KAOLA_WORKTREE_PATH` when present. The 6 SKILL.md files include a Session Heartbeat shim that changes directory: `cd "$KAOLA_WORKTREE_PATH" 2>/dev/null || true`.
+
+### Session State & Resumption
+
 Normal startup resumes only work whose lease `session_id` exactly matches the current `KAOLA_SESSION_ID`. Active work owned by a different live session is treated as occupied, so `/workflow-next` skips it and claims the next free issue. If no free issue exists, startup stops with a no-unclaimed-work message instead of adopting the foreign lease.
 
 Session id lifecycle:
@@ -427,6 +448,8 @@ Session id lifecycle:
 - Codex: fresh threads, `/clear`, `/new`, and `/fork` produce a fresh thread id. `/compact`, `/resume`, and `codex resume <SESSION_ID>` keep the same resumed thread id. Kaola uses `CODEX_THREAD_ID` when `KAOLA_SESSION_ID` is unset.
 
 Use recovery/handoff only when a user intentionally switches a new session to continue a specific unfinished project. Recovery is never triggered implicitly by being in the same folder or by there being only one active workflow project. Normal handoff is blocked by live local Claude session history, an alive ticker PID, an unexpired lock, or a recent heartbeat; `--force-live-takeover` is reserved for explicit dangerous recovery.
+
+**Backwards compatibility**: On every startup, an idempotent migrator (`migrateLegacyCoordState()`) runs to move coordination state from the legacy `<worktree>/kaola-workflow/` location to the shared coordRoot. No manual migration needed.
 
 Cross-machine hardening ensures that only one session can hold an issue lease at a time, with automatic cleanup if a session becomes inactive. For full details, see `commands/workflow-next.md` "Startup Step 0" and "Co-active Leases".
 

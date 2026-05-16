@@ -2,6 +2,8 @@
 set -uo pipefail
 
 GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+COORD_ROOT="$(git rev-parse --git-common-dir 2>/dev/null)" || COORD_ROOT=""
+[ -n "$COORD_ROOT" ] && COORD_ROOT="$(cd "$GIT_ROOT" && realpath "$COORD_ROOT" 2>/dev/null)" || COORD_ROOT="$GIT_ROOT/.git"
 
 export HOOK_INPUT
 HOOK_INPUT="$(cat)"
@@ -16,10 +18,14 @@ INVOKED_CMD="$(node -e "
   } catch(e) { process.stdout.write(''); }
 " 2>/dev/null)" || true
 
-case "$INVOKED_CMD" in
-  *"git commit"*) ;;
-  *) exit 0 ;;
-esac
+# If HOOK_INPUT was provided (Claude Code context), require it to be a git commit.
+# If HOOK_INPUT is absent (direct git commit), fall through when KAOLA_SESSION_ID is set.
+if [ -n "$HOOK_INPUT" ]; then
+  case "$INVOKED_CMD" in
+    *"git commit"*) ;;
+    *) exit 0 ;;
+  esac
+fi
 
 [ -z "${KAOLA_SESSION_ID:-}" ] && exit 0
 
@@ -51,7 +57,11 @@ fi
 [ "$PROJECT_COUNT" -eq 0 ] && exit 0
 PROJECT="$(printf '%s\n' "$PROJECTS" | head -1)"
 
-LOCK_FILE="$GIT_ROOT/kaola-workflow/.locks/${PROJECT}.lock"
+LOCK_FILE="$COORD_ROOT/kaola-workflow/.locks/${PROJECT}.lock"
+# Legacy fallback: if lock not found at COORD_ROOT path, try GIT_ROOT path
+if [ ! -f "$LOCK_FILE" ]; then
+  LOCK_FILE="$GIT_ROOT/kaola-workflow/.locks/${PROJECT}.lock"
+fi
 OWNER=""
 
 if [ -f "$LOCK_FILE" ]; then

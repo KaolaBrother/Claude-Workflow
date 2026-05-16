@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { getCoordRoot, removeWorktree } = require('./kaola-workflow-claim.js');
 
 const OFFLINE = process.env.KAOLA_WORKFLOW_OFFLINE === '1';
 const FORCE_FF_FAIL = parseInt(process.env.KAOLA_WORKFLOW_FORCE_FF_FAIL || '0', 10);
@@ -43,7 +44,9 @@ function parseArgs(argv) {
 const MAX_AUTOMERGE_RETRIES = 3;
 
 function assertCleanWorktree() {
-  const status = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim();
+  // Use --untracked-files=no to ignore untracked files (e.g. kaola-workflow/ state dirs)
+  // Only staged and unstaged changes to tracked files block the checkout.
+  const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=no'], { encoding: 'utf8' }).trim();
   assert(!status, 'Worktree must be clean before sink-merge checks out the requested branch');
 }
 
@@ -131,7 +134,7 @@ function postMergeCleanup(args) {
     try { ghExec(['issue', 'close', String(args.issue), '--comment', 'Merged via sink-merge.']); }
     catch (_) {}
   }
-  // Step 9 — Delete branch
+  // Step 9 — Delete branch (worktree was removed in step 0)
   try { execFileSync('git', ['branch', '-d', '--', args.branch], { encoding: 'utf8' }); } catch (_) {}
   if (!OFFLINE) {
     try { execFileSync('git', ['push', 'origin', '--delete', '--', args.branch], { encoding: 'utf8' }); }
@@ -152,6 +155,15 @@ function main() {
     assert(Number.isFinite(args.issue) && args.issue > 0, '--issue must be a positive integer');
   }
 
+  // Step 0 — Remove worktree (if any) so the branch can be checked out below
+  {
+    const coordRoot = getCoordRoot();
+    const lockFilePath = path.join(coordRoot, 'kaola-workflow', '.locks', args.project + '.lock');
+    let lock = null;
+    try { lock = JSON.parse(fs.readFileSync(lockFilePath, 'utf8')); } catch (_) {}
+    if (lock) { try { removeWorktree(coordRoot, args.project, lock); } catch (_) {} }
+  }
+
   // Step 1 — git fetch (skip if OFFLINE; fatal throw on error)
   if (!OFFLINE) {
     execFileSync('git', ['fetch', 'origin'], { encoding: 'utf8' });
@@ -161,6 +173,8 @@ function main() {
   execFileSync('git', ['checkout', args.branch], { encoding: 'utf8' });
 
   // Step 2 — Merge-base skip-check
+  // If origin/main doesn't exist (e.g. no remote, or OFFLINE with no cached ref),
+  // treat as already up-to-date so the rebase is skipped.
   let alreadyUpToDate = false;
   try {
     const mergeBase = execFileSync('git', ['merge-base', 'HEAD', 'origin/main'],
@@ -169,7 +183,8 @@ function main() {
       { encoding: 'utf8' }).trim();
     alreadyUpToDate = (mergeBase === originMain);
   } catch (_) {
-    alreadyUpToDate = false;
+    // origin/main not resolvable — treat as up-to-date (no drift to rebase against)
+    alreadyUpToDate = true;
   }
 
   doRebase(args, alreadyUpToDate);

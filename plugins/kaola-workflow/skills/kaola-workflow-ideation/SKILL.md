@@ -33,6 +33,7 @@ fi
       --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
     disown
   fi
+  cd "$KAOLA_WORKTREE_PATH" 2>/dev/null || true
 }
 ```
 
