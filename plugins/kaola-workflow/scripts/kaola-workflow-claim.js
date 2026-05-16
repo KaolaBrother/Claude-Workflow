@@ -1492,6 +1492,60 @@ function releaseSession(root, coordRoot, sessionId, reason, options) {
   return true;
 }
 
+function archiveProjectDir(root, project, statusValue) {
+  if (!isSafeName(project)) throw new Error('archiveProjectDir: unsafe project name: ' + project);
+  const srcDir = path.join(root, 'kaola-workflow', project);
+  if (!fs.existsSync(srcDir)) return { skipped: 'source-missing' };
+  const stateFile = path.join(srcDir, 'workflow-state.md');
+  try {
+    let content = fs.readFileSync(stateFile, 'utf8');
+    content = content.replace(/^status:\s*\S+.*$/m, 'status: ' + statusValue);
+    content = content.replace(/^step:\s*\S+.*$/m, 'step: complete');
+    fs.writeFileSync(stateFile, content);
+  } catch (_) {}
+  const archiveBase = path.join(root, 'kaola-workflow', 'archive');
+  fs.mkdirSync(archiveBase, { recursive: true });
+  let destDir = path.join(archiveBase, project);
+  if (fs.existsSync(destDir)) {
+    destDir = destDir + '.archived-' + new Date().toISOString().replace(/[:.]/g, '-');
+  }
+  fs.renameSync(srcDir, destDir);
+  return { archived: true, dest: destDir };
+}
+
+function cmdFinalize() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(args.project, '--project <name> required for finalize');
+  assert(args.session, '--session <id> required for finalize');
+  assertSafeSession(args.session);
+  if (!isSafeName(args.project)) { process.stderr.write('finalize: unsafe project name\n'); process.exitCode = 1; return; }
+  const root = getRoot();
+  const coordRoot = getCoordRoot();
+  const lp = lockPath(coordRoot, args.project);
+  if (!fs.existsSync(lp)) {
+    process.stderr.write('finalize: no lock file for project ' + args.project + '\n');
+    process.exitCode = 1;
+    return;
+  }
+  let lock;
+  try { lock = JSON.parse(fs.readFileSync(lp, 'utf8')); } catch (e) {
+    process.stderr.write('finalize: cannot read lock: ' + e.message + '\n');
+    process.exitCode = 1;
+    return;
+  }
+  if (lock.session_id !== args.session) {
+    process.stderr.write('finalize: session mismatch — lock owned by ' + lock.session_id + '\n');
+    process.exitCode = 1;
+    return;
+  }
+  const result = archiveProjectDir(root, args.project, 'closed');
+  if (result.skipped === 'source-missing') {
+    process.stdout.write(JSON.stringify({ already: true }) + '\n');
+    return;
+  }
+  process.stdout.write(JSON.stringify({ archived: true, dest: result.dest, status: 'closed' }) + '\n');
+}
+
 function cmdRelease() {
   const args = parseArgs(process.argv.slice(3));
   assert(args.session, '--session <id> required for release');
@@ -1665,6 +1719,32 @@ function cmdSweep() {
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (_) {}
   drainPendingRemovals(coordRoot);
+
+  // Second pass: GC orphaned active dirs with expired leases and no phase artifacts
+  const GC_CUTOFF_MS = 30 * 60 * 1000; // 30 minutes
+  const cutoff = Date.now() - GC_CUTOFF_MS;
+  const kwDir = path.join(root, 'kaola-workflow');
+  let kwEntries = [];
+  try { kwEntries = fs.readdirSync(kwDir, { withFileTypes: true }); } catch (_) {}
+  for (const entry of kwEntries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name === 'archive' || entry.name.startsWith('.')) continue;
+    if (!isSafeName(entry.name)) continue;
+    const dirPath = path.join(kwDir, entry.name);
+    let dirFiles = [];
+    try { dirFiles = fs.readdirSync(dirPath); } catch (_) { continue; }
+    if (dirFiles.some(f => /^phase\d/.test(f))) continue;
+    const stateContent = (() => {
+      try { return fs.readFileSync(path.join(dirPath, 'workflow-state.md'), 'utf8'); } catch (_) { return ''; }
+    })();
+    if (field(stateContent, 'status') !== 'active') continue;
+    if (fs.existsSync(lockPath(coordRoot, entry.name))) continue;
+    const expiresStr = field(stateContent, 'expires');
+    if (!expiresStr) continue;
+    const expiresMs = new Date(expiresStr).getTime();
+    if (isNaN(expiresMs) || expiresMs >= cutoff) continue;
+    try { archiveProjectDir(root, entry.name, 'abandoned'); } catch (_) {}
+  }
 }
 
 function cmdStatus() {
@@ -1813,7 +1893,7 @@ function cmdWatchPr() {
 
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|can-handoff|handoff|verify-startup|patch-branch|watch-pr|bootstrap|startup>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|can-handoff|handoff|verify-startup|patch-branch|watch-pr|bootstrap|startup|finalize>');
   if (sub === 'claim') return cmdClaim();
   if (sub === 'can-handoff') return cmdCanHandoff();
   if (sub === 'handoff') return cmdHandoff();
@@ -1828,11 +1908,12 @@ function main() {
   if (sub === 'bootstrap') return cmdBootstrap();
   if (sub === 'startup') return cmdStartup();
   if (sub === 'verify-startup') return cmdVerifyStartup();
+  if (sub === 'finalize') return cmdFinalize();
   throw new Error('unknown subcommand: ' + sub);
 }
 
 if (require.main === module) {
   try { main(); } catch (err) { process.stderr.write(err.message + '\n'); process.exitCode = 1; }
 } else {
-  module.exports = { buildSinkBranchName, getCoordRoot, removeWorktree };
+  module.exports = { buildSinkBranchName, getCoordRoot, removeWorktree, archiveProjectDir };
 }

@@ -87,7 +87,7 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
 4. Documentation Docking: compare changed files with `README.md`, API docs, architecture docs, changelog, `.env.example`, roadmap, and issue comments when relevant. Save `.cache/doc-docking.md` with verdict `DOCKED` or `BLOCKED`.
 5. Closure decision: scan all phase files for deferred items or user decisions. Ask before reorganizing issues or roadmap.
 6. Refresh `kaola-workflow/ROADMAP.md`.
-7. Archive `kaola-workflow/{project}/` to `kaola-workflow/archive/{project}/`.
+7. Archive is performed atomically by `cmdFinalize` in step 8b below. Do not perform a manual copy or git mv here.
 8. Commit and push only approved files.
 
    ### Cross-Session Staging Guard
@@ -167,6 +167,20 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
      done
    fi
    ```
+
+   ### Step 8b - Finalize (Archive + Status Close)
+
+   Run `cmdFinalize` from the linked worktree after the artifact mirror and before the commit gate:
+
+   ```bash
+   (cd "$ACTIVE_WORKTREE_PATH" && node "$CLAIM_JS" finalize \
+     --project "$KAOLA_PROJECT" \
+     --session "$KAOLA_SESSION_ID")
+   ```
+
+   This atomically writes `status: closed` + `step: complete` to `workflow-state.md` and
+   renames `kaola-workflow/${KAOLA_PROJECT}/` → `kaola-workflow/archive/${KAOLA_PROJECT}/`
+   in the linked worktree. The rename is staged and committed in the commit gate below.
 
    Before sink dispatch, stage only approved implementation, docs, roadmap,
    archive, and workflow artifacts for this project, then create the final

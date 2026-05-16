@@ -4421,6 +4421,167 @@ exit 0
       }
     }
 
+    // Issue-34-A: cmdFinalize archives and writes status:closed
+    {
+      const claimScript = path.join(root, 'scripts/kaola-workflow-claim.js');
+      const finalizeTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-finalize-'));
+      try {
+        const locksDir34a = path.join(finalizeTmp, 'kaola-workflow', '.locks');
+        const projDir34a = path.join(finalizeTmp, 'kaola-workflow', 'test-proj');
+        fs.mkdirSync(locksDir34a, { recursive: true });
+        fs.mkdirSync(projDir34a, { recursive: true });
+
+        // Write workflow-state.md
+        fs.writeFileSync(path.join(projDir34a, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\nstatus: active\nstep: plan\n');
+
+        // Write lock file owned by test-session-a
+        const lockData34a = {
+          project: 'test-proj',
+          session_id: 'test-session-a',
+          machine_id: 'm1',
+          claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          last_heartbeat: new Date().toISOString(),
+          issue_number: null,
+          claim_comment_id: null,
+          sink: 'merge'
+        };
+        fs.writeFileSync(path.join(locksDir34a, 'test-proj.lock'), JSON.stringify(lockData34a, null, 2) + '\n');
+
+        // Run finalize
+        const finalizeOut = execFileSync(process.execPath, [
+          claimScript, 'finalize', '--project', 'test-proj', '--session', 'test-session-a'
+        ], {
+          cwd: finalizeTmp,
+          encoding: 'utf8',
+          env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1', KAOLA_COORD_ROOT: finalizeTmp }
+        });
+
+        // Assert 1: archive/test-proj/workflow-state.md exists with status:closed and step:complete
+        const archivedState34a = path.join(finalizeTmp, 'kaola-workflow', 'archive', 'test-proj', 'workflow-state.md');
+        assert(fs.existsSync(archivedState34a), '34-A: archive/test-proj/workflow-state.md must exist');
+        const archivedContent34a = fs.readFileSync(archivedState34a, 'utf8');
+        assert(archivedContent34a.includes('status: closed'), '34-A: archived state must contain status: closed');
+        assert(archivedContent34a.includes('step: complete'), '34-A: archived state must contain step: complete');
+
+        // Assert 2: kaola-workflow/test-proj/ does NOT exist
+        assert(!fs.existsSync(projDir34a), '34-A: kaola-workflow/test-proj/ must not exist after finalize');
+
+        // Assert 3: stdout JSON has archived: true
+        const finalizeJson34a = JSON.parse(finalizeOut.trim());
+        assert(finalizeJson34a.archived === true, '34-A: stdout JSON must have archived: true');
+
+        // Sub-case: already done (source missing) → exit 0, stdout has {already: true}
+        // Lock file still exists, project dir is gone — this is the "already done" state
+        const finalizeOut2 = execFileSync(process.execPath, [
+          claimScript, 'finalize', '--project', 'test-proj', '--session', 'test-session-a'
+        ], {
+          cwd: finalizeTmp,
+          encoding: 'utf8',
+          env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1', KAOLA_COORD_ROOT: finalizeTmp }
+        });
+        const finalizeJson2 = JSON.parse(finalizeOut2.trim());
+        assert(finalizeJson2.already === true, '34-A already-done: stdout must have {already: true}');
+
+        // Sub-case: wrong session → exit non-zero
+        // Re-create project dir and lock for wrong session test
+        fs.mkdirSync(projDir34a, { recursive: true });
+        fs.writeFileSync(path.join(projDir34a, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\nstatus: active\nstep: plan\n');
+        // Lock is still owned by test-session-a (from earlier write); try with wrong session
+        let wrongSessionExit = 0;
+        try {
+          execFileSync(process.execPath, [
+            claimScript, 'finalize', '--project', 'test-proj', '--session', 'wrong-session-z'
+          ], {
+            cwd: finalizeTmp,
+            encoding: 'utf8',
+            env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1', KAOLA_COORD_ROOT: finalizeTmp }
+          });
+        } catch (e) {
+          wrongSessionExit = e.status || 1;
+        }
+        assert(wrongSessionExit !== 0, '34-A wrong-session: must exit non-zero, got ' + wrongSessionExit);
+
+      } finally {
+        fs.rmSync(finalizeTmp, { recursive: true, force: true });
+      }
+    }
+
+    // Issue-34-B: sweep second pass GC
+    {
+      const claimScript = path.join(root, 'scripts/kaola-workflow-claim.js');
+      const sweepTmp34b = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-sweep34b-'));
+      try {
+        const locksDir34b = path.join(sweepTmp34b, 'kaola-workflow', '.locks');
+        fs.mkdirSync(locksDir34b, { recursive: true });
+
+        // orphan-proj: status:active, expires 31min ago, no lock file, only workflow-state.md
+        const orphanDir = path.join(sweepTmp34b, 'kaola-workflow', 'orphan-proj');
+        fs.mkdirSync(orphanDir, { recursive: true });
+        fs.writeFileSync(path.join(orphanDir, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\nstatus: active\nexpires: ' +
+          new Date(Date.now() - 31 * 60 * 1000).toISOString() + '\n');
+
+        // live-proj: status:active, expires 30min future, no lock
+        const liveDir = path.join(sweepTmp34b, 'kaola-workflow', 'live-proj');
+        fs.mkdirSync(liveDir, { recursive: true });
+        fs.writeFileSync(path.join(liveDir, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\nstatus: active\nexpires: ' +
+          new Date(Date.now() + 30 * 60 * 1000).toISOString() + '\n');
+
+        // in-flight-proj: status:active, expires 31min ago, no lock, has phase1-research.md
+        const inflightDir = path.join(sweepTmp34b, 'kaola-workflow', 'in-flight-proj');
+        fs.mkdirSync(inflightDir, { recursive: true });
+        fs.writeFileSync(path.join(inflightDir, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\nstatus: active\nexpires: ' +
+          new Date(Date.now() - 31 * 60 * 1000).toISOString() + '\n');
+        fs.writeFileSync(path.join(inflightDir, 'phase1-research.md'), '# Phase 1\n');
+
+        // Run sweep
+        execFileSync(process.execPath, [claimScript, 'sweep'], {
+          cwd: sweepTmp34b,
+          encoding: 'utf8',
+          env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1', KAOLA_COORD_ROOT: sweepTmp34b }
+        });
+
+        // Assert 1: archive/orphan-proj/workflow-state.md exists with status: abandoned
+        const archivedOrphan = path.join(sweepTmp34b, 'kaola-workflow', 'archive', 'orphan-proj', 'workflow-state.md');
+        assert(fs.existsSync(archivedOrphan), '34-B: archive/orphan-proj/workflow-state.md must exist');
+        const orphanContent = fs.readFileSync(archivedOrphan, 'utf8');
+        assert(orphanContent.includes('status: abandoned'), '34-B: orphan archived state must contain status: abandoned');
+
+        // Assert 2: kaola-workflow/orphan-proj/ does NOT exist
+        assert(!fs.existsSync(orphanDir), '34-B: kaola-workflow/orphan-proj/ must not exist after sweep');
+
+        // Assert 3: kaola-workflow/live-proj/ still exists
+        assert(fs.existsSync(liveDir), '34-B: kaola-workflow/live-proj/ must still exist (not expired)');
+
+        // Assert 4: kaola-workflow/in-flight-proj/ still exists (phase-artifacts-empty guard)
+        assert(fs.existsSync(inflightDir), '34-B: kaola-workflow/in-flight-proj/ must still exist (has phase artifacts)');
+
+      } finally {
+        fs.rmSync(sweepTmp34b, { recursive: true, force: true });
+      }
+    }
+
+    // Issue-34-C: structural check — finalize invocation in docs
+    {
+      const phase6Path = path.join(root, 'commands', 'kaola-workflow-phase6.md');
+      const skillPath = path.join(root, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
+      for (const [label, filePath] of [['phase6.md', phase6Path], ['SKILL.md', skillPath]]) {
+        const content = fs.readFileSync(filePath, 'utf8');
+        assert(content.includes('finalize'), label + ' 34-C: must contain "finalize"');
+        const step8bIdx = content.indexOf('Step 8b');
+        const commitGateIdx = content.indexOf('Step 8 - Commit Gate');
+        assert(step8bIdx !== -1, label + ' 34-C: must contain "Step 8b"');
+        if (commitGateIdx !== -1) {
+          assert(step8bIdx < commitGateIdx, label + ' 34-C: Step 8b must appear before "Step 8 - Commit Gate"');
+        }
+      }
+    }
+
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
