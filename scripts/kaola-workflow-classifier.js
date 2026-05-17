@@ -119,19 +119,8 @@ function readActiveStateIssueNumbers(root) {
 // File-path extraction
 // ---------------------------------------------------------------------------
 
-const FILE_PATH_REGEX = /(?:^|[^A-Za-z0-9_./-])((?:plugins\/kaola-workflow|scripts|commands|hooks|kaola-workflow)(?:\/[A-Za-z0-9_.-]+)*\/[A-Za-z0-9_.-]*[A-Za-z0-9_-])/g;
-const AREA_PATH_REGEX = /(?:^|[^A-Za-z0-9_./-])((?:plugins\/kaola-workflow(?:\/(?:scripts|skills|agents|config))?|scripts|commands|hooks|kaola-workflow))\/(?=$|[^A-Za-z0-9_./-])/g;
-const COARSE_AREAS = new Set([
-  'scripts',
-  'commands',
-  'hooks',
-  'kaola-workflow',
-  'plugins/kaola-workflow',
-  'plugins/kaola-workflow/scripts',
-  'plugins/kaola-workflow/skills',
-  'plugins/kaola-workflow/agents',
-  'plugins/kaola-workflow/config'
-]);
+const FILE_PATH_REGEX = /(?:^|[^A-Za-z0-9_./-])([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)+)/g;
+const AREA_PATH_REGEX = /(?:^|[^A-Za-z0-9_./-])([A-Za-z0-9_-]+)\/(?=$|[^A-Za-z0-9_./-])/g;
 
 function normalizeRepoPath(raw) {
   return String(raw || '')
@@ -165,15 +154,14 @@ function extractFilePaths(text) {
 function extractCoarseAreas(text) {
   const areas = new Set();
   for (const filePath of extractFilePaths(text)) {
-    const area = areaForPath(filePath);
-    if (COARSE_AREAS.has(area)) areas.add(area);
+    areas.add(areaForPath(filePath));
   }
   const source = String(text || '');
   let match;
   AREA_PATH_REGEX.lastIndex = 0;
   while ((match = AREA_PATH_REGEX.exec(source)) !== null) {
     const area = normalizeRepoPath(match[1]);
-    if (COARSE_AREAS.has(area)) areas.add(area);
+    if (area) areas.add(area);
   }
   return areas;
 }
@@ -264,6 +252,7 @@ function scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels,
   for (const lock of claimedLocks) {
     if (!isSafeName(lock.project)) continue;
     const projectDir = path.join(root, 'kaola-workflow', lock.project);
+    if (!fs.existsSync(projectDir)) continue;
 
     let phase3Content = '';
     let phase1Content = '';

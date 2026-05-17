@@ -1133,6 +1133,125 @@ async function main() {
         assert(fs.existsSync(path.join(locksDir, 'issue-21.lock')), 'Epic Case 6G: issue-21 lock must exist after bootstrap');
         assert(!fs.existsSync(path.join(locksDir, 'issue-19.lock')), 'Epic Case 6G: issue-19 lock must not be created');
 
+        // 6H: red — host-project path src/foo.ts in both candidate and claimed lock → exact overlap
+        {
+          const epic6HTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic6h-'));
+          try {
+            const locksDir6H = locksDirFor(epic6HTmp);
+            const claimedDir6H = path.join(epic6HTmp, 'kaola-workflow', 'host-claimed');
+            fs.mkdirSync(locksDir6H, { recursive: true });
+            fs.mkdirSync(claimedDir6H, { recursive: true });
+            // Claimed lock is for issue 60; candidate being classified is issue 61
+            fs.writeFileSync(path.join(locksDir6H, 'host-claimed.lock'), JSON.stringify({
+              project: 'host-claimed', session_id: 'sess-6h', issue_number: 60,
+              claimed_at: new Date().toISOString(),
+              expires: new Date(Date.now() + 3600000).toISOString(),
+              last_heartbeat: new Date().toISOString()
+            }, null, 2));
+            // Claimed lock's phase3 plan references src/foo.ts
+            fs.writeFileSync(path.join(claimedDir6H, 'phase3-plan.md'),
+              '# Phase 3\nTouches: src/foo.ts\n');
+            const roadmapDir6H = path.join(epic6HTmp, 'kaola-workflow', '.roadmap');
+            fs.mkdirSync(roadmapDir6H, { recursive: true });
+            // Candidate issue 61 also touches src/foo.ts
+            fs.writeFileSync(path.join(roadmapDir6H, 'issue-61.md'),
+              'issue: #61\ntitle: host feature\nstatus: open\nworkflow_project: —\nnext_step: ready\nbody: Modifies src/foo.ts\n');
+            const out6H = execFileSync(process.execPath, [classifierScript, 'classify', '--issue', '61'],
+              { cwd: epic6HTmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+            const r6H = JSON.parse(out6H.trim());
+            assert(r6H.verdict === 'red',
+              'Epic Case 6H: exact file path overlap on host-project path must yield red, got ' + r6H.verdict);
+            assert(r6H.reasoning.includes('exact file path'),
+              'Epic Case 6H: reasoning must mention "exact file path", got: ' + r6H.reasoning);
+          } finally {
+            fs.rmSync(epic6HTmp, { recursive: true, force: true });
+          }
+        }
+
+        // 6I: green — garbage lock whose projectDir does NOT exist on disk; no path info
+        // The ghost lock claims issue 50; we classify a different issue (51) which has no path info.
+        // Without the projectDir guard, the conservative-red trigger would fire (claimed lock in phase<=2
+        // + no path info on candidate). With the guard in scanClaimedOverlap the ghost lock is skipped
+        // and the candidate sees no active claims → green.
+        {
+          const epic6ITmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic6i-'));
+          try {
+            const locksDir6I = locksDirFor(epic6ITmp);
+            fs.mkdirSync(locksDir6I, { recursive: true });
+            fs.writeFileSync(path.join(locksDir6I, 'ghost-project.lock'), JSON.stringify({
+              project: 'ghost-project', session_id: 'sess-6i', issue_number: 50,
+              claimed_at: new Date().toISOString(),
+              expires: new Date(Date.now() + 3600000).toISOString(),
+              last_heartbeat: new Date().toISOString()
+            }, null, 2));
+            const roadmapDir6I = path.join(epic6ITmp, 'kaola-workflow', '.roadmap');
+            fs.mkdirSync(roadmapDir6I, { recursive: true });
+            // Candidate issue 51 has no path info; ghost lock (issue 50) has no projectDir
+            fs.writeFileSync(path.join(roadmapDir6I, 'issue-51.md'),
+              'issue: #51\ntitle: no metadata\nstatus: open\nworkflow_project: —\nnext_step: ready\n');
+            const out6I = execFileSync(process.execPath, [classifierScript, 'classify', '--issue', '51'],
+              { cwd: epic6ITmp, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' } });
+            const r6I = JSON.parse(out6I.trim());
+            assert(r6I.verdict === 'green',
+              'Epic Case 6I: missing projectDir must skip lock; expected green, got ' + r6I.verdict);
+          } finally {
+            fs.rmSync(epic6ITmp, { recursive: true, force: true });
+          }
+        }
+
+        // 6J: ticker orphan-exit — spawned without Claude ancestor self-terminates and removes PID file
+        {
+          const epic6JTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic6j-'));
+          const stderrFile6J = path.join(epic6JTmp, 'ticker-stderr.txt');
+          try {
+            const claimScript6J = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+            const coordRoot6J = path.join(epic6JTmp, '.git');
+            fs.mkdirSync(path.join(coordRoot6J, 'kaola-workflow', '.tickers'), { recursive: true });
+            const sessionId6J = 'sess-6j-orphan';
+            const pidFile6J = path.join(coordRoot6J, 'kaola-workflow', '.tickers', sessionId6J + '.pid');
+
+            // Use (cmd &) subshell pattern: subshell exits immediately after fork,
+            // breaking the ancestor chain before walkToClaudePid() runs.
+            // Stderr captured to file (not /dev/null) so we can assert the orphan message.
+            const spawnScript = [
+              `(nohup "${process.execPath}" "${claimScript6J}" ticker`,
+              `  --session "${sessionId6J}"`,
+              `  --interval 60000`,
+              `  </dev/null 2>"${stderrFile6J}" &)`,
+              `; sleep 0.05`
+            ].join(' ');
+            spawnSync('sh', ['-c', spawnScript], {
+              cwd: epic6JTmp,
+              encoding: 'utf8',
+              env: {
+                ...process.env,
+                KAOLA_WORKFLOW_OFFLINE: '0',
+                HOME: epic6JTmp
+              }
+            });
+
+            // Wait up to 1500ms for ticker to exit and remove its PID file
+            let elapsed = 0;
+            let pidFileGone = false;
+            while (elapsed < 1500) {
+              if (!fs.existsSync(pidFile6J)) { pidFileGone = true; break; }
+              spawnSync('sh', ['-c', 'sleep 0.1']);
+              elapsed += 100;
+            }
+            assert(pidFileGone,
+              'Epic Case 6J: orphaned ticker must remove its PID file within 1500ms; file still exists at ' + pidFile6J);
+
+            // Assert orphan-exit message in captured stderr
+            const stderr6J = fs.existsSync(stderrFile6J)
+              ? fs.readFileSync(stderrFile6J, 'utf8')
+              : '';
+            assert(stderr6J.includes('no Claude ancestor at startup'),
+              'Epic Case 6J: ticker stderr must contain "no Claude ancestor at startup", got: ' + stderr6J);
+          } finally {
+            fs.rmSync(epic6JTmp, { recursive: true, force: true });
+          }
+        }
+
       } finally {
         fs.rmSync(epic6Tmp, { recursive: true, force: true });
       }

@@ -1893,6 +1893,11 @@ function cmdTicker() {
   process.on('SIGINT',  gracefulShutdown);
   const tickCtx = { root, coordRoot, session: args.session, pidPath, intervalMs, tickCountRef: { value: 0 } };
   tickCtx.claudePid = walkToClaudePid();  // null if not under Claude
+  if (tickCtx.claudePid === null) {
+    process.stderr.write('ticker: no Claude ancestor at startup; orphaned, exiting\n');
+    try { fs.unlinkSync(pidPath); } catch (_) {}
+    return;
+  }
   runTick(tickCtx);
 }
 
