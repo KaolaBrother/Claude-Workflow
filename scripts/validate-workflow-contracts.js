@@ -326,5 +326,6 @@ assertIncludes('scripts/kaola-workflow-claim.js', 'worktree-finalize');
 assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 17');
 assertIncludes('commands/workflow-next.md', 'KAOLA_WORKTREE_NATIVE');
 assertIncludes('commands/kaola-workflow-phase4.md', 'ACTIVE_WORKTREE_PATH');
+assertIncludes('commands/kaola-workflow-phase4.md', "git worktree list --porcelain");
 
 console.log('Workflow contract validation passed');

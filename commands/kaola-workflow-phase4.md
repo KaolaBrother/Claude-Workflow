@@ -60,7 +60,7 @@ Resolve the active worktree path before running any git commands in this phase:
 
 ```bash
 if [ "${KAOLA_WORKTREE_NATIVE:-0}" = "1" ]; then
-  COORD_ROOT="$(git rev-parse --show-toplevel)"
+  COORD_ROOT="$(git worktree list --porcelain | awk '/^worktree /{print substr($0,10); exit}')"
   ACTIVE_WORKTREE_PATH="${COORD_ROOT%/}.kw/{project}"
 else
   ACTIVE_WORKTREE_PATH="$(pwd)"

@@ -4802,6 +4802,14 @@ exit 0
         assert(fs.existsSync(path.join(finalize17f.worktree_path, 'kaola-workflow', pick17a.project, 'phase3-plan.md')),
           '17F: phase3-plan.md must exist in issue worktree after finalize');
 
+        // Case 17K: COORD_ROOT resolved correctly from inside issue worktree
+        const coordRootFromWT = execFileSync('bash', ['-c',
+          'git worktree list --porcelain | awk \'/^worktree /{print substr($0,10); exit}\''
+        ], { cwd: pick17a.worktree_path, encoding: 'utf8' }).trim();
+        assert(coordRootFromWT === fs.realpathSync(epic17Tmp),
+          '17K: COORD_ROOT from inside worktree should be main repo root, got ' + coordRootFromWT +
+          ' expected ' + fs.realpathSync(epic17Tmp));
+
       } finally {
         // Prune worktrees before rm to avoid git lock issues
         try { execFileSync('git', ['-C', epic17Tmp, 'worktree', 'prune'], { encoding: 'utf8' }); } catch (_) {}
