@@ -11,8 +11,24 @@ const claudeDir = path.join(repoRoot, 'scripts');
 const codexDir = path.join(repoRoot, 'plugins', 'kaola-workflow', 'scripts');
 
 // Scripts present in BOTH trees that must stay in sync. Tree-specific files
-// (compact-context, session-env, simulate-*, validate-kaola-workflow-contracts,
-// install-codex-agent-profiles) are intentionally excluded.
+// are intentionally excluded:
+//
+//   simulate-workflow-walkthrough.js (Claude) and simulate-kaola-workflow-walkthrough.js
+//     (Codex) — these test DIFFERENT surfaces and must NEVER be synced. The Claude
+//     variant is a 4700-line end-to-end workflow walkthrough that exercises the
+//     compact-context.js hook (Claude-only). The Codex variant is a focused 1100-line
+//     test of Codex-specific claim semantics (runtime tagging, parallel bootstrap,
+//     roadmap sync). A previous "sync everything" pass (commit 308f747) clobbered
+//     the Codex variant with the Claude one; do not repeat that.
+//
+//   kaola-workflow-compact-context.js, kaola-workflow-session-env.js (Claude-only) —
+//     these implement Claude Code SessionStart hooks that have no Codex equivalent.
+//
+//   validate-kaola-workflow-contracts.js (Codex-only) — Codex contract validator;
+//     the Claude validator is validate-workflow-contracts.js (in the allowlist below).
+//
+//   install-codex-agent-profiles.js (Codex-only) — installs .codex/agents/ TOML
+//     profiles; not used by the Claude pack.
 const COMMON_SCRIPTS = [
   'kaola-workflow-claim.js',
   'kaola-workflow-classifier.js',

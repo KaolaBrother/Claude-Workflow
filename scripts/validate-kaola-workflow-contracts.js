@@ -144,8 +144,8 @@ assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'Documen
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'Commit And Push');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, '## Session Heartbeat');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'kaola-workflow-sink-pr.js');
-assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'git commit -m "chore: finalize ${KAOLA_PROJECT}"');
-assertBefore(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'git commit -m "chore: finalize ${KAOLA_PROJECT}"', 'kaola-workflow-sink-merge.js');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'commit -m "chore: finalize ${KAOLA_PROJECT}"');
+assertBefore(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'commit -m "chore: finalize ${KAOLA_PROJECT}"', 'kaola-workflow-sink-merge.js');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'Session lifecycle');
 
 const repairScript = `${pluginRoot}/scripts/kaola-workflow-repair-state.js`;

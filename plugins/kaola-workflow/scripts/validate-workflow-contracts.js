@@ -122,7 +122,7 @@ assertIncludes('commands/kaola-workflow-phase6.md', '## Closure Decision Gate');
 assertIncludes('commands/kaola-workflow-phase6.md', '.cache/advisor-closure.md');
 assertIncludes('commands/kaola-workflow-phase6.md', '## Step 8 - Commit Gate');
 assertIncludes('commands/kaola-workflow-phase6.md', '## Step 9 - Sink');
-assertBefore('commands/kaola-workflow-phase6.md', 'git commit -m "chore: finalize {project}"', 'kaola-workflow-sink-merge.js');
+assertBefore('commands/kaola-workflow-phase6.md', 'commit -m "chore: finalize {project}"', 'kaola-workflow-sink-merge.js');
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.js');
 assertIncludes('README.md', 'Avoid redundant validation runs');
 assertIncludes('README.md', '/workflow-next');
@@ -133,7 +133,12 @@ assertIncludes('commands/workflow-init.md', 'Use `/workflow-next` as the workflo
 assertIncludes('commands/workflow-init.md', 'commit and push');
 assertIncludes('commands/workflow-init.md', '## ECC Hook Policy');
 assertIncludes('commands/workflow-init.md', 'kaola_script(){ _n="$1"');
-assertIncludes('commands/workflow-init.md', '$HOME/.claude/plugins/cache');
+// Issue #36: resolver is a 3-step chain (PLUGIN_ROOT -> install.sh dir -> dev checkout).
+// Fragile `find ~/.claude/plugins/cache | sort | tail -n 1` fallback has been removed.
+assertIncludes('commands/workflow-init.md', '${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}');
+assertIncludes('commands/workflow-init.md', '$HOME/.claude/kaola-workflow/scripts/$_n');
+assertIncludes('commands/workflow-init.md', './scripts/$_n');
+assertNotIncludes('commands/workflow-init.md', '$HOME/.claude/plugins/cache');
 assertNotIncludes('commands/workflow-init.md', 'CLAUDE_PLUGIN_ROOT:-./');
 assertNotIncludes('commands/workflow-init.md', 'CLAUDE_PLUGIN_ROOT:-$HOME/.claude/kaola-workflow');
 assertIncludes('install.sh', 'kaola-workflow-repair-state.js');
@@ -238,13 +243,20 @@ assertIncludes('commands/kaola-workflow-phase1.md', 'patch-branch');
 assertIncludes('install.sh', 'kaola-workflow-pre-commit.sh');
 assertIncludes('commands/workflow-next.md', 'Startup Step 0');
 assertIncludes('commands/workflow-next.md', 'kaola_script(){ _n="$1"');
-assertIncludes('commands/workflow-next.md', '$HOME/.claude/plugins/cache');
+// Issue #36: 3-step resolver chain, fragile cache-walk fallback removed.
+assertIncludes('commands/workflow-next.md', '${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}');
+assertIncludes('commands/workflow-next.md', '$HOME/.claude/kaola-workflow/scripts/$_n');
+assertIncludes('commands/workflow-next.md', './scripts/$_n');
+assertNotIncludes('commands/workflow-next.md', '$HOME/.claude/plugins/cache');
 assertNotIncludes('commands/workflow-next.md', 'CLAUDE_PLUGIN_ROOT:-./');
 assertNotIncludes('commands/workflow-next.md', 'CLAUDE_PLUGIN_ROOT:-$HOME/.claude/kaola-workflow');
 for (const file of phaseCommands) {
   assertIncludes(file, 'Session Heartbeat');
   assertIncludes(file, 'kaola_script(){ _n="$1"');
-  assertIncludes(file, '$HOME/.claude/plugins/cache');
+  assertIncludes(file, '${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}');
+  assertIncludes(file, '$HOME/.claude/kaola-workflow/scripts/$_n');
+  assertIncludes(file, './scripts/$_n');
+  assertNotIncludes(file, '$HOME/.claude/plugins/cache');
   assertNotIncludes(file, 'CLAUDE_PLUGIN_ROOT:-./');
   assertNotIncludes(file, 'CLAUDE_PLUGIN_ROOT:-$HOME/.claude/kaola-workflow');
 }
