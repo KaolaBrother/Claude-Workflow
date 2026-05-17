@@ -5,11 +5,11 @@ name: issue-45
 status: active
 
 ## Current Position
-phase: 2
-phase_name: Ideation
+phase: 3
+phase_name: Plan
 step: complete
-next_command: /kaola-workflow-phase3 issue-45
-next_skill: kaola-workflow-plan issue-45
+next_command: /kaola-workflow-phase4 issue-45
+next_skill: kaola-workflow-execute issue-45
 main_session_role: orchestrator
 implementation_owner: N/A
 fix_owner: N/A
@@ -19,10 +19,10 @@ inline_emergency_fallback_authorized: no
 - none
 
 ## Last Evidence
-phase_file: kaola-workflow/issue-45/phase2-ideation.md
-cache_file: kaola-workflow/issue-45/.cache/advisor-ideation.md
-last_command: /kaola-workflow-phase2 issue-45
-last_result: phase2-complete
+phase_file: kaola-workflow/issue-45/phase3-plan.md
+cache_file: kaola-workflow/issue-45/.cache/advisor-plan.md
+last_command: /kaola-workflow-phase3 issue-45
+last_result: phase3-complete
 
 ## Last Updated
 2026-05-17T17:40:09.823Z
