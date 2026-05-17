@@ -4859,15 +4859,16 @@ exit 0
         assert(fs.existsSync(pick17a.worktree_path),
           '17A: worktree_path must exist on disk: ' + pick17a.worktree_path);
 
-        // 17B: second pick-next (OFFLINE) returns none — branch dedup excludes already-claimed issue 701.
-        // Write ROADMAP.md so the offline fallback finds issue 701 as a candidate; the branch filter
-        // must then exclude it and produce verdict:none.
+        // 17B: second pick-next by the same session returns 'owned' — the owned-check short-circuits
+        // before issue selection, correctly reflecting that sess-epic17 already holds issue-701.
+        // (Pre-B6 this returned 'none' via branch dedup; post-B6 the owned-check takes precedence.)
         fs.writeFileSync(path.join(epic17Tmp, 'kaola-workflow', 'ROADMAP.md'), '## Open Issues\n- #701 worktree-native\n');
         const pickOut17b = execFileSync(process.execPath, [claimJS, 'pick-next',
           '--session', 'sess-epic17', '--runtime', 'claude'],
           { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
         const pick17b = JSON.parse(pickOut17b.trim());
-        assert(pick17b.verdict === 'none', '17B: second pick-next must return none (dedup), got ' + JSON.stringify(pick17b));
+        assert(pick17b.verdict === 'owned', '17B: second pick-next by same session must return owned (owned-check), got ' + JSON.stringify(pick17b));
+        assert(pick17b.project === 'issue-701', '17B: project must be issue-701, got ' + pick17b.project);
 
         // 17C: worktree-status lists the worktree
         const statusOut17c = execFileSync(process.execPath, [claimJS, 'worktree-status'],
@@ -4900,7 +4901,7 @@ exit 0
         assert(resume17e.next_command && resume17e.next_command.includes('phase4'),
           '17E: next_command must include phase4, got ' + resume17e.next_command);
 
-        // 17F: worktree-finalize copies artifacts and commits
+        // 17F setup: write artifacts and configure git identity for commit tests
         // Write a second artifact so the copy has something to sync
         fs.writeFileSync(path.join(projDir17e, 'workflow-state.md'), '# state\n');
         // Git identity needed for commit
@@ -4912,16 +4913,8 @@ exit 0
         // Give the worktree branch an initial commit (required for git add + commit)
         execFileSync('git', ['-C', pick17a.worktree_path, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
 
-        const finalizeOut17f = execFileSync(process.execPath, [claimJS, 'worktree-finalize',
-          '--project', pick17a.project],
-          { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
-        const finalize17f = JSON.parse(finalizeOut17f.trim());
-        assert(finalize17f.verdict === 'finalized', '17F: verdict must be finalized, got ' + JSON.stringify(finalize17f));
-        // Assert files exist in worktree
-        assert(fs.existsSync(path.join(finalize17f.worktree_path, 'kaola-workflow', pick17a.project, 'phase3-plan.md')),
-          '17F: phase3-plan.md must exist in issue worktree after finalize');
-
         // Case 17K: COORD_ROOT resolved correctly from inside issue worktree
+        // (runs before 17F terminal cleanup so the worktree is still alive)
         const coordRootFromWT = execFileSync('bash', ['-c',
           'git worktree list --porcelain | awk \'/^worktree /{print substr($0,10); exit}\''
         ], { cwd: pick17a.worktree_path, encoding: 'utf8' }).trim();
@@ -4953,6 +4946,39 @@ exit 0
           assert(threw17h, '17H: worktree-finalize with no provisioned worktree must throw');
         }
 
+        // Case 17L: verify-startup authorized after pick-next
+        // (runs before 17I/17J/17M so the project dir is not yet archived by any successful finalize)
+        {
+          // Compute coordRoot the same way the production code does:
+          // git rev-parse --git-common-dir (relative), resolved against root
+          const gitCommonDir17l = execFileSync('git', ['rev-parse', '--git-common-dir'],
+            { cwd: epic17Tmp, encoding: 'utf8' }).trim();
+          const coordRoot17l = path.resolve(epic17Tmp, gitCommonDir17l);
+          // Read lock written by pick-next — this is the ground truth for the 24h expiry check.
+          // (The 17F setup step overwrote workflow-state.md with '# state\n', so we source
+          // expiry data from the lock file rather than the state file to avoid circular assertions.)
+          const lockFile17l = path.join(coordRoot17l, 'kaola-workflow', '.locks', pick17a.project + '.lock');
+          const lockData17l = JSON.parse(fs.readFileSync(lockFile17l, 'utf8'));
+
+          // Run verify-startup — should return authorized:true because pick-next wrote the startup receipt
+          const verifyOut17l = execFileSync(process.execPath,
+            [claimJS, 'verify-startup', '--session', 'sess-epic17', '--project', pick17a.project],
+            { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+          const verify17l = JSON.parse(verifyOut17l.trim());
+          assert(verify17l.authorized === true,
+            '17L: verify-startup must return authorized:true, got ' + JSON.stringify(verify17l));
+
+          // workflow-state.md must exist (pick-next creates it; 17F setup clobbered content but not existence)
+          const stateFile17l = path.join(epic17Tmp, 'kaola-workflow', pick17a.project, 'workflow-state.md');
+          assert(fs.existsSync(stateFile17l),
+            '17L: workflow-state.md must exist at ' + stateFile17l);
+
+          // Lock must have expires > 20h from now — verifies pick-next set the 24h lease
+          const expiresTs17l = new Date(lockData17l.expires).getTime();
+          assert(expiresTs17l > Date.now() + 20 * 60 * 60 * 1000,
+            '17L: lock expires must be more than 20h from now (24h lease set by pick-next), got ' + lockData17l.expires);
+        }
+
         // 17I: worktree-finalize with staged uncommitted file in kaola-workflow/{project}/ errors
         {
           const dirtyFile = path.join(pick17a.worktree_path, 'kaola-workflow', pick17a.project, 'dirty-staged.md');
@@ -4976,18 +5002,90 @@ exit 0
         }
 
         // 17J: worktree-finalize with new main-worktree artifact changes HEAD SHA
+        // cwd is pick17a.worktree_path so removeWorktree defers (CWD inside worktree),
+        // allowing the worktree to remain alive for 17M and 17F terminal cleanup.
+        // archiveProjectDir runs and archives kaola-workflow/{project}/ to archive/.
         {
           const headBefore17j = execFileSync('git', ['-C', pick17a.worktree_path, 'rev-parse', 'HEAD'],
             { encoding: 'utf8' }).trim();
           fs.writeFileSync(path.join(projDir17e, 'phase4-progress.md'), '# Phase 4\n');
           const finalizeOut17j = execFileSync(process.execPath,
             [claimJS, 'worktree-finalize', '--project', pick17a.project],
-            { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+            { cwd: pick17a.worktree_path, encoding: 'utf8', env: env17Offline });
           JSON.parse(finalizeOut17j.trim()); // must be valid JSON
           const headAfter17j = execFileSync('git', ['-C', pick17a.worktree_path, 'rev-parse', 'HEAD'],
             { encoding: 'utf8' }).trim();
           assert(headBefore17j !== headAfter17j,
             '17J: HEAD must change after finalize with new artifact');
+        }
+
+        // 17M: worktree-finalize called with cwd INSIDE the linked worktree
+        // projDir17e was archived by 17J; recreate it with a fresh artifact before running.
+        // archiveProjectDir is idempotent on a fresh src dir, so 17M archives the recreated dir.
+        {
+          fs.mkdirSync(projDir17e, { recursive: true });
+          fs.writeFileSync(path.join(projDir17e, 'phase3-plan.md'), '# Phase 3 M\n');
+          const finalizeOut17m = execFileSync(process.execPath,
+            [claimJS, 'worktree-finalize', '--project', pick17a.project],
+            { cwd: pick17a.worktree_path, encoding: 'utf8', env: env17Offline });
+          const result17m = JSON.parse(finalizeOut17m.trim());
+          assert(result17m.verdict === 'finalized',
+            '17M: verdict must be finalized, got ' + JSON.stringify(result17m));
+          assert(!result17m.worktree_path.includes('.kw.kw/'),
+            '17M: worktree_path must not contain double-nested .kw.kw/, got ' + result17m.worktree_path);
+        }
+
+        // 17F: worktree-finalize terminal cleanup — archives project dir, removes worktree
+        // 17K/17G/17H/17L/17I/17J/17M all ran with worktree alive; 17F runs from main cwd to
+        // trigger actual worktree removal (not deferred). projDir17e was archived by 17M so we
+        // recreate it with a sentinel artifact before finalize (commitWorktreeArtifacts needs srcDir).
+        // archiveProjectDir archives the recreated dir; removeWorktree actually removes the worktree.
+        {
+          fs.mkdirSync(projDir17e, { recursive: true });
+          fs.writeFileSync(path.join(projDir17e, 'phase3-plan.md'), '# Phase 3 final\n');
+          const finalizeOut17f = execFileSync(process.execPath, [claimJS, 'worktree-finalize',
+            '--project', pick17a.project],
+            { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+          const finalize17f = JSON.parse(finalizeOut17f.trim());
+          assert(finalize17f.verdict === 'finalized', '17F: verdict must be finalized, got ' + JSON.stringify(finalize17f));
+          // Assert phase3-plan.md was committed to the worktree branch by 17M (verifiable via git even after worktree removal)
+          const showOut17f = execFileSync('git', ['-C', epic17Tmp, 'show',
+            finalize17f.branch + ':kaola-workflow/' + pick17a.project + '/phase3-plan.md'],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+          assert(showOut17f.trim().length > 0,
+            '17F: phase3-plan.md must be committed to worktree branch after finalize');
+          // E14: assert cleanup was attempted (removal field present and valid)
+          assert(finalize17f.removal === 'removed' || finalize17f.removal === 'deferred',
+            '17F: removal must be removed or deferred, got ' + finalize17f.removal);
+          // E14: assert archive directory exists (17J archived project dir into archive/)
+          const archiveDir17f = path.join(epic17Tmp, 'kaola-workflow', 'archive', pick17a.project);
+          assert(fs.existsSync(archiveDir17f) || finalize17f.removal === 'deferred',
+            '17F: archive dir must exist or removal must be deferred, archive path: ' + archiveDir17f);
+        }
+
+        // Case 17N: sweep GCs an expired pick-next worktree lock
+        // (lock file survives 17F since worktree-finalize omits --session, so releaseSession is not called)
+        {
+          // coordRoot is computed the same way as production code
+          const gitCommonDir17n = execFileSync('git', ['rev-parse', '--git-common-dir'],
+            { cwd: epic17Tmp, encoding: 'utf8' }).trim();
+          const coordRoot17n = path.resolve(epic17Tmp, gitCommonDir17n);
+          const lockPath17n = path.join(coordRoot17n, 'kaola-workflow', '.locks', pick17a.project + '.lock');
+          const lockJson17n = JSON.parse(fs.readFileSync(lockPath17n, 'utf8'));
+          // Mark as synthetic so sweep GCs it unconditionally (non-synthetic sessions require
+          // both shouldSweep and isRemoteStale, which cannot be satisfied in the test env)
+          const expiredLock17n = Object.assign({}, lockJson17n, {
+            session_id: 'synthetic-expired-17n',
+            expires: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+          });
+          fs.writeFileSync(lockPath17n, JSON.stringify(expiredLock17n, null, 2) + '\n', { mode: 0o600 });
+
+          // Run sweep ONLINE (env17, no OFFLINE flag) so sweep's GC pass runs
+          execFileSync(process.execPath, [claimJS, 'sweep'],
+            { cwd: epic17Tmp, encoding: 'utf8', env: env17 });
+
+          assert(!fs.existsSync(lockPath17n),
+            '17N: sweep must GC the expired synthetic lock, but lock file still exists at ' + lockPath17n);
         }
 
       } finally {

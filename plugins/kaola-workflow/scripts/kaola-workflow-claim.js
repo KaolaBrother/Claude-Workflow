@@ -1187,25 +1187,32 @@ function cmdBootstrap() {
   process.stdout.write(JSON.stringify({ project: pick.project, issue: pick.pick, verdict: pick.verdict, session: args.session }) + '\n');
 }
 
-function runStartupClaimFirstAvailable(claimScript, classifierScript, args, issues, skipped, blocked) {
-  if (!fs.existsSync(classifierScript)) return { pick: null };
+function selectFirstClaimable(classifierScript, issues, claimer, sinks) {
+  sinks = sinks || { skipped: [], blocked: [] };
   for (const issue of issues) {
     const issueNumber = Number(issue.number || issue);
     if (!Number.isFinite(issueNumber) || issueNumber <= 0) continue;
     const candidate = classifyIssueCandidate(classifierScript, issueNumber);
     if (candidate.verdict === 'blocked') {
-      blocked.push({ issue: issueNumber, reason: candidate.reasoning });
+      sinks.blocked.push({ issue: issueNumber, reason: candidate.reasoning });
       continue;
     }
     if (candidate.verdict !== 'green' && candidate.verdict !== 'yellow') {
-      skipped.push({ issue: issueNumber, verdict: candidate.verdict, reason: candidate.reasoning });
+      sinks.skipped.push({ issue: issueNumber, verdict: candidate.verdict, reason: candidate.reasoning });
       continue;
     }
     const pick = { pick: issueNumber, project: candidate.project, verdict: candidate.verdict };
-    if (runBootstrapClaim(claimScript, args, pick)) return pick;
-    skipped.push({ issue: issueNumber, verdict: 'skipped', reason: 'claim race or existing lock' });
+    if (claimer(pick)) return pick;
+    sinks.skipped.push({ issue: issueNumber, verdict: 'skipped', reason: 'claim race or existing lock' });
   }
   return { pick: null };
+}
+
+function runStartupClaimFirstAvailable(claimScript, classifierScript, args, issues, skipped, blocked) {
+  if (!fs.existsSync(classifierScript)) return { pick: null };
+  return selectFirstClaimable(classifierScript, issues,
+    (pick) => runBootstrapClaim(claimScript, args, pick),
+    { skipped, blocked });
 }
 
 function cmdStartup() {
@@ -2182,55 +2189,91 @@ function fetchOpenIssues(root, offline) {
 
 function cmdPickNext() {
   const args = parseArgs(process.argv.slice(3));
+  args.session = currentSessionId(args);
+  assertSafeSession(args.session, '--session/current platform session id');
+  assert(!args.sink || args.sink === 'merge' || args.sink === 'pr', '--sink must be "merge" or "pr"');
+  assert(!args.runtime || args.runtime === 'claude' || args.runtime === 'codex',
+    '--runtime must be "claude" or "codex"');
+
   const root = getRoot();
+  const coordRoot = getCoordRoot();
+  if (process.env.KAOLA_KERNEL_SESSION_SKIP !== '1') enforcePlatformSessionOrExit(args.session, coordRoot, args);
 
-  const claimedBranches = buildClaimedBranchSet(root, OFFLINE);
-
-  const openIssues = fetchOpenIssues(root, OFFLINE);
-
-  // Filter to unclaimed
-  const unclaimed = openIssues.filter(issue => {
-    const branch = 'workflow/issue-' + issue.number;
-    return !claimedBranches.has(branch);
-  });
-
-  if (unclaimed.length === 0) {
-    process.stdout.write(JSON.stringify({ verdict: 'none', reason: 'no-unclaimed-issues' }) + '\n');
+  // Early-return: check if this session already owns a project (fixes Flaw 5 dedup)
+  const owned = ownedActiveProject(coordRoot, root, args.session);
+  if (owned) {
+    process.stdout.write(JSON.stringify({
+      verdict: 'owned',
+      project: owned.project,
+      issue: owned.issue_number,
+      session: args.session
+    }) + '\n');
     return;
   }
 
-  // Try to provision worktree for first unclaimed
-  for (const issue of unclaimed) {
-    const project = 'issue-' + issue.number;
-    const branch = buildSinkBranchName(issue.number, null);
-    try {
-      const wtResult = provisionWorktree(root, project, branch);
-      // Set label online
-      if (!OFFLINE) {
-        try {
-          execFileSync('gh', ['issue', 'edit', String(issue.number), '--add-label', CLAIM_LABEL],
-            { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
-        } catch (_) {}
-      }
-      const result = {
-        verdict: 'acquired',
-        issue: issue.number,
-        project,
-        branch,
-        worktree_path: wtResult.path,
-        session: args.session || null,
-        runtime: args.runtime || null,
-        sink: args.sink || null
-      };
-      process.stdout.write(JSON.stringify(result) + '\n');
-      return;
-    } catch (_) {
-      // Lost race or provisioning failed — try next
-      process.stderr.write('pick-next: provisionWorktree failed for ' + project + ': ' + _.message + '\n');
-    }
+  // Sweep for orphans (mirrors startup; OFFLINE guard inside sweep)
+  runBootstrapSweep(__filename, root);
+
+  // Proper issue selection using classifier (fixes Flaw 5 — replaces fetchOpenIssues + buildClaimedBranchSet)
+  const topTierLabels = readPriorityConfig(root);
+  const issueFetch = fetchOpenIssueRecords(root);
+  const sortedIssues = issueFetch.issues.length > 0
+    ? sortIssueRecords(issueFetch.issues, { topTierLabels })
+    : issueFetch.issues;
+
+  const classifierScript = path.join(path.dirname(__filename), 'kaola-workflow-classifier.js');
+  const skipped = [];
+  const blocked = [];
+
+  const pick = selectFirstClaimable(classifierScript, sortedIssues,
+    (candidate) => runBootstrapClaim(__filename, args, candidate),
+    { skipped, blocked });
+
+  if (!pick.pick) {
+    process.stdout.write(JSON.stringify({
+      verdict: 'none',
+      reason: 'no-actionable-issues',
+      skipped,
+      blocked
+    }) + '\n');
+    return;
   }
 
-  process.stdout.write(JSON.stringify({ verdict: 'none', reason: 'no-unclaimed-issues' }) + '\n');
+  // Flaw 4: Write startup receipt with claim: 'acquired'
+  const receipt = writeStartupReceipt(coordRoot, args.session, {
+    runtime: args.runtime || 'claude',
+    issue_sync: issueFetch.status,
+    roadmap_sync: 'skipped',
+    issue_source: issueFetch.status,
+    project: pick.project,
+    issue: pick.pick,
+    selected_project: pick.project,
+    selected_issue: pick.pick,
+    verdict: pick.verdict,
+    claim: 'acquired',
+    skipped,
+    blocked
+  });
+
+  // Flaws 8+9: Update state file with 24h expiry (cmdClaim wrote 30min) and patch lock file
+  const now = new Date();
+  const lp = lockPath(coordRoot, pick.project);
+  const existingLock = readJsonFile(lp) || {};
+  const patchLock = Object.assign({}, existingLock, {
+    expires: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+    last_heartbeat: now.toISOString()
+  });
+  fs.writeFileSync(lp, JSON.stringify(patchLock, null, 2) + '\n', { mode: 0o600 });
+  const stateFile = path.join(root, 'kaola-workflow', pick.project, 'workflow-state.md');
+  updateSinkLease(stateFile, patchLock);
+
+  // Augment stdout with branch/worktree_path from the lock and normalise verdict to 'acquired'
+  const output = Object.assign({}, receipt, {
+    verdict: 'acquired',
+    branch: existingLock.branch || patchLock.branch,
+    worktree_path: existingLock.worktree_path || patchLock.worktree_path
+  });
+  process.stdout.write(JSON.stringify(output) + '\n');
 }
 
 function findMainWorktree() {
@@ -2264,6 +2307,22 @@ function detectCurrentProject(args) {
 
 function scanPhaseArtifacts(projectDir) {
   const project = path.basename(projectDir);
+
+  // Read workflow-state.md first; fall back to artifact scan if absent or step is claimed/complete
+  const stateFilePath = path.join(projectDir, 'workflow-state.md');
+  if (fs.existsSync(stateFilePath)) {
+    try {
+      const stateContent = fs.readFileSync(stateFilePath, 'utf8');
+      const nextCmd = field(stateContent, 'next_command');
+      const step = field(stateContent, 'step');
+      if (nextCmd && step && step !== 'complete' && step !== 'claimed') {
+        const m = nextCmd.match(/phase(\d+)/);
+        const currentPhase = m ? Math.max(0, parseInt(m[1], 10) - 1) : 0;
+        return { currentPhase, nextCommand: nextCmd };
+      }
+    } catch (_) {}
+  }
+
   const PHASE_ARTIFACTS = [
     { file: 'phase6-summary.md',  phase: 6, next: 'complete' },
     { file: 'phase5-review.md',   phase: 5, next: '/kaola-workflow-phase6 ' + project },
@@ -2399,11 +2458,28 @@ function cmdWorktreeFinalize() {
   assert(args.project, 'worktree-finalize requires --project');
   assert(isSafeName(args.project), '--project must be a simple folder name with no path separators');
 
-  const root = getRoot();  // ← getRoot(), NOT getCoordRoot()
+  const root = findMainWorktree() || getRoot();  // use main worktree regardless of CWD
+  const coordRoot = getCoordRoot();
   const worktreePath = worktreePathFor(root, args.project);
 
   assert(fs.existsSync(worktreePath),
     'worktree-finalize: worktree not provisioned at ' + worktreePath);
+
+  // Optional session ownership check (skipped when --session is not provided for backward compat)
+  if (args.session) {
+    const lp = lockPath(coordRoot, args.project);
+    if (!fs.existsSync(lp)) {
+      process.stderr.write('worktree-finalize: no lock file for project ' + args.project + '\n');
+      process.exitCode = 2;
+      return;
+    }
+    const lockData = readJsonFile(lp);
+    if (lockData && lockData.session_id !== args.session) {
+      process.stderr.write('worktree-finalize: session mismatch — lock owned by ' + lockData.session_id + '\n');
+      process.exitCode = 2;
+      return;
+    }
+  }
 
   commitWorktreeArtifacts(worktreePath, args.project, root);
 
@@ -2412,13 +2488,27 @@ function cmdWorktreeFinalize() {
     branch = execFileSync('git', ['-C', worktreePath, 'rev-parse', '--abbrev-ref', 'HEAD'],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   } catch (_) {}
+  let archiveResult;
+  try {
+    archiveResult = archiveProjectDir(root, args.project, 'closed');
+  } catch (archiveErr) {
+    process.stderr.write('worktree-finalize: archiveProjectDir failed: ' + archiveErr.message + '\n');
+    archiveResult = { skipped: 'archive-failed' };
+  }
+  if (args.session) {
+    releaseSession(root, coordRoot, args.session, 'worktree-finalized', { remoteCleanup: false });
+  }
+  const lock = readJsonFile(lockPath(coordRoot, args.project));
+  const removalResult = removeWorktree(coordRoot, args.project, lock || { worktree_path: worktreePath });
+  const removalStatus = removalResult.deferred ? 'deferred' : removalResult.removed ? 'removed' : 'skipped';
 
   process.stdout.write(JSON.stringify({
     verdict: 'finalized',
     project: args.project,
     worktree_path: worktreePath,
     branch,
-    session: args.session || null
+    session: args.session || null,
+    removal: removalStatus
   }) + '\n');
 }
 

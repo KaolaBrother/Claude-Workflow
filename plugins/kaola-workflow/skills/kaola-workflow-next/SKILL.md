@@ -39,12 +39,27 @@ fi
 if [ -f "$claim_script" ]; then
   KAOLA_STARTUP_SESSION="$(node "$claim_script" session 2>/dev/null || true)"
   [ -n "$KAOLA_STARTUP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_STARTUP_SESSION"
-  KAOLA_SINK_FLAG=""
-  [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
-  STARTUP_OUT=$(node "$claim_script" startup \
-    --session "$KAOLA_STARTUP_SESSION" \
-    --runtime codex \
-    $KAOLA_SINK_FLAG 2>/dev/null) || true
+  if [ "${KAOLA_WORKTREE_NATIVE:-0}" = "1" ]; then
+    PICK_NEXT_OUT="$(node "$claim_script" pick-next --session "$KAOLA_STARTUP_SESSION" --runtime codex ${KAOLA_SINK:+--sink $KAOLA_SINK} 2>/dev/null)" || true
+    PICK_NEXT_VERDICT="$(node -e "try{process.stdout.write(JSON.parse(process.argv[1]).verdict||'')}catch(e){}" "$PICK_NEXT_OUT" 2>/dev/null)" || true
+    PICK_NEXT_PROJECT="$(node -e "try{process.stdout.write(JSON.parse(process.argv[1]).project||'')}catch(e){}" "$PICK_NEXT_OUT" 2>/dev/null)" || true
+    if [ "$PICK_NEXT_VERDICT" = "acquired" ] && [ -n "$PICK_NEXT_PROJECT" ]; then
+      STARTUP_OUT="$PICK_NEXT_OUT"
+    elif [ "$PICK_NEXT_VERDICT" = "owned" ] && [ -n "$PICK_NEXT_PROJECT" ]; then
+      STARTUP_OUT="$PICK_NEXT_OUT"
+    else
+      echo "pick-next: no actionable issue (verdict: ${PICK_NEXT_VERDICT:-none})" >&2
+      exit 0
+    fi
+  fi
+  if [ -z "${STARTUP_OUT:-}" ]; then
+    KAOLA_SINK_FLAG=""
+    [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
+    STARTUP_OUT=$(node "$claim_script" startup \
+      --session "$KAOLA_STARTUP_SESSION" \
+      --runtime codex \
+      $KAOLA_SINK_FLAG 2>/dev/null) || true
+  fi
 else
   echo "BLOCKED: kaola-workflow startup unavailable; cannot select issue-backed work without a startup receipt." >&2
   exit 1

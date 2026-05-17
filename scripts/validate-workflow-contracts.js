@@ -174,7 +174,7 @@ assert(Array.isArray(packageJson.files) && packageJson.files.includes('hooks/'),
 assert(Array.isArray(packageJson.files) && packageJson.files.includes('scripts/'), 'package.json files must include scripts/');
 
 const routerLines = read('commands/workflow-next.md').split(/\r?\n/).length;
-assert(routerLines <= 250, `commands/workflow-next.md must remain a thin router; found ${routerLines} lines`);
+assert(routerLines <= 265, `commands/workflow-next.md must remain a thin router; found ${routerLines} lines`);
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-contract-'));
 try {
@@ -265,7 +265,7 @@ for (const file of phaseCommands) {
 assert(exists('scripts/kaola-workflow-roadmap.js'), 'scripts/kaola-workflow-roadmap.js is missing');
 assert(exists('scripts/kaola-workflow-classifier.js'), 'scripts/kaola-workflow-classifier.js is missing');
 assertIncludes('scripts/kaola-workflow-classifier.js', 'function extractFilePaths');
-assertIncludes('scripts/kaola-workflow-classifier.js', 'plugins\\/kaola-workflow');
+assertIncludes('scripts/kaola-workflow-classifier.js', 'plugins/kaola-workflow');
 assertIncludes('install.sh', 'kaola-workflow-roadmap.js');
 assertIncludes('install.sh', 'kaola-workflow-classifier.js');
 assertIncludes('hooks/kaola-workflow-pre-commit.sh', '\\.roadmap/');

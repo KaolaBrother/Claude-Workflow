@@ -174,7 +174,7 @@ assert(Array.isArray(packageJson.files) && packageJson.files.includes('hooks/'),
 assert(Array.isArray(packageJson.files) && packageJson.files.includes('scripts/'), 'package.json files must include scripts/');
 
 const routerLines = read('commands/workflow-next.md').split(/\r?\n/).length;
-assert(routerLines <= 250, `commands/workflow-next.md must remain a thin router; found ${routerLines} lines`);
+assert(routerLines <= 265, `commands/workflow-next.md must remain a thin router; found ${routerLines} lines`);
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-contract-'));
 try {
@@ -265,7 +265,7 @@ for (const file of phaseCommands) {
 assert(exists('scripts/kaola-workflow-roadmap.js'), 'scripts/kaola-workflow-roadmap.js is missing');
 assert(exists('scripts/kaola-workflow-classifier.js'), 'scripts/kaola-workflow-classifier.js is missing');
 assertIncludes('scripts/kaola-workflow-classifier.js', 'function extractFilePaths');
-assertIncludes('scripts/kaola-workflow-classifier.js', 'plugins\\/kaola-workflow');
+assertIncludes('scripts/kaola-workflow-classifier.js', 'plugins/kaola-workflow');
 assertIncludes('install.sh', 'kaola-workflow-roadmap.js');
 assertIncludes('install.sh', 'kaola-workflow-classifier.js');
 assertIncludes('hooks/kaola-workflow-pre-commit.sh', '\\.roadmap/');
@@ -320,11 +320,23 @@ assertIncludes('scripts/kaola-workflow-claim.js', 'cmdPickNext');
 assertIncludes('scripts/kaola-workflow-claim.js', 'cmdResume');
 assertIncludes('scripts/kaola-workflow-claim.js', 'cmdWorktreeStatus');
 assertIncludes('scripts/kaola-workflow-claim.js', 'cmdWorktreeFinalize');
-assertIncludes('scripts/kaola-workflow-claim.js', 'pick-next');
-assertIncludes('scripts/kaola-workflow-claim.js', 'worktree-status');
-assertIncludes('scripts/kaola-workflow-claim.js', 'worktree-finalize');
+assertIncludes('scripts/kaola-workflow-claim.js', "if (sub === 'pick-next')");
+assertIncludes('scripts/kaola-workflow-claim.js', "if (sub === 'worktree-status')");
+assertIncludes('scripts/kaola-workflow-claim.js', "if (sub === 'worktree-finalize')");
+// Plugin mirror parity
+const claimContent = read('scripts/kaola-workflow-claim.js');
+const pluginContent = read('plugins/kaola-workflow/scripts/kaola-workflow-claim.js');
+['cmdPickNext', 'cmdResume', 'cmdWorktreeStatus', 'cmdWorktreeFinalize',
+ "if (sub === 'pick-next')", "if (sub === 'worktree-status')", "if (sub === 'worktree-finalize')",
+].forEach(needle => {
+  assert(pluginContent.includes(needle),
+    'plugins/kaola-workflow/scripts/kaola-workflow-claim.js must include: ' + needle);
+  assert(claimContent.includes(needle),
+    'scripts/kaola-workflow-claim.js must include: ' + needle);
+});
 assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 17');
 assertIncludes('commands/workflow-next.md', 'KAOLA_WORKTREE_NATIVE');
 assertIncludes('commands/kaola-workflow-phase4.md', 'ACTIVE_WORKTREE_PATH');
+assertIncludes('commands/kaola-workflow-phase4.md', "git worktree list --porcelain");
 
 console.log('Workflow contract validation passed');

@@ -169,7 +169,7 @@ for (const script of pluginLocalSharedScripts) {
 assertIncludes(repairScript, 'kaola-workflow');
 assertIncludes(repairScript, 'next_skill');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-classifier.js`, 'function extractFilePaths');
-assertIncludes(`${pluginRoot}/scripts/kaola-workflow-classifier.js`, 'plugins\\/kaola-workflow');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-classifier.js`, 'plugins/kaola-workflow');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'CODEX_THREAD_ID');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function cmdHandoff');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function cmdCanHandoff');
@@ -181,6 +181,13 @@ assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function runBoo
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'function cmdStartup');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'startupReceiptPath');
 assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'syncIssuesToRoadmap');
+// Phase B contracts: pick-next startup receipt + finalize cleanup
+assertIncludes('scripts/kaola-workflow-claim.js', "claim: 'acquired'");
+assertIncludes('scripts/kaola-workflow-claim.js', 'writeStartupReceipt');
+assertIncludes('scripts/kaola-workflow-claim.js', 'archiveProjectDir');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, "claim: 'acquired'");
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'writeStartupReceipt');
+assertIncludes(`${pluginRoot}/scripts/kaola-workflow-claim.js`, 'archiveProjectDir');
 assertIncludes(simulateScript, 'real parallel bootstrap coordination and claim-race retry');
 assertIncludes(simulateScript, 'startup transaction syncs issue roadmap');
 assertIncludes(simulateScript, 'can-handoff must reject live owner');
