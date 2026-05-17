@@ -54,6 +54,22 @@ node "$_CLAIM_JS" verify-startup --session "$KAOLA_SESSION_ID" --project "{proje
 }
 ```
 
+## Worktree Discovery
+
+Resolve the active worktree path before running any git commands in this phase:
+
+```bash
+if [ "${KAOLA_WORKTREE_NATIVE:-0}" = "1" ]; then
+  COORD_ROOT="$(git rev-parse --show-toplevel)"
+  ACTIVE_WORKTREE_PATH="${COORD_ROOT%/}.kw/{project}"
+else
+  ACTIVE_WORKTREE_PATH="$(pwd)"
+fi
+export ACTIVE_WORKTREE_PATH
+```
+
+All subsequent `git -C`, `cp`, and path operations in Phase 4 use `$ACTIVE_WORKTREE_PATH` as the working root for issue-branch changes. When `KAOLA_WORKTREE_NATIVE=0` (default), `ACTIVE_WORKTREE_PATH` is the current directory, preserving existing behavior.
+
 ## Prerequisite
 
 `phase3-plan.md` must exist. If missing, stop:

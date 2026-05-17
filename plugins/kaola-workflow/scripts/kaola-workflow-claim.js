@@ -2130,9 +2130,282 @@ function cmdWatchPr() {
   }
 }
 
+function cmdPickNext() {
+  const args = parseArgs(process.argv.slice(3));
+  const root = getRoot();
+
+  // Build set of already-claimed issue branches
+  let claimedBranches = new Set();
+  try {
+    const localBranches = execFileSync('git', ['branch', '--list', 'workflow/issue-*'],
+      { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    localBranches.split('\n').filter(Boolean).forEach(b => claimedBranches.add(b.trim().replace(/^[*+]\s*/, '')));
+  } catch (_) {}
+
+  if (!OFFLINE) {
+    try {
+      const remoteBranches = execFileSync('git', ['ls-remote', '--heads', 'origin', 'refs/heads/workflow/issue-*'],
+        { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      remoteBranches.split('\n').filter(Boolean).forEach(line => {
+        const branch = line.split('\t')[1]?.replace('refs/heads/', '');
+        if (branch) claimedBranches.add(branch);
+      });
+    } catch (_) {}
+  }
+
+  // Fetch open issues
+  let openIssues = [];
+  if (!OFFLINE) {
+    try {
+      const ghOut = execFileSync('gh', ['issue', 'list', '--json', 'number,title,state,labels,assignees,updatedAt,url', '--state', 'open'],
+        { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      openIssues = JSON.parse(ghOut);
+    } catch (_) {}
+  }
+  if (openIssues.length === 0) {
+    // Offline fallback: read ROADMAP.md
+    try {
+      const roadmap = fs.readFileSync(path.join(root, 'kaola-workflow', 'ROADMAP.md'), 'utf8');
+      const re = /#(\d+)/g;
+      let m;
+      while ((m = re.exec(roadmap)) !== null) {
+        const n = parseInt(m[1], 10);
+        if (!openIssues.find(i => i.number === n)) openIssues.push({ number: n });
+      }
+    } catch (_) {}
+  }
+
+  // Filter to unclaimed
+  const unclaimed = openIssues.filter(issue => {
+    const branch = 'workflow/issue-' + issue.number;
+    return !claimedBranches.has(branch);
+  });
+
+  if (unclaimed.length === 0) {
+    process.stdout.write(JSON.stringify({ verdict: 'none', reason: 'no-unclaimed-issues' }) + '\n');
+    return;
+  }
+
+  // Try to provision worktree for first unclaimed
+  for (const issue of unclaimed) {
+    const project = 'issue-' + issue.number;
+    const branch = buildSinkBranchName(issue.number, null);
+    try {
+      const wtResult = provisionWorktree(root, project, branch);
+      // Set label online
+      if (!OFFLINE) {
+        try {
+          execFileSync('gh', ['issue', 'edit', String(issue.number), '--add-label', CLAIM_LABEL],
+            { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] });
+        } catch (_) {}
+      }
+      const result = {
+        verdict: 'acquired',
+        issue: issue.number,
+        project,
+        branch,
+        worktree_path: wtResult.path,
+        session: args.session || null,
+        runtime: args.runtime || null,
+        sink: args.sink || null
+      };
+      process.stdout.write(JSON.stringify(result) + '\n');
+      return;
+    } catch (_) {
+      // Lost race or provisioning failed — try next
+    }
+  }
+
+  process.stdout.write(JSON.stringify({ verdict: 'none', reason: 'no-unclaimed-issues' }) + '\n');
+}
+
+function cmdResume() {
+  const args = parseArgs(process.argv.slice(3));
+
+  // Find main worktree: first 'worktree' line from git worktree list --porcelain
+  let mainWorktree = null;
+  try {
+    const wtList = execFileSync('git', ['worktree', 'list', '--porcelain'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    const lines = wtList.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('worktree ')) {
+        mainWorktree = lines[i].slice('worktree '.length).trim();
+        break;
+      }
+    }
+  } catch (_) {}
+
+  if (!mainWorktree) {
+    process.stdout.write(JSON.stringify({ resumed: false, reason: 'could not determine main worktree' }) + '\n');
+    return;
+  }
+
+  // Determine project
+  let project = args.project || null;
+  if (!project) {
+    try {
+      const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      const m = branch.match(/^workflow\/issue-(\d+)/);
+      if (m) project = 'issue-' + m[1];
+    } catch (_) {}
+  }
+
+  if (!project) {
+    process.stdout.write(JSON.stringify({ resumed: false, reason: 'cannot determine project' }) + '\n');
+    return;
+  }
+  assert(isSafeName(project), '--project must be a simple folder name with no path separators');
+
+  const projectDir = path.join(mainWorktree, 'kaola-workflow', project);
+
+  // Scan phase artifacts
+  let currentPhase = null;
+  let nextCommand = null;
+
+  if (fs.existsSync(path.join(projectDir, 'phase6-summary.md'))) {
+    currentPhase = 6; nextCommand = 'complete';
+  } else if (fs.existsSync(path.join(projectDir, 'phase5-review.md'))) {
+    currentPhase = 5; nextCommand = '/kaola-workflow-phase6 ' + project;
+  } else if (fs.existsSync(path.join(projectDir, 'phase4-progress.md'))) {
+    currentPhase = 4; nextCommand = '/kaola-workflow-phase5 ' + project;
+  } else if (fs.existsSync(path.join(projectDir, 'phase3-plan.md'))) {
+    currentPhase = 3; nextCommand = '/kaola-workflow-phase4 ' + project;
+  } else if (fs.existsSync(path.join(projectDir, 'phase2-ideation.md'))) {
+    currentPhase = 2; nextCommand = '/kaola-workflow-phase3 ' + project;
+  } else if (fs.existsSync(path.join(projectDir, 'phase1-research.md'))) {
+    currentPhase = 1; nextCommand = '/kaola-workflow-phase2 ' + project;
+  } else {
+    currentPhase = 0; nextCommand = '/kaola-workflow-phase1 ' + project;
+  }
+
+  let branch = null;
+  try {
+    branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  } catch (_) {}
+
+  process.stdout.write(JSON.stringify({
+    resumed: true,
+    issue: project.replace(/^issue-/, ''),
+    project,
+    branch,
+    main_worktree: mainWorktree,
+    current_phase: currentPhase,
+    next_command: nextCommand
+  }) + '\n');
+}
+
+function cmdWorktreeStatus() {
+  let wtList = '';
+  try {
+    wtList = execFileSync('git', ['worktree', 'list', '--porcelain'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  } catch (_) {}
+
+  const entries = [];
+  const blocks = wtList.split('\n\n').filter(Boolean);
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    const worktreeMatch = lines.find(l => l.startsWith('worktree '));
+    const headMatch = lines.find(l => l.startsWith('HEAD '));
+    const branchMatch = lines.find(l => l.startsWith('branch '));
+
+    if (!worktreeMatch || !branchMatch) continue;
+    const worktree_path = worktreeMatch.slice('worktree '.length).trim();
+    const head = headMatch ? headMatch.slice('HEAD '.length).trim() : null;
+    const branchFull = branchMatch.slice('branch '.length).trim();
+    const branch = branchFull.replace('refs/heads/', '');
+
+    if (!/^workflow\/issue-\d+/.test(branch)) continue;
+
+    const issueNumMatch = branch.match(/^workflow\/issue-(\d+)/);
+    const issueNum = issueNumMatch ? parseInt(issueNumMatch[1], 10) : null;
+
+    let issue_data = null;
+    if (!OFFLINE && issueNum) {
+      try {
+        const ghOut = execFileSync('gh', ['issue', 'view', String(issueNum), '--json',
+          'state,assignees,labels,title,number,url'],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+        issue_data = JSON.parse(ghOut);
+      } catch (_) {}
+    }
+
+    entries.push({ worktree_path, branch, head, issue: issueNum, issue_data });
+  }
+
+  process.stdout.write(JSON.stringify(entries) + '\n');
+}
+
+function cmdWorktreeFinalize() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(args.project, 'worktree-finalize requires --project');
+  assert(isSafeName(args.project), '--project must be a simple folder name with no path separators');
+
+  const root = getRoot();  // ← getRoot(), NOT getCoordRoot()
+  const worktreePath = worktreePathFor(root, args.project);
+
+  assert(fs.existsSync(worktreePath),
+    'worktree-finalize: worktree not provisioned at ' + worktreePath);
+
+  // Dirty-check ONLY kaola-workflow/{project}/ in the issue worktree
+  const statusOut = execFileSync('git', ['-C', worktreePath, 'status', '--porcelain',
+    '--', 'kaola-workflow/' + args.project + '/'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  assert(!statusOut, 'worktree-finalize: uncommitted changes in kaola-workflow/' + args.project + '/: ' + statusOut);
+
+  // Find main worktree (first 'worktree' entry from git worktree list --porcelain)
+  const wtListOut = execFileSync('git', ['worktree', 'list', '--porcelain'],
+    { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const firstLine = wtListOut.split('\n').find(l => l.startsWith('worktree '));
+  const mainWorktree = firstLine ? firstLine.slice('worktree '.length).trim() : root;
+
+  // Copy kaola-workflow/{project}/ from main to issue worktree
+  const srcDir = path.join(mainWorktree, 'kaola-workflow', args.project);
+  const dstDir = path.join(worktreePath, 'kaola-workflow', args.project);
+  fs.mkdirSync(dstDir, { recursive: true });
+  fs.cpSync(srcDir, dstDir, { recursive: true });
+
+  // Stage and commit
+  execFileSync('git', ['-C', worktreePath, 'add', 'kaola-workflow/' + args.project + '/'],
+    { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  // Check if anything staged
+  let staged = false;
+  try {
+    execFileSync('git', ['-C', worktreePath, 'diff', '--cached', '--quiet'],
+      { stdio: ['ignore', 'pipe', 'pipe'] });
+    staged = false; // exit 0 = nothing staged
+  } catch (_) {
+    staged = true; // exit 1 = something staged
+  }
+
+  let branch = null;
+  try {
+    branch = execFileSync('git', ['-C', worktreePath, 'rev-parse', '--abbrev-ref', 'HEAD'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  } catch (_) {}
+
+  if (staged) {
+    execFileSync('git', ['-C', worktreePath, 'commit', '-m',
+      'chore: sync phase artifacts for ' + args.project],
+      { stdio: ['ignore', 'pipe', 'pipe'] });
+  }
+
+  process.stdout.write(JSON.stringify({
+    verdict: 'finalized',
+    project: args.project,
+    worktree_path: worktreePath,
+    branch,
+    session: args.session || null
+  }) + '\n');
+}
+
 function main() {
   const sub = process.argv[2];
-  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|derive-session|can-handoff|handoff|verify-startup|patch-branch|watch-pr|bootstrap|startup|finalize>');
+  assert(sub, 'usage: kaola-workflow-claim.js <claim|release|heartbeat|ticker|sweep|status|session|derive-session|can-handoff|handoff|verify-startup|patch-branch|watch-pr|bootstrap|startup|finalize|pick-next|resume|worktree-status|worktree-finalize>');
   if (sub === 'claim') return cmdClaim();
   if (sub === 'can-handoff') return cmdCanHandoff();
   if (sub === 'handoff') return cmdHandoff();
@@ -2149,11 +2422,16 @@ function main() {
   if (sub === 'startup') return cmdStartup();
   if (sub === 'verify-startup') return cmdVerifyStartup();
   if (sub === 'finalize') return cmdFinalize();
+  if (sub === 'pick-next') return cmdPickNext();
+  if (sub === 'resume') return cmdResume();
+  if (sub === 'worktree-status') return cmdWorktreeStatus();
+  if (sub === 'worktree-finalize') return cmdWorktreeFinalize();
   throw new Error('unknown subcommand: ' + sub);
 }
 
 if (require.main === module) {
   try { main(); } catch (err) { process.stderr.write(err.message + '\n'); process.exitCode = 1; }
 } else {
-  module.exports = { buildSinkBranchName, getCoordRoot, removeWorktree, archiveProjectDir };
+  module.exports = { buildSinkBranchName, getCoordRoot, removeWorktree, archiveProjectDir,
+                     cmdPickNext, cmdResume, cmdWorktreeStatus, cmdWorktreeFinalize };
 }

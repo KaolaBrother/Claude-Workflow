@@ -1125,6 +1125,59 @@ exit 0
       fs.rmSync(case5Dir, { recursive: true, force: true });
     }
 
+    // Case 5l: pick-next + worktree-status round-trip with issue 801
+    {
+      const case5lDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-plugin-5l-'));
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: case5lDir, encoding: 'utf8' });
+        execFileSync('git', ['-C', case5lDir, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+        fs.mkdirSync(path.join(case5lDir, 'kaola-workflow'), { recursive: true });
+
+        const binDir5l = path.join(case5lDir, 'bin');
+        fs.mkdirSync(binDir5l, { recursive: true });
+        const ghShim5l = path.join(binDir5l, 'gh');
+        fs.writeFileSync(ghShim5l, [
+          '#!/usr/bin/env node',
+          'const args = process.argv.slice(2);',
+          'if (args[0]==="issue"&&args[1]==="list") { process.stdout.write(JSON.stringify([{number:801,title:"plugin-case-5l",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/801"}])+"\\n"); process.exit(0); }',
+          'if (args[0]==="issue"&&args[1]==="edit") { process.exit(0); }',
+          'if (args[0]==="issue"&&args[1]==="view") { process.stdout.write(JSON.stringify({state:"open",number:801,title:"plugin-case-5l",labels:[],assignees:[],url:"https://github.com/test/repo/issues/801"})+"\\n"); process.exit(0); }',
+          'process.exit(0);'
+        ].join('\n'), { mode: 0o755 });
+
+        const pathSep = process.platform === 'win32' ? ';' : ':';
+        const env5l = { ...process.env, PATH: binDir5l + pathSep + process.env.PATH };
+
+        // pick-next acquires issue 801
+        const pickOut5l = execFileSync(process.execPath, [claimScript, 'pick-next',
+          '--session', 'sess-plugin-5l', '--runtime', 'claude'],
+          { cwd: case5lDir, encoding: 'utf8', env: env5l });
+        const pick5l = JSON.parse(pickOut5l.trim());
+        assert(pick5l.verdict === 'acquired', 'Case 5l: pick-next verdict must be acquired, got ' + JSON.stringify(pick5l));
+        assert(pick5l.issue === 801, 'Case 5l: pick-next issue must be 801, got ' + pick5l.issue);
+        assert(fs.existsSync(pick5l.worktree_path), 'Case 5l: worktree_path must exist: ' + pick5l.worktree_path);
+
+        // worktree-status returns matching entry
+        const statusOut5l = execFileSync(process.execPath, [claimScript, 'worktree-status'],
+          { cwd: case5lDir, encoding: 'utf8', env: { ...env5l, KAOLA_WORKFLOW_OFFLINE: '1' } });
+        const status5l = JSON.parse(statusOut5l.trim());
+        assert(Array.isArray(status5l) && status5l.length >= 1,
+          'Case 5l: worktree-status must return at least 1 entry');
+        const entry5l = status5l.find(e => e.branch === pick5l.branch);
+        assert(entry5l, 'Case 5l: worktree-status must have entry for ' + pick5l.branch);
+        assert(entry5l.worktree_path === pick5l.worktree_path, 'Case 5l: worktree_path must match pick-next output');
+
+      } finally {
+        try { execFileSync('git', ['-C', case5lDir, 'worktree', 'prune'], { encoding: 'utf8' }); } catch (_) {}
+        // Also clean up the sibling .kw directory created by worktreePathFor
+        try {
+          const kwDir = case5lDir + '.kw';
+          if (fs.existsSync(kwDir)) fs.rmSync(kwDir, { recursive: true, force: true });
+        } catch (_) {}
+        fs.rmSync(case5lDir, { recursive: true, force: true });
+      }
+    }
+
     console.log('Kaola-Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

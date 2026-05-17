@@ -295,7 +295,7 @@ is detected at test time by `scripts/validate-script-sync.js`.
 | Script | Purpose | Phase |
 |--------|---------|-------|
 | `kaola-workflow-repair-state.js` | Reconstruct workflow state from phase artifacts | Init / Resume |
-| `kaola-workflow-claim.js` | Multi-session lease management (claim, release, heartbeat, ticker, sweep, status, patch-branch, watch-pr, bootstrap, derive-session, finalize); `--runtime claude\|codex` flag on claim and bootstrap | All phases |
+| `kaola-workflow-claim.js` | Multi-session lease management (claim, release, heartbeat, ticker, sweep, status, patch-branch, watch-pr, bootstrap, derive-session, finalize, **pick-next, resume, worktree-status, worktree-finalize**); `--runtime claude\|codex` flag on claim and bootstrap | All phases |
 | `kaola-workflow-sink-merge.js` | Branch-per-issue auto-merge sink — rebase-then-ff-merge sequence | Phase 6 |
 | `kaola-workflow-roadmap.js` | ROADMAP.md regenerator — generate/migrate/validate/init-issue/project-name subcommands; reads `kaola-workflow/.roadmap/issue-{N}.md` per-issue files | Phase 1, Phase 6 |
 | `kaola-workflow-classifier.js` | Parallel-work classifier — classifies open issues as green/yellow/red/blocked before claim; reads lock files, issue file sets, and active remote claim markers | Startup (Step 0) |
@@ -319,6 +319,18 @@ Session identity is derived from the Claude ancestor process rather than self-as
 | `KAOLA_KERNEL_SESSION_FAKE_PID` | (unset) | TEST ONLY — override `walkToClaudePid()` return value for testing without running inside Claude |
 | `KAOLA_COORD_ROOT` | (auto) | Override the coordination root path; normally discovered via `git rev-parse --git-common-dir` |
 | `KAOLA_WORKFLOW_DEBUG_CWD` | (unset) | DEV/TEST ONLY — when set, `sink-merge.js` writes the final `process.cwd()` to the named file on exit. Used by test suite to verify CWD restoration after worktree removal. Not for production use. |
+| `KAOLA_WORKTREE_NATIVE` | `0` | Set to `1` to enable worktree-as-primary-signal mode. `workflow-next.md` routes to `pick-next` instead of `startup`; Phase 4 resolves `ACTIVE_WORKTREE_PATH` from the issue worktree path instead of `$(pwd)`. Legacy session-lease path remains active when this flag is unset. |
+
+**Worktree-Native Subcommands (`KAOLA_WORKTREE_NATIVE=1`):**
+
+Four new subcommands implement the worktree-as-primary-signal model. Enable with `KAOLA_WORKTREE_NATIVE=1`. Legacy subcommands remain active when the flag is unset.
+
+| Subcommand | Usage | Description |
+|------------|-------|-------------|
+| `pick-next` | `node scripts/kaola-workflow-claim.js pick-next --session <id> --runtime <claude\|codex> [--sink <merge\|pr>]` | Finds first unclaimed open issue, provisions a linked worktree, sets `workflow:in-progress` label (online), and emits `{verdict:'acquired', issue, project, branch, worktree_path}` or `{verdict:'none'}` |
+| `resume` | `node scripts/kaola-workflow-claim.js resume [--project <name>] [--session <id>]` | Scans phase artifacts in the main worktree to determine the current phase and emit the next slash command. Derives project from current branch if `--project` is omitted |
+| `worktree-status` | `node scripts/kaola-workflow-claim.js worktree-status` | Lists all `workflow/issue-*` linked worktrees with GitHub issue metadata |
+| `worktree-finalize` | `node scripts/kaola-workflow-claim.js worktree-finalize --project <name> [--session <id>]` | Copies phase artifacts from main worktree into the issue worktree and commits them on the issue branch |
 
 **`derive-session` Subcommand:**
 

@@ -4700,6 +4700,120 @@ exit 0
       }
     }
 
+    // Epic Case 17: Worktree-native subcommands (pick-next, resume, worktree-status, worktree-finalize)
+    {
+      const epic17Tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic17-'));
+      try {
+        execFileSync('git', ['init', '-b', 'main'], { cwd: epic17Tmp, encoding: 'utf8' });
+        execFileSync('git', ['-C', epic17Tmp, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+
+        // Create kaola-workflow/ dir (needed for ROADMAP.md offline fallback and artifact copy)
+        fs.mkdirSync(path.join(epic17Tmp, 'kaola-workflow'), { recursive: true });
+
+        // gh shim: issue list returns issue 701
+        const binDir17 = path.join(epic17Tmp, 'bin');
+        fs.mkdirSync(binDir17, { recursive: true });
+        const ghShim17 = path.join(binDir17, 'gh');
+        fs.writeFileSync(ghShim17, [
+          '#!/usr/bin/env node',
+          'const args = process.argv.slice(2);',
+          'if (args[0]==="issue"&&args[1]==="list") { process.stdout.write(JSON.stringify([{number:701,title:"worktree-native",state:"open",labels:[],assignees:[],updatedAt:"2026-01-01",url:"https://github.com/test/repo/issues/701"}])+"\\n"); process.exit(0); }',
+          'if (args[0]==="issue"&&args[1]==="edit") { process.exit(0); }',
+          'if (args[0]==="issue"&&args[1]==="view") { process.stdout.write(JSON.stringify({state:"open",number:701,title:"worktree-native",labels:[],assignees:[],url:"https://github.com/test/repo/issues/701"})+"\\n"); process.exit(0); }',
+          'process.exit(0);'
+        ].join('\n'), { mode: 0o755 });
+
+        const pathSep = process.platform === 'win32' ? ';' : ':';
+        const env17 = { ...process.env, PATH: binDir17 + pathSep + process.env.PATH };
+        const env17Offline = { ...env17, KAOLA_WORKFLOW_OFFLINE: '1' };
+        const claimJS = path.join(root, 'scripts/kaola-workflow-claim.js');
+
+        // 17A: pick-next acquires issue 701
+        const pickOut17a = execFileSync(process.execPath, [claimJS, 'pick-next',
+          '--session', 'sess-epic17', '--runtime', 'claude'],
+          { cwd: epic17Tmp, encoding: 'utf8', env: env17 });
+        const pick17a = JSON.parse(pickOut17a.trim());
+        assert(pick17a.verdict === 'acquired', '17A: verdict must be acquired, got ' + JSON.stringify(pick17a));
+        assert(pick17a.issue === 701, '17A: issue must be 701, got ' + pick17a.issue);
+        assert(pick17a.branch && pick17a.branch.startsWith('workflow/'),
+          '17A: branch must start with workflow/, got ' + pick17a.branch);
+        assert(fs.existsSync(pick17a.worktree_path),
+          '17A: worktree_path must exist on disk: ' + pick17a.worktree_path);
+
+        // 17B: second pick-next (OFFLINE) returns none — branch dedup excludes already-claimed issue 701.
+        // Write ROADMAP.md so the offline fallback finds issue 701 as a candidate; the branch filter
+        // must then exclude it and produce verdict:none.
+        fs.writeFileSync(path.join(epic17Tmp, 'kaola-workflow', 'ROADMAP.md'), '## Open Issues\n- #701 worktree-native\n');
+        const pickOut17b = execFileSync(process.execPath, [claimJS, 'pick-next',
+          '--session', 'sess-epic17', '--runtime', 'claude'],
+          { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+        const pick17b = JSON.parse(pickOut17b.trim());
+        assert(pick17b.verdict === 'none', '17B: second pick-next must return none (dedup), got ' + JSON.stringify(pick17b));
+
+        // 17C: worktree-status lists the worktree
+        const statusOut17c = execFileSync(process.execPath, [claimJS, 'worktree-status'],
+          { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+        const status17c = JSON.parse(statusOut17c.trim());
+        assert(Array.isArray(status17c) && status17c.length >= 1,
+          '17C: worktree-status must return array with at least 1 entry, got ' + JSON.stringify(status17c));
+        const entry17c = status17c.find(e => e.branch === pick17a.branch);
+        assert(entry17c, '17C: worktree-status must have entry for ' + pick17a.branch);
+        assert(entry17c.worktree_path === pick17a.worktree_path,
+          '17C: worktree_path must match pick-next output');
+
+        // 17D: resume with no phase artifacts routes to phase1
+        const resumeOut17d = execFileSync(process.execPath, [claimJS, 'resume',
+          '--project', pick17a.project],
+          { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+        const resume17d = JSON.parse(resumeOut17d.trim());
+        assert(resume17d.resumed === true, '17D: resume must return resumed:true, got ' + JSON.stringify(resume17d));
+        assert(resume17d.next_command && resume17d.next_command.includes('phase1'),
+          '17D: next_command must include phase1, got ' + resume17d.next_command);
+
+        // 17E: resume with phase3-plan.md present routes to phase4
+        const projDir17e = path.join(epic17Tmp, 'kaola-workflow', pick17a.project);
+        fs.mkdirSync(projDir17e, { recursive: true });
+        fs.writeFileSync(path.join(projDir17e, 'phase3-plan.md'), '# Phase 3\n');
+        const resumeOut17e = execFileSync(process.execPath, [claimJS, 'resume',
+          '--project', pick17a.project],
+          { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+        const resume17e = JSON.parse(resumeOut17e.trim());
+        assert(resume17e.next_command && resume17e.next_command.includes('phase4'),
+          '17E: next_command must include phase4, got ' + resume17e.next_command);
+
+        // 17F: worktree-finalize copies artifacts and commits
+        // Write a second artifact so the copy has something to sync
+        fs.writeFileSync(path.join(projDir17e, 'workflow-state.md'), '# state\n');
+        // Git identity needed for commit
+        execFileSync('git', ['-C', epic17Tmp, 'config', 'user.email', 'test@test.com'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', epic17Tmp, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+        // Configure git identity in the issue worktree too
+        execFileSync('git', ['-C', pick17a.worktree_path, 'config', 'user.email', 'test@test.com'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', pick17a.worktree_path, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+        // Give the worktree branch an initial commit (required for git add + commit)
+        execFileSync('git', ['-C', pick17a.worktree_path, 'commit', '--allow-empty', '-m', 'init'], { encoding: 'utf8' });
+
+        const finalizeOut17f = execFileSync(process.execPath, [claimJS, 'worktree-finalize',
+          '--project', pick17a.project],
+          { cwd: epic17Tmp, encoding: 'utf8', env: env17Offline });
+        const finalize17f = JSON.parse(finalizeOut17f.trim());
+        assert(finalize17f.verdict === 'finalized', '17F: verdict must be finalized, got ' + JSON.stringify(finalize17f));
+        // Assert files exist in worktree
+        assert(fs.existsSync(path.join(finalize17f.worktree_path, 'kaola-workflow', pick17a.project, 'phase3-plan.md')),
+          '17F: phase3-plan.md must exist in issue worktree after finalize');
+
+      } finally {
+        // Prune worktrees before rm to avoid git lock issues
+        try { execFileSync('git', ['-C', epic17Tmp, 'worktree', 'prune'], { encoding: 'utf8' }); } catch (_) {}
+        // Also clean up the sibling .kw directory created by worktreePathFor
+        try {
+          const kwDir = epic17Tmp + '.kw';
+          if (fs.existsSync(kwDir)) fs.rmSync(kwDir, { recursive: true, force: true });
+        } catch (_) {}
+        fs.rmSync(epic17Tmp, { recursive: true, force: true });
+      }
+    }
+
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

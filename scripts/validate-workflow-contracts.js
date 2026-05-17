@@ -315,4 +315,16 @@ assertIncludes('scripts/kaola-workflow-claim.js', 'ranking');
 assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 14a');
 assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 14b');
 
+// Issue #37 – worktree-native subcommands
+assertIncludes('scripts/kaola-workflow-claim.js', 'cmdPickNext');
+assertIncludes('scripts/kaola-workflow-claim.js', 'cmdResume');
+assertIncludes('scripts/kaola-workflow-claim.js', 'cmdWorktreeStatus');
+assertIncludes('scripts/kaola-workflow-claim.js', 'cmdWorktreeFinalize');
+assertIncludes('scripts/kaola-workflow-claim.js', 'pick-next');
+assertIncludes('scripts/kaola-workflow-claim.js', 'worktree-status');
+assertIncludes('scripts/kaola-workflow-claim.js', 'worktree-finalize');
+assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 17');
+assertIncludes('commands/workflow-next.md', 'KAOLA_WORKTREE_NATIVE');
+assertIncludes('commands/kaola-workflow-phase4.md', 'ACTIVE_WORKTREE_PATH');
+
 console.log('Workflow contract validation passed');

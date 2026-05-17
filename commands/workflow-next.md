@@ -60,6 +60,7 @@ CLAIM_JS="$(kaola_script kaola-workflow-claim.js)"
 if [ -f "$CLAIM_JS" ]; then
   KAOLA_STARTUP_SESSION="$(node "$CLAIM_JS" session 2>/dev/null || true)"
   [ -n "$KAOLA_STARTUP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_STARTUP_SESSION"
+  [ "${KAOLA_WORKTREE_NATIVE:-0}" = "1" ] && { node "$CLAIM_JS" pick-next --session "$KAOLA_STARTUP_SESSION" --runtime claude ${KAOLA_SINK:+--sink $KAOLA_SINK} 2>&1; exit 0; } || true
   KAOLA_SINK_FLAG=""
   [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
   STARTUP_OUT=$(node "$CLAIM_JS" startup \
