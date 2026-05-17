@@ -50,6 +50,19 @@ function getRoot() {
   }
 }
 
+function getCoordRoot() {
+  const root = getRoot();
+  try {
+    const raw = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+    return path.resolve(root, raw);
+  } catch (_) {
+    return path.join(root, '.git');
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Config utilities
 // ---------------------------------------------------------------------------
@@ -71,13 +84,18 @@ function readOrCreateConfig() {
 // Lock-file reader
 // ---------------------------------------------------------------------------
 
-function readLockFiles(root) {
-  const dir = path.join(root, 'kaola-workflow', '.locks');
-  if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
-    .filter(f => f.endsWith('.lock'))
-    .map(f => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch (_) { return null; } })
-    .filter(Boolean);
+function readLockFiles(coordRoot, root) {
+  const seen = new Set();
+  const result = [];
+  for (const dir of [path.join(coordRoot, 'kaola-workflow', '.locks'), root ? path.join(root, 'kaola-workflow', '.locks') : null]) {
+    if (!dir || !fs.existsSync(dir)) continue;
+    for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.lock'))) {
+      if (seen.has(f)) continue;
+      seen.add(f);
+      try { result.push(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); } catch (_) {}
+    }
+  }
+  return result;
 }
 
 function readActiveStateIssueNumbers(root) {
@@ -359,7 +377,8 @@ function cmdClassify() {
   }
 
   const root = getRoot();
-  const locks = readLockFiles(root);
+  const coordRoot = getCoordRoot();
+  const locks = readLockFiles(coordRoot, root);
   const activeStateIssues = readActiveStateIssueNumbers(root);
 
   // Already claimed → exit 2, no stdout

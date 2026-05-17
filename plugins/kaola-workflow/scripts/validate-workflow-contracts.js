@@ -296,4 +296,11 @@ assertIncludes('scripts/kaola-workflow-sink-pr.js', 'pr_auto_merge');
 assertIncludes('commands/workflow-next.md', 'watch-pr');
 assertIncludes('commands/workflow-next.md', 'KAOLA_SINK');
 
+assertIncludes('scripts/kaola-workflow-claim.js', 'PRIORITY_TIER_BY_LABEL');
+assertIncludes('scripts/kaola-workflow-claim.js', 'parsePriorityTier');
+assertIncludes('scripts/kaola-workflow-claim.js', 'readPriorityConfig');
+assertIncludes('scripts/kaola-workflow-claim.js', 'ranking');
+assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 14a');
+assertIncludes('scripts/simulate-workflow-walkthrough.js', 'Epic Case 14b');
+
 console.log('Workflow contract validation passed');
