@@ -340,7 +340,7 @@ Four new subcommands implement the worktree-as-primary-signal model. Enable with
 |------------|-------|-------------|
 | `pick-next` | `node scripts/kaola-workflow-claim.js pick-next --session <id> --runtime <claude\|codex> [--sink <merge\|pr>]` | Finds first unclaimed open issue, provisions a linked worktree, sets `workflow:in-progress` label (online), and emits `{verdict:'acquired', issue, project, branch, worktree_path}` or `{verdict:'none'}` |
 | `resume` | `node scripts/kaola-workflow-claim.js resume [--project <name>] [--session <id>]` | Scans phase artifacts in the main worktree to determine the current phase and emit the next slash command. Derives project from current branch if `--project` is omitted |
-| `worktree-status` | `node scripts/kaola-workflow-claim.js worktree-status` | Lists all `workflow/issue-*` linked worktrees with GitHub issue metadata |
+| `worktree-status` | `node scripts/kaola-workflow-claim.js worktree-status` | Lists all `workflow/issue-*` linked worktrees with GitHub issue metadata; entries include `closed: true\|false` for linked-issue state, and unregistered dirs in the `*.kw/` parent appear with `registered: false` and `abandoned: true\|false` flags |
 | `worktree-finalize` | `node scripts/kaola-workflow-claim.js worktree-finalize --project <name> [--session <id>]` | Copies phase artifacts from main worktree into the issue worktree and commits them on the issue branch |
 
 **`derive-session` Subcommand:**
@@ -518,14 +518,15 @@ Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets
 - Background ticker (`ticker` subcommand) keeps leases active across machines with 15-min heartbeat intervals
 - Claim race tiebreaker: lowest GitHub comment ID wins; losers yield cleanly and release the lease
 - Simultaneous startup race retry: if a session classifies an issue as claimable but loses the local claim race before writing its lock, bootstrap continues scanning the open issue list and claims the next green/yellow issue automatically
-- Remote sweeper (`sweep` subcommand) checks GitHub comment `updated_at` — skips active sessions (< 24h), clears stale ones (≥ 24h); second pass garbage-collects orphaned active directories (no lock file + expired >30 minutes + no phase artifacts) as `status: abandoned`
+- Remote sweeper (`sweep` subcommand) checks GitHub comment `updated_at` — skips active sessions (< 24h), clears stale ones (≥ 24h); second pass garbage-collects orphaned active directories (no lock file + expired >30 minutes + no phase artifacts) as `status: abandoned`; third pass removes `.abandoned-<ISO>` directories in the `*.kw/` parent dir that are older than 30 minutes
+- `status` subcommand now includes `'issue closed'` in the drift array when the linked GitHub issue is in CLOSED state
 - Pre-commit hook blocks commits that stage files from a project owned by a different session
 
 **Shared coordination state (coordRoot)**: All linked worktrees of the same repository share lock, session, and ticker state via the canonical git common directory (`<repo>/.git/kaola-workflow/`). Discovered via `git rev-parse --git-common-dir`. This ensures that a session is uniquely bound to an issue across all worktrees on the same machine or across different machines accessing the same repository.
 
 ### Per-Session Git Worktrees
 
-When a session claims an issue, `kaola-workflow-claim.js` automatically provisions a dedicated git worktree at `<repo-parent>/<repo-name>.kw/<project>/` via the `provisionWorktree()` helper. The worktree path is stored in the lock file as `worktree_path`, and the environment variable `KAOLA_WORKTREE_PATH` is exported after provisioning.
+When a session claims an issue, `kaola-workflow-claim.js` automatically provisions a dedicated git worktree at `<repo-parent>/<repo-name>.kw/<project>/` via the `provisionWorktree()` helper. The worktree path is stored in the lock file as `worktree_path`, and the environment variable `KAOLA_WORKTREE_PATH` is exported after provisioning. The startup receipt also includes `worktree_path` for `owned` and `acquired` claim outcomes, allowing agents and scripts to read the worktree path directly without querying the lock file.
 
 **Worktree lifecycle management:**
 - `removeWorktree()`: removes worktree on PR MERGED, sink-merge success, or explicit release

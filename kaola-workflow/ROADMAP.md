@@ -10,7 +10,6 @@ This file mirrors active unfinished work. GitHub issues are the source of truth 
 | #41 | workflow-next robustness: priority-label discovery, claim:none fallback, phantom-advisor gate, fast-path workflow | open | — | ready |
 | #42 | Remove /workflow-next-pr; drive sink from prompt intent + merge fallback | open | — | ready |
 | #43 | Investigation: does /workflow-init need to change given current architecture vision (#40, #41, #42)? | open | — | ready |
-| #45 | Bug: Post-#40 worktree-native cleanup and resume still have stale-state gaps | open | — | ready |
 | #46 | Design: /goal and Phase 6 completion contract — single-issue stop is the default; cross-issue continuation requires explicit re-direction | open | — | ready |
 
 ## Rules
