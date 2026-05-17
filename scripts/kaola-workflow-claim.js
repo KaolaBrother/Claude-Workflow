@@ -411,7 +411,7 @@ function ownedActiveProject(coordRoot, root, sessionId) {
     }
   }
   for (const state of activeStateProjects(root)) {
-    if (state.session_id === sessionId && !candidates.some(candidate => candidate.project === state.project)) {
+    if (state.session_id === sessionId && isSafeName(state.project) && !candidates.some(candidate => candidate.project === state.project)) {
       candidates.push({
         project: state.project,
         issue_number: state.issue_number,
@@ -969,14 +969,14 @@ function analyzeIssue(issue, config) {
     priority_label = parsed.priority_label;
     override_label = parsed.override_label;
   }
-  const body = (issue.body || '');
+  const body = (issue.body || '').slice(0, 8192);
   const bodyLower = body.toLowerCase();
   const acCheckboxes = (body.match(/- \[[ x]\]/gi) || []).length;
-  const fileMatches = (body.match(/`[^`]+\.[a-z]{2,4}`|[\w/-]+\.\w{2,4}/g) || []).length;
+  const fileMatches = (body.match(/`[^`]+\.[a-z]{2,4}`|[\w][\w-]*(?:\/[\w.-]+)+\.\w{2,4}/g) || []).length;
   const path_signals = [];
   let pro_score = 0;
 
-  const ANTI_LABELS = /architecture|breaking-change|security|refactor|design/i;
+  const ANTI_LABELS = /^(architecture|breaking-change|security|refactor|design)$/i;
   const hasAntiLabel = labels.some(l => ANTI_LABELS.test(l));
   const areaLabels = labels.filter(l => /^area:/i.test(l));
   const hasDependsOn = /depends-on:#\d+|blocks:#\d+/i.test(body);
@@ -1321,6 +1321,14 @@ function cmdStartup() {
 
   const owned = ownedActiveProject(coordRoot, root, args.session);
   if (owned) {
+    const ownedStatePath = path.join(root, 'kaola-workflow', owned.project, 'workflow-state.md');
+    const ownedWorkflowPath = (function() {
+      try {
+        const content = fs.readFileSync(ownedStatePath, 'utf8');
+        const m = content.match(/^workflow_path:\s*(\S+)/m);
+        return (m && m[1] === 'fast') ? 'fast' : 'full';
+      } catch (_) { return 'full'; }
+    })();
     const receipt = writeStartupReceipt(coordRoot, args.session, {
       runtime: args.runtime || 'claude',
       issue_sync: sync.issue_sync,
@@ -1334,7 +1342,8 @@ function cmdStartup() {
       claim: 'owned',
       skipped: skipped,
       blocked: blocked,
-      ranking: ranking
+      ranking: ranking,
+      workflow_path: ownedWorkflowPath
     });
     process.stdout.write(JSON.stringify(receipt) + '\n');
     return;

@@ -5291,6 +5291,35 @@ exit 0
       } finally {
         fs.rmSync(ctx3.tmpDir, { recursive: true, force: true });
       }
+
+      // Sub-case 4: claim:owned resume preserves workflow_path from workflow-state.md
+      const ctx4 = make15aRepo('d');
+      try {
+        // First startup: acquire with KAOLA_PATH=fast
+        const r15a4acq = JSON.parse(execFileSync(process.execPath, [
+          claimScript15a, 'startup', '--session', 'sess-15a-4', '--runtime', 'claude'
+        ], { cwd: ctx4.tmpDir, encoding: 'utf8', env: { ...ctx4.env, KAOLA_PATH: 'fast' } }).trim());
+        assert(r15a4acq.claim === 'acquired', '15a-4: first startup must acquire, got ' + r15a4acq.claim);
+        assert(r15a4acq.workflow_path === 'fast', '15a-4: first receipt must have workflow_path=fast, got ' + r15a4acq.workflow_path);
+        // Simulate fast path writing workflow_path to workflow-state.md
+        const project4 = r15a4acq.selected_project;
+        const stateDir4 = path.join(ctx4.tmpDir, 'kaola-workflow', project4);
+        fs.mkdirSync(stateDir4, { recursive: true });
+        fs.writeFileSync(path.join(stateDir4, 'workflow-state.md'),
+          'status: active\nphase: fast\nworkflow_path: fast\n\n## Lease\nsession_id: sess-15a-4\n');
+        // Second startup (same session, same project): must return claim:owned with workflow_path preserved
+        const r15a4own = JSON.parse(execFileSync(process.execPath, [
+          claimScript15a, 'startup', '--session', 'sess-15a-4', '--runtime', 'claude'
+        ], {
+          cwd: ctx4.tmpDir, encoding: 'utf8',
+          env: (function() { const e = { ...ctx4.env }; delete e.KAOLA_PATH; return e; })()
+        }).trim());
+        assert(r15a4own.claim === 'owned', '15a-4: resume startup must return claim:owned, got ' + r15a4own.claim);
+        assert(r15a4own.workflow_path === 'fast',
+          '15a-4: claim:owned resume must preserve workflow_path=fast from state file, got ' + r15a4own.workflow_path);
+      } finally {
+        fs.rmSync(ctx4.tmpDir, { recursive: true, force: true });
+      }
     }
 
     console.log('Workflow walkthrough simulation passed');
