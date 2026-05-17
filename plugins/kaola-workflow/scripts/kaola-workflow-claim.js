@@ -1376,6 +1376,11 @@ function cmdStartup() {
         return (m && m[1] === 'fast') ? 'fast' : 'full';
       } catch (_) { return 'full'; }
     })();
+    let ownedWtPath = null;
+    try {
+      const ownedLock = JSON.parse(fs.readFileSync(lockPath(coordRoot, owned.project), 'utf8'));
+      ownedWtPath = ownedLock.worktree_path || null;
+    } catch (_) {}
     const receipt = writeStartupReceipt(coordRoot, args.session, {
       runtime: args.runtime || 'claude',
       issue_sync: sync.issue_sync,
@@ -1390,7 +1395,8 @@ function cmdStartup() {
       skipped: skipped,
       blocked: blocked,
       ranking: ranking,
-      workflow_path: ownedWorkflowPath
+      workflow_path: ownedWorkflowPath,
+      worktree_path: ownedWtPath
     });
     process.stdout.write(JSON.stringify(receipt) + '\n');
     return;
@@ -1420,6 +1426,7 @@ function cmdStartup() {
 
   const targetResult = claimExplicitTarget(__filename, classifierScript, args, args.targetIssue, coordRoot, root);
   if (targetResult.status !== 'acquired') {
+    // issue-44: target_mismatch — claim is 'none'; worktree_path is NOT added to this receipt (NO-WRITE invariant)
     const receipt = writeStartupReceipt(coordRoot, args.session, {
       runtime: args.runtime || 'claude',
       issue_sync: sync.issue_sync,
@@ -1442,6 +1449,11 @@ function cmdStartup() {
     return;
   }
 
+  let acqWtPath = null;
+  try {
+    const acqLock = JSON.parse(fs.readFileSync(lockPath(coordRoot, targetResult.project), 'utf8'));
+    acqWtPath = acqLock.worktree_path || null;
+  } catch (_) {}
   const receipt = writeStartupReceipt(coordRoot, args.session, {
     runtime: args.runtime || 'claude',
     issue_sync: sync.issue_sync,
@@ -1457,7 +1469,8 @@ function cmdStartup() {
     blocked: blocked,
     ranking: ranking,
     target_source: 'user_directed',
-    workflow_path: process.env.KAOLA_PATH === 'fast' ? 'fast' : 'full'
+    workflow_path: process.env.KAOLA_PATH === 'fast' ? 'fast' : 'full',
+    worktree_path: acqWtPath
   });
   process.stdout.write(JSON.stringify(receipt) + '\n');
 }

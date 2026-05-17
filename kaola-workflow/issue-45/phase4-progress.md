@@ -35,8 +35,8 @@ Failure routing:
 | 5 | P2-A: Flaw 2 — scanPhaseArtifacts conditional advance | complete | scripts/kaola-workflow-claim.js, plugins/kaola-workflow/scripts/kaola-workflow-claim.js | phase4-progress.md parse: in[_-]progress rows → route to phase4 |
 | 6 | P2-B: Gap B — cmdSweep abandoned GC third pass | complete | scripts/kaola-workflow-claim.js, plugins/kaola-workflow/scripts/kaola-workflow-claim.js | third pass with indexOf('.abandoned-') + ISO suffix parse + GC_CUTOFF_MS |
 | 7 | P2-C: Gap C — cmdWorktreeStatus unregistered dirs | complete | scripts/kaola-workflow-claim.js, plugins/kaola-workflow/scripts/kaola-workflow-claim.js | second pass scans *.kw/ parent, deduplicates via realpathSync, adds registered:false entries |
-| 8 | P3-A: Flaw 3 — cmdStartup worktree_path in receipt | pending | | |
-| 9 | P3-B: KAOLA_WORKTREE_PATH SKILL.md export | pending | | |
+| 8 | P3-A: Flaw 3 — cmdStartup worktree_path in receipt | complete | scripts/kaola-workflow-claim.js, plugins/kaola-workflow/scripts/kaola-workflow-claim.js | owned+acquired branches get worktree_path from lock; target_mismatch NO-WRITE comment |
+| 9 | P3-B: KAOLA_WORKTREE_PATH SKILL.md export | complete | plugins/kaola-workflow/skills/kaola-workflow-next/SKILL.md | KAOLA_WORKTREE_PATH extracted in both pick-next and startup branches |
 | 10 | Tests 17P–17V regression suite | pending | | |
 
 ## Build Status
