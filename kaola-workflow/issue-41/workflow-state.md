@@ -5,26 +5,26 @@ name: issue-41
 status: active
 
 ## Current Position
-phase: 1
-phase_name: Research
+phase: 2
+phase_name: Ideation
 step: complete
-next_command: /kaola-workflow-phase2 issue-41
+next_command: /kaola-workflow-phase3 issue-41
 main_session_role: orchestrator
 implementation_owner: N/A
 fix_owner: N/A
 inline_emergency_fallback_authorized: no
 
 ## Pending Gates
-none
+- phase3-plan
 
 ## Last Evidence
-phase_file: kaola-workflow/issue-41/phase1-research.md
-cache_file: kaola-workflow/issue-41/.cache/code-explorer.md
-last_command: /kaola-workflow-phase1
+phase_file: kaola-workflow/issue-41/phase2-ideation.md
+cache_file: kaola-workflow/issue-41/.cache/advisor-ideation.md
+last_command: /kaola-workflow-phase2 issue-41
 last_result: complete
 
 ## Last Updated
-2026-05-17T14:22:00.000Z
+2026-05-17T22:15:00.000Z
 
 ## Sink
 branch: workflow/issue-41
