@@ -7,7 +7,8 @@ This file mirrors active unfinished work. GitHub issues are the source of truth 
 
 | Issue | Title | Status | Workflow Project | Next Step |
 |-------|-------|--------|------------------|-----------|
-| none | No active work | — | — | — |
+| #35 | Startup classifier picks next work by issue ordering, ignores P0/P1/P2/P3 priority labels and Engine Showcase Gap tier | open | — | ready |
+| #37 | Replace session-id claims with git-worktree-as-primary-signal | open | — | ready |
 
 ## Rules
 
