@@ -37,16 +37,17 @@ DOCKED — evidence: .cache/doc-docking.md
 No deferred items require user decision. All follow-ups are quality improvements that do not affect correctness or public behavior. Implementation complete as specified by issue #35.
 
 ## Commit And Push
-pending final Git gate
+Commit: 0c97c70 "feat: rank startup issues by P0/P1/P2/P3 priority labels (issue #35)"
+Pushed to origin/main via sink-merge. Branch workflow/issue-35 merged and deleted.
 
 ## GitHub Issue
-pending close (issue #35)
+Closed — KaolaBrother/Kaola-Workflow#35
 
 ## Roadmap
-pending regeneration (kaola-workflow/.roadmap/issue-35.md deletion + ROADMAP.md regenerate)
+kaola-workflow/.roadmap/issue-35.md deleted; ROADMAP.md regenerated; both in final commit
 
 ## Archive
-pending (cmdFinalize will archive kaola-workflow/issue-35/ → kaola-workflow/archive/issue-35/)
+kaola-workflow/archive/issue-35/ committed in final commit via cmdFinalize
 
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
@@ -55,9 +56,9 @@ pending (cmdFinalize will archive kaola-workflow/issue-35/ → kaola-workflow/ar
 | documentation docking | invoked | .cache/doc-docking.md | |
 | closure advisor gate | N/A | closure scan found only MEDIUM/LOW deferred items; no user decisions required | |
 | final-validation fix executors | N/A | final validation passed on first run; no fixes needed | |
-| roadmap refresh | ready | kaola-workflow/.roadmap/issue-35.md + ROADMAP.md | staged in final commit |
-| archive completed folder | ready | cmdFinalize will archive via Step 8b | |
-| final commit and push | ready | git status/git diff/upstream check | final gate runs after this file is committed |
+| roadmap refresh | invoked | kaola-workflow/ROADMAP.md regenerated and committed | |
+| archive completed folder | complete | kaola-workflow/archive/issue-35/ | |
+| final commit and push | complete | commit 0c97c70, pushed to origin/main | |
 
 ## Status
-READY FOR FINAL GIT GATE
+COMPLETE
