@@ -952,6 +952,78 @@ function parsePriorityTier(issue, topTierLabels) {
   return { tier: minTier, priority_label: minLabel, override_label: null };
 }
 
+const TOP_TIER_LABEL_REGEX = /^(priority:(critical|highest|p0)|top-?priority|urgent|sev-?[01])$/i;
+
+function analyzeIssue(issue, config) {
+  if (!issue) return null;
+  const labels = issueLabelNames(issue);
+  const topMatch = labels.find(l => TOP_TIER_LABEL_REGEX.test(l));
+  let priority_tier, priority_label, override_label;
+  if (topMatch) {
+    priority_tier = 0;
+    override_label = topMatch;
+    priority_label = topMatch;
+  } else {
+    const parsed = parsePriorityTier(issue, config ? config.topTierLabels : []);
+    priority_tier = parsed.tier;
+    priority_label = parsed.priority_label;
+    override_label = parsed.override_label;
+  }
+  const body = (issue.body || '');
+  const bodyLower = body.toLowerCase();
+  const acCheckboxes = (body.match(/- \[[ x]\]/gi) || []).length;
+  const fileMatches = (body.match(/`[^`]+\.[a-z]{2,4}`|[\w/-]+\.\w{2,4}/g) || []).length;
+  const path_signals = [];
+  let pro_score = 0;
+
+  const ANTI_LABELS = /architecture|breaking-change|security|refactor|design/i;
+  const hasAntiLabel = labels.some(l => ANTI_LABELS.test(l));
+  const areaLabels = labels.filter(l => /^area:/i.test(l));
+  const hasDependsOn = /depends-on:#\d+|blocks:#\d+/i.test(body);
+  const bodyLines = body.split('\n').length;
+  const hasAnti = hasAntiLabel || areaLabels.length >= 2 || hasDependsOn
+    || bodyLines >= 200 || acCheckboxes >= 8 || fileMatches >= 5
+    || (bodyLower.match(/\b(should|need to|must)\b/g) || []).length >= 5;
+
+  if (!hasAnti) {
+    if (bodyLines <= 30) { pro_score += 2; path_signals.push('body_lines<=30'); }
+    else if (bodyLines <= 60) { pro_score += 1; path_signals.push('body_lines<=60'); }
+    if (acCheckboxes <= 2) { pro_score += 2; path_signals.push('ac<=2'); }
+    else if (acCheckboxes <= 4) { pro_score += 1; path_signals.push('ac<=4'); }
+    if (labels.some(l => /^(typo|docs|chore|style)$/i.test(l))) {
+      pro_score += 3; path_signals.push('label:docs/chore');
+    }
+    if (labels.some(l => /^good-first-issue$/i.test(l))) {
+      pro_score += 2; path_signals.push('label:good-first-issue');
+    }
+    if (fileMatches === 1) { pro_score += 2; path_signals.push('files=1'); }
+    else if (fileMatches <= 3) { pro_score += 1; path_signals.push('files<=3'); }
+    if (/```diff/.test(body)) { pro_score += 2; path_signals.push('diff_block'); }
+    if (/line \d+(-\d+)?/i.test(body)) { pro_score += 2; path_signals.push('line_citation'); }
+  } else {
+    path_signals.push('anti:veto');
+  }
+
+  let recommended_path, path_confidence;
+  if (hasAnti) {
+    recommended_path = 'full'; path_confidence = 'high';
+  } else if (pro_score >= 6) {
+    recommended_path = 'fast'; path_confidence = 'high';
+  } else if (pro_score >= 4) {
+    recommended_path = 'fast'; path_confidence = 'medium';
+  } else {
+    recommended_path = 'full'; path_confidence = 'high';
+  }
+
+  return { priority_tier, priority_label, override_label, recommended_path, path_signals, path_confidence };
+}
+
+function computeRecovery(skipped, blocked) {
+  if ((skipped || []).length > 0 && (blocked || []).length === 0) return 'advance_project';
+  if ((blocked || []).length > 0) return 'consult_advisor';
+  return 'prompt_user';
+}
+
 function sortIssueRecords(issues, opts) {
   // opts.topTierLabels: labels forced to tier 0; omit opts for backward-compat (all tier 4)
   const topTierLabels = (opts && Array.isArray(opts.topTierLabels)) ? opts.topTierLabels : [];
@@ -1283,7 +1355,8 @@ function cmdStartup() {
       claim: 'none',
       skipped: skipped,
       blocked: blocked,
-      ranking: ranking
+      ranking: ranking,
+      recovery: computeRecovery(skipped, blocked)
     });
     process.stderr.write('startup: no unclaimed work available for session ' + args.session + '\n');
     process.stdout.write(JSON.stringify(receipt) + '\n');
@@ -1304,7 +1377,8 @@ function cmdStartup() {
     claim: 'acquired',
     skipped: skipped,
     blocked: blocked,
-    ranking: ranking
+    ranking: ranking,
+    workflow_path: process.env.KAOLA_PATH === 'fast' ? 'fast' : 'full'
   });
   process.stdout.write(JSON.stringify(receipt) + '\n');
 }
@@ -2234,7 +2308,8 @@ function cmdPickNext() {
       verdict: 'none',
       reason: 'no-actionable-issues',
       skipped,
-      blocked
+      blocked,
+      recovery: computeRecovery(skipped, blocked)
     }) + '\n');
     return;
   }
@@ -2544,6 +2619,7 @@ if (require.main === module) {
   module.exports = {
     buildSinkBranchName, getCoordRoot, removeWorktree, archiveProjectDir,
     findMainWorktree,
-    cmdPickNext, cmdResume, cmdWorktreeStatus, cmdWorktreeFinalize
+    cmdPickNext, cmdResume, cmdWorktreeStatus, cmdWorktreeFinalize,
+    analyzeIssue, computeRecovery
   };
 }
