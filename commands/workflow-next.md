@@ -114,7 +114,8 @@ fi
 ```
 
 If `STARTUP_OUT` is JSON, its `session` field is the active session id. A
-verdict of `owned` routes that owned project. If startup returns `claim: "none"`,
+verdict of `owned` routes that owned project. If startup returns `verdict: no_target`,
+the agent must select a target issue per Step 0 and re-run. If startup returns `claim: "none"`,
 normal routing must stop; do not inspect active project folders and recover/handoff
 them from a skipped `already claimed` entry unless the user explicitly requested
 recovery for a specific unfinished project. If startup returns a
