@@ -41,8 +41,16 @@ function field(content, name) {
   return match ? match[1].trim() : '';
 }
 
+function resolveProjectFile(root, project, basename) {
+  const live = path.join(root, 'kaola-workflow', project, basename);
+  if (fs.existsSync(live)) return live;
+  const archived = path.join(root, 'kaola-workflow', 'archive', project, basename);
+  if (fs.existsSync(archived)) return archived;
+  return live; // let caller's try/catch handle missing
+}
+
 function readProjectInfo(root, project) {
-  const stateFile = path.join(root, 'kaola-workflow', project, 'workflow-state.md');
+  const stateFile = resolveProjectFile(root, project, 'workflow-state.md');
   let content = '';
   try { content = fs.readFileSync(stateFile, 'utf8'); } catch (_) {}
   return {
@@ -53,7 +61,7 @@ function readProjectInfo(root, project) {
 }
 
 function finalValidationPassed(root, project) {
-  const summaryFile = path.join(root, 'kaola-workflow', project, 'phase6-summary.md');
+  const summaryFile = resolveProjectFile(root, project, 'phase6-summary.md');
   let summary = '';
   try { summary = fs.readFileSync(summaryFile, 'utf8'); } catch (_) { return false; }
   return /Final Validation/i.test(summary) && /pass/i.test(summary) && !/blocked|failed/i.test(summary);

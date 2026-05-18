@@ -68,8 +68,9 @@ function updateStateSinkBlock(stateFile, mrUrl, mrIid) {
 }
 
 function appendSummary(summaryFile, mrUrl, mrIid) {
-  fs.mkdirSync(path.dirname(summaryFile), { recursive: true });
+  if (!fs.existsSync(path.dirname(summaryFile))) return false;
   fs.appendFileSync(summaryFile, '\nMR URL: ' + mrUrl + '\nMR IID: ' + mrIid + '\n');
+  return true;
 }
 
 function routeMergeRequestState(mr) {

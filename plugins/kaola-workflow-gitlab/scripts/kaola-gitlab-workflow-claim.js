@@ -548,6 +548,11 @@ function cmdSinkFallback() {
   const root = getRoot();
   const args = parseArgs(process.argv.slice(3));
   assert(args.project, '--project required');
+  assert(isSafeName(args.project), 'unsafe project name');
+  if (!fs.existsSync(projectDir(root, args.project))) {
+    output({ updated: false, project: args.project, reason: 'project archived' });
+    return;
+  }
   const reason = args.reason || 'merge fallback';
   updateState(root, args.project, content => content
     .replace(/^sink:.*$/m, 'sink: mr')

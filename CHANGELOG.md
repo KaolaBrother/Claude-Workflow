@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Fixed — GitLab Archive-Aware Sink and Fallback Behavior (issue #83)
+
+- **Private `resolveProjectFile` helper** (`plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-sink-merge.js`): New fallback resolution that checks the live `kaola-workflow/{project}/` path first, then falls back to `kaola-workflow/archive/{project}/` if the live path is missing. Enables sink scripts to work with both active and archived project metadata.
+- **`readProjectInfo` + `finalValidationPassed` archive awareness** (`kaola-gitlab-workflow-sink-merge.js`): Both functions now call `resolveProjectFile` to locate workflow-state.md and phase6-summary.md, allowing direct merge sink to validate and close issues even when the project folder has been archived.
+- **`cmdSinkFallback` archive guard** (`plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-claim.js`): Added `isSafeName` validation and `fs.existsSync(projectDir(...))` check before attempting sink-fallback state updates. When project dir is absent (archived), returns `{updated: false, reason: 'project archived'}` instead of attempting unsafe filesystem operations that could recreate archived folders.
+- **`appendSummary` directory existence guard** (`plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-sink-mr.js`): Replaced `fs.mkdirSync` with `fs.existsSync(path.dirname(...))` guard; function now returns `boolean` to indicate success/failure when writing to archived/missing project directories.
+- **6 new unit tests** (`plugins/kaola-workflow-gitlab/scripts/test-gitlab-sinks.js`): Coverage for all three bug scenarios: finalValidationPassed fallback, runDirectMerge after archive, appendSummary with missing parent dir, sink-fallback with archived project, sink-fallback with active project, and unsafe project name rejection.
+- **Integration test** (`plugins/kaola-workflow-gitlab/scripts/simulate-gitlab-workflow-walkthrough.js`): New `testFallbackGuardsAfterArchive` test validating end-to-end behavior when project folder is archived.
+
 ### Fixed — Sink-PR Metadata Commit + Clean Worktree (issue #82)
 
 - **`scripts/kaola-workflow-sink-pr.js` + GitLab mirror**: PR sink now creates a deliberate metadata follow-up commit (`chore: record PR metadata for {project}`) after PR creation. This writes `pr_url` and `pr_number` to the workflow-state.md `## Sink` block and leaves the worktree clean. The pattern applies to both ONLINE and OFFLINE paths (OFFLINE writes `OFFLINE_PLACEHOLDER` commit instead). No user interaction or branch manipulation required — sink-pr handles the metadata internally.
