@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [3.6.1] — 2026-05-18
+
+### Changed — Remove /workflow-next-pr; Drive Sink from Prompt Intent + Merge Fallback (issue #42)
+
+- **Deleted** `commands/workflow-next-pr.md` and `plugins/kaola-workflow/skills/kaola-workflow-next-pr/SKILL.md`.
+- **Added** Startup Step 0a — PR Intent Capture to `workflow-next.md`: if the user's prompt contains PR-intent keywords, the agent exports `KAOLA_SINK=pr` before startup.
+- **Added** `classifyMergeError()` to `kaola-workflow-sink-merge.js`: classifies push exceptions into `branch_protected`, `non_fast_forward`, or `permission_denied`. On failure, resets local main, writes `.cache/sink-fallback.json`, and exits 3.
+- **Added** `cmdSinkFallback` subcommand to `kaola-workflow-claim.js`: reads the fallback receipt and pivots Sink block to `sink: pr`.
+- **Added** exit-3 pivot block to Phase 6 dispatch: on `sink-merge.js` exit 3, calls `claim.js sink-fallback` and dispatches to `sink-pr.js`.
+- **Added** Epic Cases 18A–18D to `simulate-workflow-walkthrough.js`.
+
+### Fixed — workflow-init doc nudges + stale validator assertions (issue #43)
+
+- `commands/workflow-init.md`: added nudges reflecting current architecture vision from issues #40, #41, #42.
+- `scripts/validate-workflow-contracts.js` and `plugins/` mirror: fixed stale assertions; added `verdict: no_target` check.
+
+### Fixed — Post-merge cleanup
+
+- `commands/workflow-next.md`: removed duplicate `claim: "none"` paragraph introduced by version-bump + PR merge overlap; restored `verdict: no_target` routing prose.
+
 ## [3.6.0] — 2026-05-18
 
 ### Added — Single-Issue Completion Contract (issue #46)
