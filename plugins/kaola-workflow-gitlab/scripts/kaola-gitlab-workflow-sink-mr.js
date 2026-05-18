@@ -1,0 +1,146 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const forge = require('./kaola-gitlab-forge');
+
+function assert(cond, msg) { if (!cond) throw new Error(msg); }
+
+function isSafeName(name) {
+  return typeof name === 'string' && name.length > 0 &&
+    !name.includes('/') && !name.includes('\\') &&
+    !name.includes('\0') && name !== '.' && name !== '..';
+}
+
+function getRoot() {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore']
+    }).trim();
+  } catch (_) {
+    return process.cwd();
+  }
+}
+
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 0; i < argv.length; i++) {
+    const key = argv[i];
+    if (key === '--branch' && argv[i + 1]) { args.branch = argv[++i]; continue; }
+    if (key === '--issue' && argv[i + 1]) { args.issue = parseInt(argv[++i], 10); continue; }
+    if (key === '--project' && argv[i + 1]) { args.project = argv[++i]; continue; }
+    if (key === '--title' && argv[i + 1]) { args.title = argv[++i]; continue; }
+    if (key === '--description' && argv[i + 1]) { args.description = argv[++i]; continue; }
+    if (key === '--merge') { args.merge = true; continue; }
+    if (key === '--auto-merge') { args.autoMerge = true; continue; }
+    if (key === '--squash') { args.squash = true; continue; }
+    if (key === '--remove-source-branch') { args.removeSourceBranch = true; continue; }
+    if (key === '--sha' && argv[i + 1]) { args.sha = argv[++i]; continue; }
+  }
+  return args;
+}
+
+function sinkBlock(content) {
+  const match = /(^## Sink\s*$[\s\S]*?)(?=\n## |\s*$)/m.exec(content);
+  return match ? match[1] : '';
+}
+
+function replaceOrAppendLine(section, key, value) {
+  const line = key + ': ' + value;
+  const re = new RegExp('^' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ':.*$', 'm');
+  return re.test(section) ? section.replace(re, line) : section.trimEnd() + '\n' + line;
+}
+
+function updateStateSinkBlock(stateFile, mrUrl, mrIid) {
+  if (!fs.existsSync(stateFile)) return false;
+  const content = fs.readFileSync(stateFile, 'utf8');
+  const section = sinkBlock(content);
+  if (!section) return false;
+  let updatedSection = section;
+  updatedSection = replaceOrAppendLine(updatedSection, 'sink', 'mr');
+  updatedSection = replaceOrAppendLine(updatedSection, 'mr_url', mrUrl);
+  updatedSection = replaceOrAppendLine(updatedSection, 'mr_iid', mrIid);
+  fs.writeFileSync(stateFile, content.replace(section, updatedSection));
+  return true;
+}
+
+function appendSummary(summaryFile, mrUrl, mrIid) {
+  fs.mkdirSync(path.dirname(summaryFile), { recursive: true });
+  fs.appendFileSync(summaryFile, '\nMR URL: ' + mrUrl + '\nMR IID: ' + mrIid + '\n');
+}
+
+function routeMergeRequestState(mr) {
+  const state = forge.normalizeState(mr && mr.state);
+  if (state === 'merged') return 'merged';
+  if (state === 'closed') return 'closed';
+  if (state === 'open') return 'open';
+  return 'unknown';
+}
+
+function findMergeRequestForBranch(branch) {
+  return forge.listMergeRequests({ state: 'opened' }).find(mr =>
+    mr.source_branch === branch && routeMergeRequestState(mr) === 'open'
+  ) || null;
+}
+
+function ensureMergeRequest(args, opts) {
+  const options = opts || {};
+  assert(args.branch && args.branch !== 'TBD', '--branch is invalid or TBD');
+  assert(args.project && isSafeName(args.project), '--project must be a safe folder name');
+  if (args.issue != null) assert(Number.isFinite(args.issue) && args.issue > 0, '--issue must be a positive integer');
+
+  const root = options.root || getRoot();
+  const gitExec = options.gitExec || execFileSync;
+  if (!options.skipPush) gitExec('git', ['push', 'origin', args.branch], { encoding: 'utf8' });
+
+  const existing = findMergeRequestForBranch(args.branch);
+  const mr = existing || forge.createMergeRequest({
+    sourceBranch: args.branch,
+    targetBranch: 'main',
+    title: args.title || ('Workflow branch ' + args.branch),
+    description: args.description || (args.issue ? 'Closes #' + args.issue : '')
+  });
+
+  assert(mr && mr.mr_iid, 'GitLab MR creation did not return an IID');
+  assert(mr.mr_url || mr.web_url, 'GitLab MR creation did not return a URL');
+
+  const stateFile = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
+  const summaryFile = path.join(root, 'kaola-workflow', args.project, 'phase6-summary.md');
+  updateStateSinkBlock(stateFile, mr.mr_url || mr.web_url, mr.mr_iid);
+  appendSummary(summaryFile, mr.mr_url || mr.web_url, mr.mr_iid);
+  return mr;
+}
+
+function mergeMergeRequest(mrIid, args) {
+  const options = args || {};
+  return forge.mergeMergeRequest(mrIid, {
+    autoMerge: Boolean(options.autoMerge),
+    squash: Boolean(options.squash),
+    removeSourceBranch: Boolean(options.removeSourceBranch),
+    sha: options.sha
+  });
+}
+
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const mr = ensureMergeRequest(args);
+  if (args.merge) mergeMergeRequest(mr.mr_iid, args);
+  process.stdout.write('MR URL: ' + (mr.mr_url || mr.web_url) + '\nMR IID: ' + mr.mr_iid + '\n');
+}
+
+if (require.main === module) {
+  try { main(); } catch (err) { process.stderr.write(err.message + '\n'); process.exitCode = 1; }
+}
+
+module.exports = {
+  appendSummary,
+  ensureMergeRequest,
+  findMergeRequestForBranch,
+  mergeMergeRequest,
+  routeMergeRequestState,
+  updateStateSinkBlock
+};
+
