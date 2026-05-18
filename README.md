@@ -63,6 +63,18 @@ flag selects which edition to install.
 
 ### Claude Code
 
+Claude Code installs use `install.sh` only. Do not install Kaola-Workflow through
+the Claude Code plugin marketplace; `install.sh` copies the slash commands,
+support scripts, optional hook config, and vendored agents into `~/.claude/`.
+If an older Claude Code plugin install is present, the installer refuses to run
+until the plugin is removed:
+
+```bash
+claude plugin uninstall kaola-workflow@kaolabrother-kaola-workflow
+claude plugin uninstall kaola-workflow-gitlab@kaolabrother-kaola-workflow  # if installed
+claude plugin marketplace remove kaolabrother-kaola-workflow
+```
+
 GitHub edition, default behavior:
 
 ```bash
@@ -99,6 +111,9 @@ Uninstall:
 ./uninstall.sh --forge=gitlab
 ./uninstall.sh --forge=all
 ```
+
+If you installed with the one-liner and do not have a local clone, clone the
+repository first, then run the matching uninstall command.
 
 ### GitLab Prerequisites
 
@@ -242,20 +257,21 @@ performs the same review locally when no detached advisor profile is available.
 
 Current official release versions:
 
-- Claude Code `kaola-workflow` package/plugin: `3.8.0`
-- Claude Code `kaola-workflow-gitlab` plugin: `3.8.0`
+- Claude Code command install, GitHub edition: `3.8.0`
+- Claude Code command install, GitLab edition: `3.8.0`
 - Codex `kaola-workflow` plugin manifest: `1.4.0`
 - Codex `kaola-workflow-gitlab` plugin manifest: `1.4.0`
 
 The root `package.json` version is the official repository and Claude Code
-release version. The GitLab Claude plugin follows that same version in
-`plugins/kaola-workflow-gitlab/.claude-plugin/plugin.json`. Codex plugins have
-their own manifest versions in `plugins/*/.codex-plugin/plugin.json`; bump the
-affected Codex manifest whenever that plugin's install surface, skills, agent
-profiles, or workflow behavior changes.
+command-install release version. The GitLab Claude command pack follows that
+same version through the root release. Codex plugins have their own manifest
+versions in `plugins/*/.codex-plugin/plugin.json`; bump the affected Codex
+manifest whenever that plugin's install surface, skills, agent profiles, or
+workflow behavior changes.
 
 The npm package includes `"plugins/"` in `package.json#files`, so both Codex
-packs and the GitLab Claude plugin are part of the packaged release surface.
+packs and the GitLab Claude command sources are part of the packaged release
+surface.
 
 Use SemVer for both versions:
 
@@ -309,9 +325,10 @@ Fast path executes Plan, Implement, and Review in a single pass, writing `fast-s
 ## Automation Scripts
 
 The workflow includes automation scripts installed by `install.sh` to
-`~/.claude/kaola-workflow/scripts/`. Commands resolve scripts in this order:
-`${CLAUDE_PLUGIN_ROOT}/scripts/` → `~/.claude/kaola-workflow/scripts/` → `./scripts/`
-(dev checkout). Drift between `scripts/` and `plugins/kaola-workflow/scripts/`
+`~/.claude/kaola-workflow/scripts/` for the GitHub edition or
+`~/.claude/kaola-workflow-gitlab/scripts/` for the GitLab edition. Commands
+prefer the installed support directory and fall back to the repo checkout when
+developing locally. Drift between `scripts/` and `plugins/kaola-workflow/scripts/`
 is detected at test time by `scripts/validate-script-sync.js`.
 
 | Script | Purpose | Phase |
