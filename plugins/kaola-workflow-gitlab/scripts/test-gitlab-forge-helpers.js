@@ -16,13 +16,17 @@ const issue = forge.normalizeIssue({
   id: 321,
   iid: 12,
   title: 'Port helpers',
+  description: 'touches: plugins/kaola-workflow-gitlab/scripts',
   state: 'opened',
   labels: [{ name: forge.CLAIM_LABEL }, 'workflow:queued'],
+  updated_at: '2026-05-18T00:00:00Z',
   web_url: 'https://gitlab.example/group/project/-/issues/12'
 });
 assert.strictEqual(issue.number, 12);
 assert.strictEqual(issue.issue_iid, 12);
+assert.strictEqual(issue.body, 'touches: plugins/kaola-workflow-gitlab/scripts');
 assert.strictEqual(issue.state, 'open');
+assert.strictEqual(issue.url, 'https://gitlab.example/group/project/-/issues/12');
 assert.deepStrictEqual(issue.labels, [forge.CLAIM_LABEL, forge.QUEUED_LABEL]);
 assert.deepStrictEqual(
   forge.preserveWorkflowLabels(issue.labels, ['triage']),
@@ -62,6 +66,7 @@ const execFileSync = runner(calls, {
     web_url: 'https://gitlab.example/group/project'
   }),
   'issue list --output json --per-page 100': JSON.stringify([{ iid: 4, state: 'opened' }]),
+  'issue list --output json --per-page 50 --state opened': JSON.stringify([{ iid: 5, state: 'opened' }]),
   'issue view 4 --output json': JSON.stringify({ iid: 4, state: 'opened', title: 'View me' }),
   'issue update 4 --label workflow:in-progress --unlabel workflow:queued': JSON.stringify({
     iid: 4,
@@ -84,6 +89,7 @@ const execFileSync = runner(calls, {
 
 assert.strictEqual(forge.discoverProject({ execFileSync }).path_with_namespace, 'group/project');
 assert.strictEqual(forge.listIssues({ execFileSync })[0].issue_iid, 4);
+assert.strictEqual(forge.listIssues({ execFileSync, perPage: 50, state: 'opened' })[0].issue_iid, 5);
 assert.strictEqual(forge.viewIssue(4, { execFileSync }).title, 'View me');
 assert.deepStrictEqual(
   forge.updateIssue(4, {

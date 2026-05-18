@@ -1,0 +1,212 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const forge = require('./kaola-gitlab-forge');
+const active = require('./kaola-gitlab-workflow-active-folders');
+
+function assert(cond, msg) { if (!cond) throw new Error(msg); }
+
+function labelName(label) {
+  return String((label && label.name) || label || '');
+}
+
+function parseArgs(argv) {
+  const args = {};
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--issue' && argv[i + 1]) { args.issue = parseInt(argv[++i], 10); continue; }
+    if (argv[i] === '--json') { args.json = true; continue; }
+  }
+  return args;
+}
+
+const FILE_PATH_REGEX = /(?:^|[^A-Za-z0-9_./-])([A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)+)/g;
+const AREA_PATH_REGEX = /(?:^|[^A-Za-z0-9_./-])([A-Za-z0-9_-]+)\/(?=$|[^A-Za-z0-9_./-])/g;
+const DEPENDS_ON_REGEX = /^depends-on:#(\d+)$/;
+const SHARED_INFRA = new Set(['scripts', 'hooks', 'plugins/kaola-workflow-gitlab/scripts']);
+
+function normalizeRepoPath(raw) {
+  return String(raw || '')
+    .replace(/^touches:/, '')
+    .replace(/^[`'"]+/, '')
+    .replace(/[`'",.;:)\]}]+$/, '')
+    .trim();
+}
+
+function areaForPath(filePath) {
+  if (filePath.startsWith('plugins/kaola-workflow-gitlab/')) {
+    const parts = filePath.split('/');
+    if (parts.length >= 3) return parts.slice(0, 3).join('/');
+    return 'plugins/kaola-workflow-gitlab';
+  }
+  return filePath.split('/')[0];
+}
+
+function extractFilePaths(text) {
+  const paths = new Set();
+  const source = String(text || '');
+  let match;
+  FILE_PATH_REGEX.lastIndex = 0;
+  while ((match = FILE_PATH_REGEX.exec(source)) !== null) {
+    const filePath = normalizeRepoPath(match[1]);
+    if (filePath.includes('/')) paths.add(filePath);
+  }
+  return paths;
+}
+
+function extractCoarseAreas(text) {
+  const areas = new Set();
+  for (const filePath of extractFilePaths(text)) areas.add(areaForPath(filePath));
+  const source = String(text || '');
+  let match;
+  AREA_PATH_REGEX.lastIndex = 0;
+  while ((match = AREA_PATH_REGEX.exec(source)) !== null) {
+    const area = normalizeRepoPath(match[1]);
+    if (area) areas.add(area);
+  }
+  return areas;
+}
+
+function parseDependsOn(labels) {
+  for (const label of labels || []) {
+    const match = labelName(label).match(DEPENDS_ON_REGEX);
+    if (match) return parseInt(match[1], 10);
+  }
+  return null;
+}
+
+function parseAreaLabels(labels) {
+  const areas = new Set();
+  for (const label of labels || []) {
+    const name = labelName(label);
+    if (name.startsWith('area:')) areas.add(name.slice(5).trim());
+  }
+  return areas;
+}
+
+function parseAreaLabelsFromText(text) {
+  return parseAreaLabels((String(text || '').match(/area:[A-Za-z0-9_-]+/g) || []).map(name => ({ name })));
+}
+
+function checkDependsOn(depIid) {
+  let state = 'open';
+  try {
+    state = forge.viewIssue(depIid).state || 'open';
+  } catch (_) {}
+  if (state !== 'closed') return { verdict: 'blocked', reasoning: 'depends-on:#' + depIid + ' is still open' };
+  return null;
+}
+
+function scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels, activeFolders) {
+  let exactOverlapPath = '';
+  let directOverlapArea = '';
+  let sharedOverlapArea = '';
+  let hasAreaLabelOverlap = false;
+  let anyClaimedAtPhaseLeTwo = false;
+
+  for (const folder of activeFolders) {
+    if (!active.isSafeName(folder.project)) continue;
+    const phase3 = path.join(folder.project_dir, 'phase3-plan.md');
+    const phase1 = path.join(folder.project_dir, 'phase1-research.md');
+    let combined = '';
+    try { combined += fs.readFileSync(phase3, 'utf8'); } catch (_) {}
+    try { combined += fs.readFileSync(phase1, 'utf8'); } catch (_) {}
+
+    const claimedPaths = extractFilePaths(combined);
+    const claimedAreas = extractCoarseAreas(combined);
+    const claimedAreaLabels = parseAreaLabelsFromText(combined);
+
+    if (!fs.existsSync(phase3)) anyClaimedAtPhaseLeTwo = true;
+
+    for (const filePath of candidatePaths) {
+      if (claimedPaths.has(filePath) && !exactOverlapPath) exactOverlapPath = filePath;
+    }
+
+    for (const area of candidateAreas) {
+      if (!claimedAreas.has(area)) continue;
+      if (SHARED_INFRA.has(area)) {
+        if (!sharedOverlapArea) sharedOverlapArea = area;
+      } else if (!directOverlapArea) {
+        directOverlapArea = area;
+      }
+    }
+
+    for (const label of candidateAreaLabels) {
+      if (claimedAreaLabels.has(label)) { hasAreaLabelOverlap = true; break; }
+    }
+  }
+
+  return { exactOverlapPath, directOverlapArea, sharedOverlapArea, hasAreaLabelOverlap, anyClaimedAtPhaseLeTwo };
+}
+
+function classify(issue, activeFolders) {
+  const depIid = parseDependsOn(issue.labels || []);
+  if (depIid !== null) {
+    const blocked = checkDependsOn(depIid);
+    if (blocked) return blocked;
+  }
+
+  const body = issue.body || issue.description || '';
+  const candidatePaths = extractFilePaths(body);
+  const candidateAreas = extractCoarseAreas(body);
+  const candidateAreaLabels = parseAreaLabels(issue.labels || []);
+  for (const area of parseAreaLabelsFromText(body)) candidateAreaLabels.add(area);
+
+  const overlap = scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels, activeFolders);
+  if (overlap.exactOverlapPath) return { verdict: 'red', reasoning: 'exact file path overlap at "' + overlap.exactOverlapPath + '" with a claimed project' };
+  if (overlap.directOverlapArea) return { verdict: 'red', reasoning: 'file-set overlap at coarse area "' + overlap.directOverlapArea + '" with a claimed project' };
+  if (candidateAreas.size === 0 && candidateAreaLabels.size === 0 && activeFolders.length > 0 && overlap.anyClaimedAtPhaseLeTwo) {
+    return { verdict: 'red', reasoning: 'no extractable file paths or area labels; claimed project in phase <= 2; conservative red' };
+  }
+  if (overlap.sharedOverlapArea) return { verdict: 'yellow', reasoning: 'shared-infra area "' + overlap.sharedOverlapArea + '" overlap; proceed with caution' };
+  if (overlap.hasAreaLabelOverlap) return { verdict: 'yellow', reasoning: 'area:* label overlap with a claimed project; proceed with caution' };
+  return { verdict: 'green', reasoning: 'no file-set overlap, no dependency block; file sets are disjoint' };
+}
+
+function classifyIssue(issueIid, root) {
+  const repoRoot = root || active.getRoot();
+  const activeFolders = active.readActiveFolders(repoRoot);
+  if (activeFolders.some(folder => folder.issue_iid === issueIid)) {
+    return { verdict: 'owned', reasoning: 'active local folder already exists' };
+  }
+
+  let issue;
+  try {
+    issue = forge.viewIssue(issueIid);
+  } catch (_) {
+    return { verdict: 'green', reasoning: 'issue fetch failed; defaulting to green' };
+  }
+
+  if ((issue.state || '').toLowerCase() === 'closed') {
+    return { verdict: 'red', reasoning: 'issue #' + issueIid + ' is already closed' };
+  }
+
+  return classify(issue, activeFolders);
+}
+
+function cmdClassify() {
+  const args = parseArgs(process.argv.slice(3));
+  assert(Number.isFinite(args.issue) && args.issue > 0, '--issue <N> required for classify');
+  process.stdout.write(JSON.stringify(classifyIssue(args.issue, active.getRoot())) + '\n');
+}
+
+function main() {
+  const sub = process.argv[2];
+  assert(sub, 'usage: kaola-gitlab-workflow-classifier.js <classify>');
+  if (sub === 'classify') return cmdClassify();
+  throw new Error('unknown subcommand: ' + sub);
+}
+
+if (require.main === module) {
+  try { main(); } catch (err) { process.stderr.write(err.message + '\n'); process.exitCode = 1; }
+}
+
+module.exports = {
+  classify,
+  classifyIssue,
+  extractCoarseAreas,
+  extractFilePaths,
+  parseDependsOn
+};
+

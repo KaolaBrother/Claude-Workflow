@@ -91,9 +91,13 @@ function normalizeIssue(raw) {
     issue_iid: issueIid,
     id: firstNumber(data.id),
     title: data.title || '',
+    body: data.description || data.body || '',
+    description: data.description || data.body || '',
     state: normalizeState(data.state),
     labels: labelsOf(data.labels),
-    web_url: data.web_url || data.webUrl || data.url || ''
+    updated_at: data.updated_at || data.updatedAt || '',
+    web_url: data.web_url || data.webUrl || data.url || '',
+    url: data.web_url || data.webUrl || data.url || ''
   };
 }
 
@@ -116,7 +120,9 @@ function normalizeMergeRequest(raw) {
 
 function listIssues(opts) {
   const options = opts || {};
-  const raw = glabExec(['issue', 'list', '--output', 'json', '--per-page', String(options.perPage || 100)], options);
+  const args = ['issue', 'list', '--output', 'json', '--per-page', String(options.perPage || 100)];
+  if (options.state) args.push('--state', options.state);
+  const raw = glabExec(args, options);
   return parseJson(raw, []).map(normalizeIssue);
 }
 
