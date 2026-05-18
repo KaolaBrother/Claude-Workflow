@@ -2,12 +2,65 @@
 
 A 6-phase development workflow for Claude Code and Codex with per-phase file artifacts, multi-model orchestration, and full resumability across sessions and context resets.
 
-## Autonomy And Goal Contract
+## Overview
+
+```
+   /workflow-init       once per project — generates CLAUDE.md,
+        │               ROADMAP.md, and the docs map
+        ▼
+   /workflow-next       per cycle — resumes from
+        │               kaola-workflow/{project}/workflow-state.md
+        │
+        ├──► Fast path (KAOLA_PATH=fast)
+        │      plan + implement + review in one pass ──► Phase 6
+        │
+        └──► Full 6-phase flow:
+                                                              output file
+            Phase 1  Research    code-explorer, docs-lookup    phase1-research.md
+            Phase 2  Ideation    planner  (advisor gate)       phase2-ideation.md
+            Phase 3  Plan        code-architect                phase3-plan.md
+            Phase 4  Execute     tdd-guide                     phase4-progress.md
+                                 build-error-resolver
+            Phase 5  Review      code-reviewer                 phase5-review.md
+                                 security-reviewer (cond.)
+            Phase 6  Finalize    doc-updater                   phase6-summary.md
+                                 sink-merge | sink-pr
+                                       │
+                                       ▼
+                       archive folder, close issue,
+                       push branch or open PR,
+                       refresh ROADMAP.md
+```
+
+## Autonomy and goal contract
 
 Kaola-Workflow is goal-driven. For Claude Code, use `/goal` or equivalent
-prompt-based Stop-hook wording so a workflow turn continues until the current
-phase objective and completion audit are genuinely satisfied. For Codex, the
+stop-condition wording so a workflow turn continues until the current
+phase objective and completion audit are satisfied. For Codex, the
 same contract lives in the Kaola-Workflow skills: continue until the phase
+objective, evidence, and `workflow-state.md` next pointer are complete.
+
+### Using `/goal` with Claude Code or Codex
+
+In Claude Code, `/goal` refers to any prompt or slash command that wires a
+stop-condition continuation into the session — keeping it working on one
+phase objective until the audit conditions are satisfied. Ship `/goal`
+yourself as a user-defined slash command, or use equivalent prompt
+wording. A minimal example:
+
+> Stay on this objective until it is complete and the phase audit passes:
+> run `/workflow-next` for the current active project and finish phase 4
+> for issue #42 — all tasks done, validation green, `phase4-progress.md`
+> updated.
+
+Each `/workflow-next` run targets one issue; finishing it is the terminal
+event and the session waits for re-direction before picking the next
+issue.
+
+In Codex, there is no separate `/goal` command. Every Kaola-Workflow skill
+embeds a `## Goal Contract` section that holds the equivalent continuation
+rule, so invoking a skill — for example `kaola-workflow-next` — already
+includes the goal contract. The skill keeps working until its phase
 objective, evidence, and `workflow-state.md` next pointer are complete.
 
 Routine workflow bookkeeping is autonomous. Generated project/folder names,
@@ -25,7 +78,7 @@ Phase 6 closes issue #N and archives the active folder, the agent stops and awai
 explicit re-direction. Do not use "next issue in line" phrasing in `/goal`
 templates — cross-issue continuation is never automatic.
 
-## Vendored Claude Code Agents
+## Vendored Claude Code agents
 
 Kaola-Workflow installs the Claude Code agents it needs directly from this
 repository. The agent prompts are derived from Everything Claude Code (ECC) and
@@ -50,16 +103,16 @@ Code advisor configuration.
 
 ## Installation
 
-### Choose An Edition
+### Choose an edition
 
 Kaola-Workflow has two sibling editions:
 
 - **GitHub edition**: default. Uses GitHub issues, pull requests, and `gh`.
 - **GitLab edition**: opt-in. Uses GitLab issues, merge requests, and `glab`.
 
-The workflow commands keep the same names in both editions, so a manual Claude
-Code command install should choose one forge at a time. install.sh `--forge`
-flag selects which edition to install.
+Both editions share the same command names, so a manual Claude Code install
+picks one forge at a time. Use the `--forge` flag on `install.sh` to select
+the edition.
 
 ### Claude Code
 
@@ -115,7 +168,7 @@ Uninstall:
 If you installed with the one-liner and do not have a local clone, clone the
 repository first, then run the matching uninstall command.
 
-### GitLab Prerequisites
+### GitLab prerequisites
 
 Before using the GitLab edition in a target project:
 
@@ -126,7 +179,7 @@ Before using the GitLab edition in a target project:
 - Keep the workflow labels available: `workflow:queued` and
   `workflow:in-progress`.
 
-## Codex Packs
+## Codex packs
 
 This repository also includes Codex packs under `plugins/`. They expose the same
 Kaola-Workflow identity through Codex-native skills, using `kaola-workflow/`
@@ -141,18 +194,15 @@ CLI requires this file (its only registration command is `plugin marketplace
 add <path>`) — it contains both `kaola-workflow` and `kaola-workflow-gitlab`
 entries so a single local-path registration exposes either edition.
 
-### Install On Another Computer
+### Install
 
 Prerequisites:
 
-- Codex is installed and authenticated on the target computer.
-- The target computer can access this GitHub repository.
+- Codex is installed and authenticated on your computer.
+- Your computer can access this GitHub repository.
 - Restart Codex after adding or updating the plugin.
 
-Clone the repository, then register it with Codex from the local path. The
-Codex CLI exposes `codex plugin marketplace add` as its only plugin
-registration command — pointing it at a local clone keeps the install local
-and does not rely on any remote/public marketplace:
+Clone the repository, then register it with Codex from the local path:
 
 ```bash
 git clone https://github.com/KaolaBrother/Kaola-Workflow.git ~/kaola-workflow
@@ -172,7 +222,7 @@ enabled = true
 enabled = true
 ```
 
-After restarting Codex, open the target project and ask Codex to initialize the
+After restarting Codex, open your project and ask Codex to initialize the
 selected workflow:
 
 ```text
@@ -210,8 +260,9 @@ kaola-workflow-finalize
 ```
 
 Both Codex packs keep the same six-phase shape, state repair, compliance ledger,
-TDD evidence, review, documentation docking, roadmap refresh, archive, and final
-Git gate. They do not depend on external agent installs. Instead,
+TDD evidence, review, documentation docking, roadmap refresh, archive, and a
+final commit-and-push step. They do not depend on external agent dependencies.
+Instead,
 `kaola-workflow-init` automatically installs Codex-native role profiles that
 mirror the Claude workflow roles:
 
@@ -232,7 +283,7 @@ maintains a `# BEGIN kaola-workflow agents` block in `.codex/config.toml` while
 preserving unrelated config. At startup, Codex workflows ask the user to authorize
 a delegation policy (`delegate`, `local-authorized`, or `tool-unavailable`).
 When policy permits and subagents are available, phases invoke those roles for
-detached research, planning, execution, repair, review, and documentation work.
+delegated research, planning, execution, repair, review, and documentation work.
 Otherwise, the current Codex session performs the work locally under explicit
 user authorization.
 
@@ -255,7 +306,7 @@ There is no separate Codex advisor role. Codex advisor gates use the strongest
 available expert model/profile for the current session, or the current session
 performs the same review locally when no detached advisor profile is available.
 
-## Release Versioning
+## Release versioning
 
 Current official release versions:
 
@@ -288,7 +339,7 @@ Official release checklist:
 ```bash
 npm test
 git diff --check
-git tag kaola-workflow-v3.1.0
+git tag kaola-workflow-v<X.Y.Z>
 git push origin main --tags
 ```
 
@@ -314,7 +365,7 @@ In any Claude Code session, run:
 
 The command is a thin router. It first checks local/remote Git state, safely fast-forwards clean behind-only branches, and asks before risky synchronization such as diverged history, dirty worktrees with upstream changes, rebases, merges, stashes, resets, or conflicts. It then scans `kaola-workflow/`, reads `workflow-state.md` when present, and routes to the right phase command.
 
-### Fast Path (Optional)
+### Fast path (optional)
 
 For small, well-scoped issues (≤2 closely related files), request the fast-path workflow:
 
@@ -324,7 +375,7 @@ KAOLA_PATH=fast /workflow-next
 
 Fast path executes Plan, Implement, and Review in a single pass, writing `fast-summary.md` instead of the full 6-phase artifacts. If scope expands during execution (multiple file groups, security concerns, dependencies, new packages), fast path escalates automatically to the full workflow. Otherwise, it routes directly to Phase 6.
 
-## Automation Scripts
+## Automation scripts
 
 The workflow includes automation scripts installed by `install.sh` to
 `~/.claude/kaola-workflow/scripts/` for the GitHub edition or
@@ -342,7 +393,7 @@ is detected at test time by `scripts/validate-script-sync.js`.
 | `kaola-workflow-classifier.js` | Parallel-work classifier: classifies open issues as green/yellow/red/blocked using active folders, roadmap metadata, and GitHub state | Startup |
 | `kaola-workflow-sink-pr.js` | PR-based sink — pushes branch, opens GitHub PR via `gh pr create`, records PR URL; optionally enables auto-merge | Phase 6 |
 
-### Active Folder Coordination
+### Active folder coordination
 
 Kaola-Workflow treats `kaola-workflow/{project}/workflow-state.md` plus GitHub issue/PR state as the durable coordination contract. No lease/session layer remains.
 
@@ -367,7 +418,7 @@ The detailed durable-state map lives in `docs/workflow-state-contract.md`. Keep 
 | `watch-pr` | `node scripts/kaola-workflow-claim.js watch-pr` | Archives PR-backed folders when GitHub reports MERGED or CLOSED |
 | `worktree-status` / `worktree-finalize` | see `--help` usage errors | Lists workflow worktrees and mirrors final artifacts into the linked worktree |
 
-### Classifier Configuration
+### Classifier configuration
 
 The `kaola-workflow-classifier.js` script uses `~/.config/kaola-workflow/config.json` for parallel-work settings:
 
@@ -386,7 +437,7 @@ Exact file-path overlap returns `red`, including shared-infrastructure files suc
 
 When an issue receives a `yellow` verdict (shared infrastructure warning), a cache file is written to `kaola-workflow/{project}/.cache/parallel-classifier.md` to flag the caution for the phase team.
 
-### Agent-Directed Issue Selection
+### Agent-directed issue selection
 
 Issue selection is an agent decision, not a hidden script decision. Agents must:
 
@@ -404,7 +455,7 @@ The startup script validates the agent's choice:
 If the agent does not provide an explicit target issue, startup refuses with `verdict: no_target`.
 
 
-### PR Sink
+### PR sink
 
 The sink mode is set at claim time and determines how Phase 6 delivers the completed work. Two paths are available:
 
@@ -430,20 +481,13 @@ Called automatically at `/workflow-next` startup. Scans active folders with `sin
 - `CLOSED` (no merge): archives the folder as abandoned and clears advisory GitHub labels
 - `OPEN`: leaves the folder active
 
-**OFFLINE behavior**: `kaola-workflow-sink-pr.js` writes `OFFLINE_PLACEHOLDER` and `0` to the workflow-state.md Sink block and phase6-summary.md, then exits 0.
+The sink-merge script automates the final merge sequence after Phase 6's
+final commit gate: fetch, rebase onto `origin/main`, fast-forward merge with
+retry on race conditions, push, close the issue, and clean up the branch.
+When offline, the PR sink writes a placeholder receipt so the workflow can
+resume online later.
 
-The sink-merge script is invoked after the Phase 6 final commit gate to automate the final merge sequence. It performs: git fetch, clean-worktree guard, checkout of the requested workflow branch, merge-base skip-check, rebase onto origin/main, post-rebase validation, FF-only merge with race-condition retry loop (MAX_AUTOMERGE_RETRIES=3), push, issue close, and branch cleanup. Exit codes: 0 (success), 1 (error), 2 (FF race exhausted), 3 (merge-impossible fallback to PR).
-
-```text
-/kaola-workflow-phase1
-/kaola-workflow-phase2
-/kaola-workflow-phase3
-/kaola-workflow-phase4
-/kaola-workflow-phase5
-/kaola-workflow-phase6
-```
-
-## GitHub Roadmap Cycle
+## GitHub roadmap cycle
 
 Use a separate research or roadmap session to discover future work and create or refine GitHub issues. `/workflow-next` is the implementation cycle: it fetches open GitHub issues, mirrors active unfinished work into `kaola-workflow/ROADMAP.md`, advances one selected item, then comments on or closes linked issues after validation.
 
@@ -455,7 +499,7 @@ Each phase records a required-agent compliance ledger. Each active workflow also
 
 Avoid redundant validation runs: Phase 4 uses targeted affected checks, Phase 5 validates only review fixes or cites existing evidence, and Phase 6 runs each full final command once against the final candidate state. Small targeted commands may run in the main session, while expensive or noisy test/lint/type/build commands should be delegated and summarized from cache evidence.
 
-## Hook Policy
+## Hook policy
 
 Hooks are background hygiene, not workflow validation. They may format, lint, or
 typecheck edited files automatically, but `/workflow-next` should not rerun the
@@ -463,10 +507,10 @@ same check unless the phase requires broader validation or relevant files change
 after the hook ran. Hook output counts as workflow evidence only when recorded
 with command, scope, result, and evidence path.
 
-Phase 6 still owns the final full relevant validation gate. It also performs
-documentation docking to match code changes with docs and issue/roadmap state,
-uses an advisor-backed closure decision gate when deferred or conflict items
-remain, and leaves commit and push as the final clean/synced workspace step.
+Phase 6 still owns the final full validation gate. It also reconciles
+documentation with code changes and issue/roadmap state, consults the advisor
+before closing when deferred items or conflicts remain, and leaves
+commit-and-push as the final step on a clean, synced workspace.
 
 ## Phases
 
@@ -485,7 +529,7 @@ All phase files are written to `{project-root}/kaola-workflow/{project-name}/` w
 
 Any interrupted session resumes from `workflow-state.md` first, then reconstructs from phase files if state is missing or stale. Phase 4 tracks `pending / in_progress / complete` per task in `phase4-progress.md`, and all phases record intra-phase checkpoints in `workflow-state.md`.
 
-### State Bootstrap And Repair
+### State bootstrap and repair
 
 When `/workflow-next` can reconstruct one safe next command from phase
 artifacts, it repairs or creates `kaola-workflow/{project}/workflow-state.md`
@@ -519,7 +563,7 @@ duplicate the hooks block.
 - `uninstall.sh` strips only entries matching the same managed-id rule; it
   does not touch other hooks.
 
-## Parallel Active Work
+## Parallel active work
 
 Multiple Kaola-Workflow runs can coexist when each targets a distinct active folder. The source of truth is `kaola-workflow/{project}/workflow-state.md`, with GitHub issue state used to reject closed issues and PR state used by `watch-pr`.
 
@@ -528,7 +572,7 @@ Multiple Kaola-Workflow runs can coexist when each targets a distinct active fol
 - `status` lists active folders; `release` archives abandoned work; `finalize` archives completed work.
 - The pre-commit hook blocks commits that stage multiple workflow project folders together.
 
-### Per-Issue Git Worktrees
+### Per-issue Git worktrees
 
 When Git is available, `kaola-workflow-claim.js` provisions a sibling worktree at `<repo-parent>/<repo-name>.kw/<project>/`. The path is stored in the active folder Sink block as `worktree_path`, so commands can resolve the linked worktree without consulting a lock file.
 
