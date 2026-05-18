@@ -34,33 +34,46 @@ A 6-phase development workflow for Claude Code and Codex with per-phase file art
 
 ## Autonomy and goal contract
 
-Kaola-Workflow is goal-driven. For Claude Code, use `/goal` or equivalent
-stop-condition wording so a workflow turn continues until the current
-phase objective and completion audit are satisfied. For Codex, the
-same contract lives in the Kaola-Workflow skills: continue until the phase
-objective, evidence, and `workflow-state.md` next pointer are complete.
+Kaola-Workflow is goal-driven. Use `/goal` in either Claude Code or Codex
+to keep a session working on a single objective across many turns until
+the platform's stop condition is satisfied. The Kaola-Workflow Codex
+skills also embed a `## Goal Contract` for phase-level continuation that
+works even when `/goal` is not in play.
 
 ### Using `/goal` with Claude Code or Codex
 
-In Claude Code, `/goal` refers to any prompt or slash command that wires a
-stop-condition continuation into the session — keeping it working on one
-phase objective until the audit conditions are satisfied. Ship `/goal`
-yourself as a user-defined slash command, or use equivalent prompt
-wording. A minimal example:
+`/goal` originated in Codex and was adopted by Claude Code. Both
+platforms treat it as a stop-condition wrapper: you type a goal in plain
+language and the session keeps working without pausing until the goal is
+satisfied (or the platform's budget runs out).
 
-> Stay on this objective until it is complete and the phase audit passes:
-> run `/workflow-next` for the current active project and finish phase 4
-> for issue #42 — all tasks done, validation green, `phase4-progress.md`
-> updated.
+**Claude Code.** `/goal` is built in from v2.1.139+. An evaluator model
+checks the goal at the end of every turn; the session continues up to a
+default cap of 500 turns. Examples:
 
-Each `/workflow-next` run targets one issue; finishing it is the terminal
-event and the session waits for re-direction before picking the next
-issue.
+```text
+/goal use the kaola-workflow commands to finish issue #42.
+/goal finish phase 4 for issue #42 — all tasks done, validation green,
+      phase4-progress.md updated.
+/goal use kaola-workflow to finish all remaining open issues, one at a
+      time, until ROADMAP.md has no active entries.
+```
 
-In Codex, there is no separate `/goal` command. Every Kaola-Workflow skill
-embeds a `## Goal Contract` section that holds the equivalent continuation
-rule, so invoking a skill — for example `kaola-workflow-next` — already
-includes the goal contract. The skill keeps working until its phase
+**Codex.** `/goal` is gated behind a feature flag in current Codex CLI
+versions — enable it by setting `goals = true` under `[features]` in
+`~/.codex/config.toml`. The runtime continues until the goal reaches
+`complete` or `budget_limited`. Examples:
+
+```text
+/goal use the kaola-workflow-next skill to finish issue #42.
+/goal use the kaola-workflow skills to finish all remaining open issues.
+```
+
+Each Kaola-Workflow Codex skill also embeds a `## Goal Contract` section
+that holds a phase-level continuation rule. That contract is independent
+of the platform `/goal` and applies even when `/goal` is not active —
+invoking a skill alone (for example, `Use the kaola-workflow-next skill
+to finish issue #42.`) is enough to keep it working until its phase
 objective, evidence, and `workflow-state.md` next pointer are complete.
 
 Routine workflow bookkeeping is autonomous. Generated project/folder names,
@@ -73,10 +86,11 @@ session. Prompt the user only for true external authorization or materially
 user-owned choices, such as risky Git synchronization, destructive rewrites,
 credential or deployment actions, or issue/roadmap reorganization.
 
-The single-issue completion contract applies at the end of every run: after
-Phase 6 closes issue #N and archives the active folder, the agent stops and awaits
-explicit re-direction. Do not use "next issue in line" phrasing in `/goal`
-templates — cross-issue continuation is never automatic.
+Each `/workflow-next` run targets one issue and ends at Phase 6 closure.
+The agent does not auto-continue across issues; cross-issue work requires
+explicit user direction — typically stated upfront in `/goal` text (for
+example, "finish all remaining open issues"), which then drives one
+`/workflow-next` run per issue until the scope is met.
 
 ## Vendored Claude Code agents
 
@@ -571,6 +585,51 @@ Multiple Kaola-Workflow runs can coexist when each targets a distinct active fol
 - Claiming uses atomic folder creation, so two agents cannot create the same `kaola-workflow/{project}/` folder.
 - `status` lists active folders; `release` archives abandoned work; `finalize` archives completed work.
 - The pre-commit hook blocks commits that stage multiple workflow project folders together.
+
+### Parallel execution examples
+
+Run one session per issue in separate terminals. Each `/workflow-next`
+claims its own `kaola-workflow/{project}/` folder atomically, and the
+classifier ensures the chosen issues are green or yellow (no red conflicts)
+before claiming.
+
+Claude Code, two terminals:
+
+```text
+# Terminal A
+cd ~/Workspace/Kaola-Workflow
+/goal use the kaola-workflow commands to finish issue #42.
+
+# Terminal B (same repo, different shell)
+cd ~/Workspace/Kaola-Workflow
+/goal use the kaola-workflow commands to finish issue #43.
+```
+
+Codex, same pattern (requires `goals = true` under `[features]` in
+`~/.codex/config.toml`; without that flag, drop the `/goal ` prefix and
+the skill's embedded `## Goal Contract` still drives continuation):
+
+```text
+# Terminal A
+cd ~/Workspace/Kaola-Workflow
+/goal use the kaola-workflow-next skill to finish issue #42.
+
+# Terminal B
+cd ~/Workspace/Kaola-Workflow
+/goal use the kaola-workflow-next skill to finish issue #43.
+```
+
+When `KAOLA_WORKTREE_NATIVE=1`, each active issue runs in a sibling
+worktree at `<repo-parent>/<repo-name>.kw/<project>/`, so file edits in
+one issue do not interfere with another.
+
+To drive several issues from a single session instead of several
+terminals, scope the goal text accordingly:
+
+```text
+/goal use kaola-workflow to finish issues #42, #43, and #44, one at a
+      time, in dependency order.
+```
 
 ### Per-issue Git worktrees
 
