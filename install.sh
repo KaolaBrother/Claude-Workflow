@@ -1,19 +1,33 @@
 #!/usr/bin/env bash
-# Kaola-Workflow manual installer.
+# Kaola-Workflow installer.
 #
-# NOTE (issue #36): This script is for users who install Kaola-Workflow WITHOUT
-# the Claude Code plugin marketplace. Marketplace users do NOT need to run it —
-# the plugin runtime exposes ${CLAUDE_PLUGIN_ROOT} and command/script resolution
-# happens automatically. This installer remains supported for:
-#   - manual / source-checkout installs
-#   - air-gapped environments
-#   - users who prefer ~/.claude/commands/ over plugin-managed commands
+# Supports curl | bash and local execution.
 #
-# The 3-step script resolver in commands/*.md prefers ${CLAUDE_PLUGIN_ROOT}/scripts/
-# first, then falls back to $HOME/.claude/kaola-workflow/scripts/ (this installer's
-# target), then ./scripts/ (dev checkout).
+# Usage (one-liner):
+#   curl -fsSL https://raw.githubusercontent.com/KaolaBrother/Kaola-Workflow/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/KaolaBrother/Kaola-Workflow/main/install.sh | bash -s -- --forge=gitlab
+#
+# Usage (local clone):
+#   git clone https://github.com/KaolaBrother/Kaola-Workflow.git && cd Kaola-Workflow && ./install.sh [--yes] [--forge=github|gitlab]
 
 set -euo pipefail
+
+# Detect curl|bash: BASH_SOURCE[0] is empty or not a real file when piped from curl.
+# When detected, clone the repo to a temp dir and re-exec the local copy.
+_SELF="${BASH_SOURCE[0]:-}"
+if [[ -z "$_SELF" || "$_SELF" == "-" || ! -f "$_SELF" ]]; then
+  if ! command -v git >/dev/null 2>&1; then
+    echo "error: git is required but not found — install git and retry" >&2
+    exit 1
+  fi
+  _TMPDIR="$(mktemp -d)"
+  echo "Kaola-Workflow — cloning repository..."
+  git clone --depth=1 https://github.com/KaolaBrother/Kaola-Workflow.git "$_TMPDIR/kaola-workflow" >/dev/null 2>&1
+  bash "$_TMPDIR/kaola-workflow/install.sh" "$@"
+  _EXIT=$?
+  rm -rf "$_TMPDIR"
+  exit $_EXIT
+fi
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 COMMANDS_DIR="$HOME/.claude/commands"
@@ -108,6 +122,35 @@ echo "Kaola-Workflow — installer"
 echo "Forge: $FORGE"
 echo ""
 
+# Remove stale kaola-workflow command files before installing fresh ones.
+# Outdated user-level commands in ~/.claude/commands/ take precedence over
+# everything else and will shadow updated installs if not cleaned up.
+if [[ -d "$COMMANDS_DIR" ]]; then
+  for pattern in "kaola-workflow-*.md" "workflow-init.md" "workflow-next.md" "workflow-goal.md" "workflow-next-pr.md"; do
+    for stale_file in "$COMMANDS_DIR"/$pattern; do
+      [[ -f "$stale_file" ]] || continue
+      rm -f "$stale_file"
+      echo "Removed stale command: $stale_file"
+    done
+  done
+fi
+
+# Remove stale support scripts that no longer exist in source.
+if [[ -d "$SUPPORT_SCRIPTS_DIR" ]]; then
+  for stale_file in "$SUPPORT_SCRIPTS_DIR"/*.js; do
+    [[ -f "$stale_file" ]] || continue
+    stale_name="$(basename "$stale_file")"
+    is_current=0
+    for name in "${SUPPORT_SCRIPT_NAMES[@]}"; do
+      [[ "$name" == "$stale_name" ]] && is_current=1 && break
+    done
+    if [[ "$is_current" -eq 0 ]]; then
+      rm -f "$stale_file"
+      echo "Removed stale script: $stale_file"
+    fi
+  done
+fi
+
 # Check ECC is installed
 ECC_AGENTS_DIR="$HOME/.claude/agents"
 REQUIRED_AGENTS=("code-explorer" "docs-lookup" "planner" "code-architect" "tdd-guide" "build-error-resolver" "code-reviewer" "security-reviewer" "doc-updater")
@@ -150,9 +193,7 @@ if [[ ${#MISSING[@]} -gt 0 ]]; then
   done
   echo ""
   echo "This workflow requires Everything Claude Code (ECC) agents."
-  echo "Recommended install inside Claude Code:"
-  echo "  /plugin marketplace add https://github.com/affaan-m/everything-claude-code"
-  echo "  /plugin install everything-claude-code@everything-claude-code"
+  echo "Install ECC: https://github.com/affaan-m/everything-claude-code"
   echo ""
   if [[ "$YES" -ne 1 ]]; then
     read -r -p "Continue installation anyway? [y/N] " confirm
@@ -262,8 +303,8 @@ echo ""
 echo "Open any Claude Code session and run:  /workflow-init"
 echo "Then run implementation cycles with:  /workflow-next"
 echo ""
-echo "Note: plugin installs load hooks/hooks.json automatically in Claude Code v2.1+."
-echo "Manual command install copies slash commands only; use plugin install for the compaction resume hook."
+echo "Hook files installed to: $SUPPORT_HOOKS_DIR/"
+echo "To enable the compaction resume hook, add hooks/hooks.json to your Claude Code hooks config."
 echo ""
 echo "For advisor gates, ensure your ~/.claude/settings.json includes:"
 echo '  "advisorModel": "opus"'

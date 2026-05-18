@@ -43,12 +43,7 @@ templates — cross-issue continuation is never automatic.
 > | `security-reviewer` | 5 — Review (conditional) | Sonnet |
 > | `doc-updater` | 6 — Finalize | Haiku |
 >
-> Install ECC first:
->
-> ```text
-> /plugin marketplace add https://github.com/affaan-m/everything-claude-code
-> /plugin install everything-claude-code@everything-claude-code
-> ```
+> Install ECC first — see <https://github.com/affaan-m/everything-claude-code> for install instructions.
 >
 > **Minimal Kaola-Workflow ECC configuration**
 >
@@ -72,35 +67,19 @@ templates — cross-issue continuation is never automatic.
 
 ## Installation
 
-### As a Claude Code plugin
+### Claude Code
 
-From Claude Code:
-
-```text
-/plugin marketplace add https://github.com/KaolaBrother/Kaola-Workflow
-/plugin install kaola-workflow@kaolabrother-kaola-workflow
-/reload-plugins
+```bash
+curl -fsSL https://raw.githubusercontent.com/KaolaBrother/Kaola-Workflow/main/install.sh | bash
 ```
 
-If you previously used the manual installer, remove or update user-level command
-files such as `~/.claude/commands/workflow-next.md` or the legacy
-`~/.claude/commands/kaola-workflow.md`; user-level commands can take
-precedence over plugin commands.
+For GitLab forge:
 
-Then run:
-
-```text
-/workflow-init
-/workflow-next
+```bash
+curl -fsSL https://raw.githubusercontent.com/KaolaBrother/Kaola-Workflow/main/install.sh | bash -s -- --forge=gitlab
 ```
 
-### Manual command install
-
-Marketplace install (above) is the recommended path and requires no `install.sh` run —
-the plugin runtime exposes `${CLAUDE_PLUGIN_ROOT}` and command/script resolution
-happens automatically. Use the manual installer below only when you cannot use
-the marketplace (air-gapped environments, source checkouts, or `~/.claude/commands/`
-preference):
+From a local clone:
 
 ```bash
 git clone https://github.com/KaolaBrother/Kaola-Workflow.git
@@ -108,13 +87,14 @@ cd Kaola-Workflow
 ./install.sh
 ```
 
-Plugin uninstall:
+Then in Claude Code:
 
 ```text
-/plugin uninstall kaola-workflow
+/workflow-init
+/workflow-next
 ```
 
-Manual command uninstall:
+Uninstall:
 
 ```bash
 ./uninstall.sh
@@ -133,17 +113,16 @@ Prerequisites:
 
 - Codex is installed and authenticated on the target computer.
 - The target computer can access this GitHub repository.
-- Restart Codex after adding, upgrading, installing, or enabling the plugin.
+- Restart Codex after adding or updating the plugin.
 
-Fresh install from GitHub:
+Clone the repository and register it as a local Codex plugin source:
 
 ```bash
-codex plugin marketplace add KaolaBrother/Kaola-Workflow
-codex
+git clone https://github.com/KaolaBrother/Kaola-Workflow.git ~/kaola-workflow
+codex plugin add ~/kaola-workflow/plugins/kaola-workflow
 ```
 
-Then install or enable `kaola-workflow` from the `kaolabrother-kaola-workflow`
-marketplace in the Codex plugin directory. For direct config enablement, add:
+For direct config enablement, add to your Codex configuration:
 
 ```toml
 [plugins."kaola-workflow@kaolabrother-kaola-workflow"]
@@ -158,21 +137,14 @@ Use Kaola-Workflow for Codex in this repo.
 Run workflow-init for Kaola-Workflow for Codex.
 ```
 
-Install from a local clone when working offline or testing local changes:
+Update an existing Codex install:
 
 ```bash
-git clone https://github.com/KaolaBrother/Kaola-Workflow.git
-codex plugin marketplace add /path/to/Kaola-Workflow
+cd ~/kaola-workflow
+git pull
 ```
 
-Update an existing Codex install to the newest marketplace version:
-
-```bash
-codex plugin marketplace upgrade kaolabrother-kaola-workflow
-```
-
-Restart Codex, then rerun `kaola-workflow-init` in any project that should
-receive the newest managed agent profiles and project config.
+Restart Codex to pick up the updated plugin files.
 
 To verify a project was initialized for Codex, check that `.codex/config.toml`
 contains a `# BEGIN kaola-workflow agents` managed block and that
@@ -298,9 +270,7 @@ Fast path executes Plan, Implement, and Review in a single pass, writing `fast-s
 
 ## Automation Scripts
 
-The workflow includes automation scripts packaged with the Claude Code plugin.
-Marketplace installs expose them via `${CLAUDE_PLUGIN_ROOT}/scripts/` and need
-no extra setup. Manual `install.sh` users get them copied to
+The workflow includes automation scripts installed by `install.sh` to
 `~/.claude/kaola-workflow/scripts/`. Commands resolve scripts in this order:
 `${CLAUDE_PLUGIN_ROOT}/scripts/` → `~/.claude/kaola-workflow/scripts/` → `./scripts/`
 (dev checkout). Drift between `scripts/` and `plugins/kaola-workflow/scripts/`
@@ -472,7 +442,7 @@ helper is available. It does not create state for brand-new work, ambiguous
 active projects, contradictory phase files, or unresolved compliance gates that
 make the next command unsafe.
 
-When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact resume reminder after context compaction. Manual command install copies slash commands only; use plugin install when you want the compaction resume hook.
+`install.sh` copies hooks to `~/.claude/kaola-workflow/hooks/`. To enable the compaction resume hook (`hooks/hooks.json`), add it to your `~/.claude/settings.json` hooks configuration.
 
 ## Parallel Active Work
 
@@ -488,6 +458,14 @@ Multiple Kaola-Workflow runs can coexist when each targets a distinct active fol
 When Git is available, `kaola-workflow-claim.js` provisions a sibling worktree at `<repo-parent>/<repo-name>.kw/<project>/`. The path is stored in the active folder Sink block as `worktree_path`, so commands can resolve the linked worktree without consulting a lock file.
 
 ## Updating
+
+If installed via one-liner, re-run it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KaolaBrother/Kaola-Workflow/main/install.sh | bash
+```
+
+If installed from a local clone:
 
 ```bash
 cd Kaola-Workflow
