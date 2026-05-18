@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [3.8.0] — 2026-05-18
+
+### Added — GitLab Workflow Support + Active-Folders State + Classifier Coverage (issues #55, #60, #64)
+
+- **GitLab workflow plugin** (`plugins/kaola-workflow-gitlab/`): full Claude plugin and Codex plugin manifests, commands, hooks, skills, and scripts for GitLab-based projects using `glab`.
+- **GitLab forge primitives** (`kaola-workflow-gitlab-forge.js`): `listIssues`, `getIssue`, `createBranch`, `createMR`, and related helpers for glab-backed projects.
+- **GitLab core scripts ported**: claim, roadmap, classifier, repair-state, sink-merge, sink-pr, and active-folders scripts adapted from GitHub edition to the gitlab plugin directory.
+- **Active-folders state simplification**: workflow state is now tracked via filesystem-native active folders, reducing stale-state surface area and removing the separate state-file layer.
+- **Race-safe roadmap writes**: roadmap generation uses an exclusive write lock to prevent concurrent agents from corrupting roadmap state.
+- **Roadmap state contract protection**: contract invariants enforced in `kaola-workflow-roadmap.js` to prevent partial-state corruption on concurrent writes.
+- **Codex plugin — kaola-workflow-gitlab**: new Codex plugin (`plugins/kaola-workflow-gitlab/.codex-plugin/`) with GitLab-branded skills, agent profiles, and defaultPrompt entries.
+
+### Tests
+
+- **Issue #64 classifier coverage** (`simulate-workflow-walkthrough.js`): Epic Cases for `status_ambiguous`, `resume_stale`, and `new_session` classifier branches are now exercised.
+
 ## [3.7.0] — 2026-05-18
 
 ### Added — Core Lifecycle: Closed-Issue Cleanup + Step:Complete Archive + Session Ownership Guards (issue #51)
