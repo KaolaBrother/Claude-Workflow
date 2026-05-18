@@ -139,6 +139,26 @@ If local is behind only and the worktree is clean, run `git pull --ff-only`,
 then re-check. Stop and ask before any merge, rebase, stash, reset, conflict
 resolution, or dirty-worktree sync.
 
+### Git Freshness Block Recovery
+
+If startup succeeds (folder claimed, worktree provisioned) but the subsequent Git freshness check in Startup Step 1 blocks (local is behind remote, dirty worktree, or merge/rebase required), run:
+
+```bash
+git fetch --prune
+git pull --ff-only
+git status --short --branch
+```
+
+If the freshness check now passes, continue to Startup Step 2. If the block persists (merge/rebase required, dirty worktree), release the claimed folder before stopping:
+
+```bash
+_KAOLA_PROJECT="$(node -e "try{process.stdout.write(JSON.parse(process.argv[1]).project||'')}catch(e){}" "$STARTUP_OUT")"
+_KAOLA_CLAIM="$(node -e "try{process.stdout.write(JSON.parse(process.argv[1]).claim||'')}catch(e){}" "$STARTUP_OUT")"
+[ "$_KAOLA_CLAIM" = "acquired" ] && [ -n "$_KAOLA_PROJECT" ] && node "$CLAIM_JS" release --project "$_KAOLA_PROJECT" --reason git-freshness-block
+```
+
+Stop and ask the user to resolve the Git state manually before retrying `/workflow-next`. Do not proceed to Startup Step 2 or adopt any active folder after this release.
+
 ## Startup Step 2 - Roadmap
 
 If a GitLab remote and authenticated `glab` are available, fetch open issues:
@@ -184,6 +204,12 @@ ask the user what to implement. New work starts with:
 ```text
 /kaola-workflow-phase1 <task description or issue>
 ```
+
+### Co-active Folders Advisory
+
+If multiple active folders exist from prior sessions, they operate independently. Each folder has its own `workflow-state.md`, branch, and worktree metadata. The pre-commit hook prevents commits that stage multiple workflow project folders together.
+
+**Important**: Do NOT merge, interleave, or batch commits from different active folders. Each folder must complete its own Phase 4 → Phase 6 sequence independently. If the same file appears in multiple active write sets, stop and resolve the conflict before continuing — do not proceed with overlapping modifications.
 
 ## Co-active Folders
 

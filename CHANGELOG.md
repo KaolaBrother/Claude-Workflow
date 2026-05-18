@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added — GitLab Active-Folder Safeguards Parity (issue #86)
+
+- **`cmdRelease` CWD guard** (`plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-claim.js`): GitLab release now refuses to discard the current working directory, returning `{released: false, reason: 'refusing to discard current working directory'}` with exit code 1. Mirrors the existing GitHub safeguard.
+- **`cmdStatus` drift detection** (`kaola-gitlab-workflow-claim.js`): Status now returns `{active, drift, count}` where `drift` contains folders for issues that have since been closed. Uses exported `partitionActiveAndDrift(root)` helper. Mirrors the GitHub drift-aware pattern.
+- **Git Freshness Block Recovery** (`plugins/kaola-workflow-gitlab/commands/workflow-next.md`): Added subsection under Startup Step 1 covering `git pull --ff-only` retry and claimed-folder release when a freshness block persists.
+- **Co-active Folders Advisory** (`commands/workflow-next.md` + `plugins/kaola-workflow-gitlab/skills/kaola-workflow-next/SKILL.md`): Added advisory subsections warning against merging, interleaving, or batching commits from different active folders.
+- **Regression tests**: CWD guard refusal test and drift detection test added to `plugins/kaola-workflow-gitlab/scripts/test-gitlab-workflow-scripts.js`.
+
 ### Tests — E2E Coverage (issue #85)
 
 - test: add E2E regression coverage for GitHub merge/PR closure and parallel-issue independence (issue #85); GitLab E2E remains out of scope pending OFFLINE support in GitLab scripts

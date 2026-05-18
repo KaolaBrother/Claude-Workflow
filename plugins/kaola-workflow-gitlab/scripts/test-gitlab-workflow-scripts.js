@@ -414,6 +414,40 @@ withForge({
   assert(state.includes('## Sink'));
 }
 
+{
+  const root = tempRoot('kw-gl-cwd-guard-');
+  try {
+    initGitRepo(root);
+    const projectDir = writeState(root, 'cwd-project', 99);
+    const result = spawnSync(process.execPath, [claimScript, 'release', '--project', 'cwd-project', '--reason', 'test'], {
+      cwd: projectDir,
+      encoding: 'utf8',
+      env: { ...process.env, KAOLA_WORKFLOW_ROOT: root }
+    });
+    assert.strictEqual(result.status, 1, 'cmdRelease should exit 1 when cwd is inside project dir');
+    const lines = result.stdout.trim().split('\n').filter(Boolean);
+    const out = JSON.parse(lines[lines.length - 1]);
+    assert.strictEqual(out.released, false, 'cmdRelease should report released: false');
+    assert.strictEqual(out.reason, 'refusing to discard current working directory', 'cmdRelease should report the CWD guard reason');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+withForge({
+  viewIssue(iid) { return { issue_iid: iid, number: iid, state: 'closed', labels: [] }; }
+}, () => {
+  const root = tempRoot('kw-gl-drift-');
+  try {
+    writeState(root, 'drift-project', 60);
+    const result = claim.partitionActiveAndDrift(root);
+    assert.strictEqual(result.drift.length, 1, 'partitionActiveAndDrift should put closed-issue folder into drift');
+    assert.strictEqual(result.active.length, 0, 'partitionActiveAndDrift should leave active empty when all issues are closed');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 testGitLabRoadmapInitIssueExclusiveAndUpdate()
   .then(() => {
     console.log('GitLab workflow script tests passed');

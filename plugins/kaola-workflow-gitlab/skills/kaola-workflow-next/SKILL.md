@@ -211,6 +211,12 @@ phase1-research.md exists -> kaola-workflow-ideation
 no phase file -> kaola-workflow-research
 ```
 
+### Co-active Folders Advisory
+
+If multiple active folders exist from prior sessions (e.g., `issue-63` and `issue-65` in different states), they operate independently. Each folder has its own `workflow-state.md`, branch, and worktree metadata. The pre-commit hook prevents commits that stage multiple workflow project folders together.
+
+**Important**: Do NOT merge, interleave, or batch commits from different active folders. Each folder must complete its own Phase 4 → Phase 6 sequence independently. If the same file appears in multiple active write sets, stop and resolve the conflict before continuing — do not proceed with overlapping modifications.
+
 ## Required Output
 
 Before continuing or stopping, print:

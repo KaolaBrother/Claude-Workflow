@@ -431,21 +431,43 @@ function cmdFinalize() {
   output(Object.assign({ status: 'closed' }, result));
 }
 
+function cwdInside(target) {
+  const cwd = fs.realpathSync(process.cwd());
+  const real = fs.realpathSync(target);
+  return cwd === real || cwd.startsWith(real + path.sep);
+}
+
 function cmdRelease() {
   const root = getRoot();
   const args = parseArgs(process.argv.slice(3));
   const folder = args.project ? activeByProject(root, args.project) : (args.issue ? activeByIssue(root, args.issue) : null);
   if (!folder) { output({ released: false, reason: '--project or --issue must name an active folder' }, 1); return; }
+  if (cwdInside(folder.project_dir)) {
+    output({ released: false, reason: 'refusing to discard current working directory' }, 1);
+    return;
+  }
   const result = archiveProjectDir(root, folder.project, 'abandoned', '.discarded-' + new Date().toISOString().replace(/[:.]/g, '-'));
   try { removeWorktree(root, folder.project, folder); } catch (_) {}
   clearAdvisoryClaim(folder.issue_iid, args.reason || 'discarded', { project_id: folder.project_id, path_with_namespace: folder.path_with_namespace });
   output(Object.assign({ released: true, project: folder.project }, result));
 }
 
+// Partition active folders into current and drift (closed-issue) groups.
+// Exported for in-process forge stub testing in unit tests.
+function partitionActiveAndDrift(root) {
+  const all = readActiveFolders(root, { excludeClosedIssues: false });
+  const active = [], drift = [];
+  for (const folder of all) {
+    if (folder.issue_iid != null && issueIsClosed(folder.issue_iid)) drift.push(folder);
+    else active.push(folder);
+  }
+  return { active, drift };
+}
+
 function cmdStatus() {
   const root = getRoot();
-  const folders = readActiveFolders(root);
-  output({ active: folders, count: folders.length });
+  const { active, drift } = partitionActiveAndDrift(root);
+  output({ active, drift, count: active.length });
 }
 
 function cmdPatchBranch() {
@@ -588,6 +610,7 @@ module.exports = {
   claimExplicitTarget,
   claimProject,
   listOpenIssues,
+  partitionActiveAndDrift,
   projectNameForIssue,
   provisionWorktree,
   readActiveFolders,
