@@ -48,9 +48,6 @@ The Opus advisor gates in Phases 2, 3, and conditional Phase 5 require
 `"advisorModel": "opus"` in `~/.claude/settings.json` or an equivalent Claude
 Code advisor configuration.
 
-In ECC terms, `tdd-guide` is the spawnable agent. `tdd-workflow` is the
-maintained TDD playbook that the agent follows for RED → GREEN → REFACTOR.
-
 ## Installation
 
 ### Choose An Edition
@@ -199,7 +196,7 @@ kaola-workflow-finalize
 
 Both Codex packs keep the same six-phase shape, state repair, compliance ledger,
 TDD evidence, review, documentation docking, roadmap refresh, archive, and final
-Git gate. They do not depend on external ECC agent installs. Instead,
+Git gate. They do not depend on external agent installs. Instead,
 `kaola-workflow-init` automatically installs Codex-native role profiles that
 mirror the Claude workflow roles:
 
