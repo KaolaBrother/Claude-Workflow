@@ -10,6 +10,11 @@
       "name": "kaola-workflow",
       "source": "./",
       "description": "A 6-phase Claude Code workflow with resumable phase artifacts, compaction-aware state, and ECC agent orchestration."
+    },
+    {
+      "name": "kaola-workflow-gitlab",
+      "source": "./plugins/kaola-workflow-gitlab",
+      "description": "GitLab edition of Kaola-Workflow using GitLab issues, merge requests, and glab."
     }
   ]
 }

@@ -17,44 +17,95 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 COMMANDS_DIR="$HOME/.claude/commands"
-SUPPORT_DIR="$HOME/.claude/kaola-workflow"
-SUPPORT_SCRIPTS_DIR="$SUPPORT_DIR/scripts"
-SOURCE_COMMANDS_DIR="$SCRIPT_DIR/commands"
-SOURCE_SCRIPTS_DIR="$SCRIPT_DIR/scripts"
-SUPPORT_HOOKS_DIR="$SUPPORT_DIR/hooks"
-SOURCE_HOOKS_DIR="$SCRIPT_DIR/hooks"
-SUPPORT_SCRIPT_NAMES=(
-  kaola-workflow-repair-state.js
-  kaola-workflow-claim.js
-  kaola-workflow-session-env.js
-  kaola-workflow-sink-merge.js
-  kaola-workflow-sink-pr.js
-  kaola-workflow-roadmap.js
-  kaola-workflow-classifier.js
-)
-SUPPORT_HOOK_NAMES=(
-  kaola-workflow-pre-commit.sh
-)
 YES=0
+FORGE=github
 
-for arg in "$@"; do
-  case "$arg" in
+usage() {
+  echo "Usage: ./install.sh [--yes] [--forge=github|gitlab]"
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
     -y|--yes)
       YES=1
+      shift
+      ;;
+    --forge=*)
+      FORGE="${1#--forge=}"
+      shift
+      ;;
+    --forge)
+      if [[ -z "${2:-}" ]]; then
+        echo "--forge requires github or gitlab" >&2
+        usage >&2
+        exit 2
+      fi
+      FORGE="$2"
+      shift 2
       ;;
     -h|--help)
-      echo "Usage: ./install.sh [--yes]"
+      usage
       exit 0
       ;;
     *)
-      echo "Unknown argument: $arg" >&2
-      echo "Usage: ./install.sh [--yes]" >&2
+      echo "Unknown argument: $1" >&2
+      usage >&2
       exit 2
       ;;
   esac
 done
 
+case "$FORGE" in
+  github)
+    SUPPORT_DIR="$HOME/.claude/kaola-workflow"
+    SOURCE_COMMANDS_DIR="$SCRIPT_DIR/commands"
+    SOURCE_SCRIPTS_DIR="$SCRIPT_DIR/scripts"
+    SOURCE_HOOKS_DIR="$SCRIPT_DIR/hooks"
+    SUPPORT_SCRIPT_NAMES=(
+      kaola-workflow-repair-state.js
+      kaola-workflow-claim.js
+      kaola-workflow-session-env.js
+      kaola-workflow-sink-merge.js
+      kaola-workflow-sink-pr.js
+      kaola-workflow-roadmap.js
+      kaola-workflow-classifier.js
+    )
+    SUPPORT_HOOK_NAMES=(
+      kaola-workflow-pre-commit.sh
+    )
+    ;;
+  gitlab)
+    SUPPORT_DIR="$HOME/.claude/kaola-workflow-gitlab"
+    SOURCE_COMMANDS_DIR="$SCRIPT_DIR/plugins/kaola-workflow-gitlab/commands"
+    SOURCE_SCRIPTS_DIR="$SCRIPT_DIR/plugins/kaola-workflow-gitlab/scripts"
+    SOURCE_HOOKS_DIR="$SCRIPT_DIR/plugins/kaola-workflow-gitlab/hooks"
+    SUPPORT_SCRIPT_NAMES=(
+      kaola-workflow-repair-state.js
+      kaola-workflow-claim.js
+      kaola-workflow-session-env.js
+      kaola-workflow-compact-context.js
+      kaola-workflow-sink-merge.js
+      kaola-workflow-sink-mr.js
+      kaola-workflow-roadmap.js
+      kaola-workflow-classifier.js
+    )
+    SUPPORT_HOOK_NAMES=(
+      kaola-workflow-pre-commit.sh
+      kaola-workflow-phantom-advisor.sh
+    )
+    ;;
+  *)
+    echo "Unknown forge: $FORGE" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
+SUPPORT_SCRIPTS_DIR="$SUPPORT_DIR/scripts"
+SUPPORT_HOOKS_DIR="$SUPPORT_DIR/hooks"
+
 echo "Kaola-Workflow — installer"
+echo "Forge: $FORGE"
 echo ""
 
 # Check ECC is installed
@@ -131,8 +182,12 @@ for command_file in "$SOURCE_COMMANDS_DIR"/*.md; do
 done
 
 if [[ "$installed" -eq 0 ]]; then
-  echo "No command files found in: $SOURCE_COMMANDS_DIR" >&2
-  exit 1
+  if [[ "$FORGE" = "gitlab" ]]; then
+    echo "GitLab edition skeleton: no command files found yet in $SOURCE_COMMANDS_DIR."
+  else
+    echo "No command files found in: $SOURCE_COMMANDS_DIR" >&2
+    exit 1
+  fi
 fi
 
 mkdir -p "$SUPPORT_SCRIPTS_DIR"
@@ -181,10 +236,16 @@ for command_file in "$SOURCE_COMMANDS_DIR"/*.md; do
 done
 
 for script_name in "${SUPPORT_SCRIPT_NAMES[@]}"; do
+  if [[ "$FORGE" = "gitlab" && ! -f "$SOURCE_SCRIPTS_DIR/$script_name" ]]; then
+    continue
+  fi
   verify_executable_file "$SUPPORT_SCRIPTS_DIR/$script_name" "support script" || verification_failed=1
 done
 
 for hook_name in "${SUPPORT_HOOK_NAMES[@]}"; do
+  if [[ "$FORGE" = "gitlab" && ! -f "$SOURCE_HOOKS_DIR/$hook_name" ]]; then
+    continue
+  fi
   verify_executable_file "$SUPPORT_HOOKS_DIR/$hook_name" "support hook" || verification_failed=1
 done
 
@@ -193,6 +254,9 @@ if [[ "$verification_failed" -ne 0 ]]; then
 fi
 
 echo "Verified Kaola-Workflow install files."
+if [[ "$FORGE" = "gitlab" && "$installed" -eq 0 ]]; then
+  echo "GitLab edition skeleton installed; runtime commands arrive in follow-up issues #56 and #57."
+fi
 
 echo ""
 echo "Open any Claude Code session and run:  /workflow-init"

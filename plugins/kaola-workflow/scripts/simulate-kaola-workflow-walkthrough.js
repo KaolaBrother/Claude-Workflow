@@ -1220,6 +1220,8 @@ async function main() {
               env: {
                 ...process.env,
                 KAOLA_WORKFLOW_OFFLINE: '0',
+                CODEX_THREAD_ID: '',
+                KAOLA_KERNEL_SESSION_SKIP: '',
                 HOME: epic6JTmp
               }
             });

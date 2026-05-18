@@ -1,7 +1,7 @@
 {
-  "name": "kaola-workflow",
+  "name": "kaola-workflow-gitlab",
   "version": "3.7.0",
-  "description": "A 6-phase Claude Code workflow with resumable phase artifacts and ECC agent orchestration.",
+  "description": "GitLab edition of the 6-phase Kaola-Workflow Claude Code plugin, using GitLab issues, merge requests, and glab.",
   "author": {
     "name": "KaolaBrother",
     "url": "https://github.com/KaolaBrother"
@@ -12,10 +12,11 @@
   "keywords": [
     "claude-code",
     "workflow",
+    "gitlab",
+    "glab",
+    "merge-requests",
     "agents",
-    "tdd",
-    "ecc",
-    "everything-claude-code"
+    "tdd"
   ],
   "commands": [
     "./commands/"

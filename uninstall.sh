@@ -1,6 +1,48 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+FORGE=github
+
+usage() {
+  echo "Usage: ./uninstall.sh [--forge=github|gitlab|all]"
+}
+
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --forge=*)
+      FORGE="${1#--forge=}"
+      shift
+      ;;
+    --forge)
+      if [[ -z "${2:-}" ]]; then
+        echo "--forge requires github, gitlab, or all" >&2
+        usage >&2
+        exit 2
+      fi
+      FORGE="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+case "$FORGE" in
+  github|gitlab|all) ;;
+  *)
+    echo "Unknown forge: $FORGE" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
+
 removed=0
 
 shopt -s nullglob
@@ -21,18 +63,22 @@ for dest in "${COMMANDS[@]}"; do
   fi
 done
 
-SUPPORT_DIR="$HOME/.claude/kaola-workflow"
-if [[ -d "$SUPPORT_DIR" ]]; then
-  rm -rf "$SUPPORT_DIR"
-  echo "Removed: $SUPPORT_DIR"
-  removed=$((removed + 1))
+remove_dir() {
+  local dir="$1"
+  if [[ -d "$dir" ]]; then
+    rm -rf "$dir"
+    echo "Removed: $dir"
+    removed=$((removed + 1))
+  fi
+}
+
+if [[ "$FORGE" = "github" || "$FORGE" = "all" ]]; then
+  remove_dir "$HOME/.claude/kaola-workflow"
+  remove_dir "$HOME/.claude/claude-workflow"
 fi
 
-LEGACY_SUPPORT_DIR="$HOME/.claude/claude-workflow"
-if [[ -d "$LEGACY_SUPPORT_DIR" ]]; then
-  rm -rf "$LEGACY_SUPPORT_DIR"
-  echo "Removed: $LEGACY_SUPPORT_DIR"
-  removed=$((removed + 1))
+if [[ "$FORGE" = "gitlab" || "$FORGE" = "all" ]]; then
+  remove_dir "$HOME/.claude/kaola-workflow-gitlab"
 fi
 
 if [[ "$removed" -eq 0 ]]; then
