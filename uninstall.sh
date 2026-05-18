@@ -2,6 +2,10 @@
 set -euo pipefail
 
 FORGE=github
+AGENTS_DIR="$HOME/.claude/agents"
+AGENT_MANIFEST_FILE="$AGENTS_DIR/.kaola-workflow-agent-manifest"
+MANAGED_AGENT_MARKER="kaola-workflow-managed-agent: true"
+REQUIRED_AGENTS=("code-explorer" "docs-lookup" "planner" "code-architect" "tdd-guide" "build-error-resolver" "code-reviewer" "security-reviewer" "doc-updater")
 
 usage() {
   echo "Usage: ./uninstall.sh [--forge=github|gitlab|all]"
@@ -46,6 +50,32 @@ esac
 removed=0
 
 shopt -s nullglob
+
+for agent in "${REQUIRED_AGENTS[@]}"; do
+  dest="$AGENTS_DIR/$agent.md"
+  if [[ -f "$dest" ]] && grep -Fq "$MANAGED_AGENT_MARKER" "$dest"; then
+    rm "$dest"
+    echo "Removed managed agent: $dest"
+    removed=$((removed + 1))
+  fi
+done
+
+if [[ -f "$AGENT_MANIFEST_FILE" ]]; then
+  managed_remaining=0
+  for agent in "${REQUIRED_AGENTS[@]}"; do
+    dest="$AGENTS_DIR/$agent.md"
+    if [[ -f "$dest" ]] && grep -Fq "$MANAGED_AGENT_MARKER" "$dest"; then
+      managed_remaining=1
+      break
+    fi
+  done
+  if [[ "$managed_remaining" -eq 0 ]]; then
+    rm "$AGENT_MANIFEST_FILE"
+    echo "Removed managed agent manifest: $AGENT_MANIFEST_FILE"
+    removed=$((removed + 1))
+  fi
+fi
+
 COMMANDS=(
   "$HOME/.claude/commands/workflow-next.md"
   "$HOME/.claude/commands/kaola-workflow.md"

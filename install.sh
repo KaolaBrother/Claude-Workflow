@@ -31,6 +31,11 @@ fi
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 COMMANDS_DIR="$HOME/.claude/commands"
+AGENTS_DIR="$HOME/.claude/agents"
+SOURCE_AGENTS_DIR="$SCRIPT_DIR/agents"
+AGENT_MANIFEST_FILE="$AGENTS_DIR/.kaola-workflow-agent-manifest"
+MANAGED_AGENT_MARKER="kaola-workflow-managed-agent: true"
+REQUIRED_AGENTS=("code-explorer" "docs-lookup" "planner" "code-architect" "tdd-guide" "build-error-resolver" "code-reviewer" "security-reviewer" "doc-updater")
 YES=0
 FORGE=github
 
@@ -177,56 +182,94 @@ if [[ -d "$SUPPORT_SCRIPTS_DIR" ]]; then
   done
 fi
 
-# Check ECC is installed
-ECC_AGENTS_DIR="$HOME/.claude/agents"
-REQUIRED_AGENTS=("code-explorer" "docs-lookup" "planner" "code-architect" "tdd-guide" "build-error-resolver" "code-reviewer" "security-reviewer" "doc-updater")
-MISSING=()
-FILE_MISSING=()
-AGENTS_LIST=""
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 
-for agent in "${REQUIRED_AGENTS[@]}"; do
-  if [[ -f "$ECC_AGENTS_DIR/$agent.md" ]]; then
-    continue
+manifest_lookup() {
+  local file_name="$1"
+  [[ -f "$AGENT_MANIFEST_FILE" ]] || return 0
+  awk -F '\t' -v name="$file_name" '$1 == name { value = $2 } END { if (value) print value }' "$AGENT_MANIFEST_FILE"
+}
+
+install_agent_files() {
+  if [[ ! -d "$SOURCE_AGENTS_DIR" ]]; then
+    echo "Agents directory not found: $SOURCE_AGENTS_DIR" >&2
+    exit 1
   fi
 
-  FILE_MISSING+=("$agent")
-done
+  mkdir -p "$AGENTS_DIR"
 
-if [[ ${#FILE_MISSING[@]} -gt 0 ]]; then
-  if command -v claude >/dev/null 2>&1; then
-    AGENTS_LIST="$(claude agents 2>/dev/null || true)"
-  fi
+  local manifest_tmp
+  manifest_tmp="$(mktemp)"
+  local installed=0
+  local skipped=0
 
-  for agent in "${FILE_MISSING[@]}"; do
-    if [[ "$AGENTS_LIST" == *" $agent "* || "$AGENTS_LIST" == *" $agent ·"* || "$AGENTS_LIST" == *"everything-claude-code:$agent"* ]]; then
-      continue
+  for agent in "${REQUIRED_AGENTS[@]}"; do
+    local file_name="$agent.md"
+    local source_file="$SOURCE_AGENTS_DIR/$file_name"
+    local dest="$AGENTS_DIR/$file_name"
+
+    if [[ ! -f "$source_file" ]]; then
+      echo "Required agent source not found: $source_file" >&2
+      rm -f "$manifest_tmp"
+      exit 1
     fi
 
-    if [[ "$AGENTS_LIST" == *"$agent ·"* ]]; then
-      continue
+    if [[ -f "$dest" ]]; then
+      if cmp -s "$source_file" "$dest"; then
+        echo "Agent already installed: $dest"
+      else
+        local recorded_hash
+        local current_hash
+        recorded_hash="$(manifest_lookup "$file_name")"
+        current_hash="$(sha256_file "$dest")"
+
+        if [[ -n "$recorded_hash" ]] &&
+           [[ "$current_hash" == "$recorded_hash" ]] &&
+           grep -Fq "$MANAGED_AGENT_MARKER" "$dest"; then
+          cp "$source_file" "$dest"
+          echo "Updated managed agent: $dest"
+        else
+          echo "Skipped agent with existing user-owned or modified file: $dest"
+          skipped=$((skipped + 1))
+          continue
+        fi
+      fi
+    else
+      cp "$source_file" "$dest"
+      echo "Installed agent: $dest"
     fi
 
-    if [[ "$AGENTS_LIST" != *"$agent"* ]]; then
-      MISSING+=("$agent")
+    if ! grep -Fq "$MANAGED_AGENT_MARKER" "$dest"; then
+      echo "Install verification failed: missing managed marker in agent: $dest" >&2
+      rm -f "$manifest_tmp"
+      exit 1
     fi
+
+    printf '%s\t%s\n' "$file_name" "$(sha256_file "$dest")" >> "$manifest_tmp"
+    installed=$((installed + 1))
   done
-fi
 
-if [[ ${#MISSING[@]} -gt 0 ]]; then
-  echo "WARNING: The following ECC agents were not found in $ECC_AGENTS_DIR:"
-  for m in "${MISSING[@]}"; do
-    echo "  - $m"
-  done
-  echo ""
-  echo "This workflow requires Everything Claude Code (ECC) agents."
-  echo "Install ECC: https://github.com/affaan-m/everything-claude-code"
-  echo ""
-  if [[ "$YES" -ne 1 ]]; then
-    read -r -p "Continue installation anyway? [y/N] " confirm
-    [[ "$confirm" =~ ^[Yy]$ ]] || { echo "Aborted."; exit 1; }
+  if [[ -s "$manifest_tmp" ]]; then
+    mv "$manifest_tmp" "$AGENT_MANIFEST_FILE"
+  else
+    rm -f "$manifest_tmp"
   fi
-  echo ""
-fi
+
+  if [[ "$skipped" -gt 0 ]]; then
+    echo "Skipped $skipped agent file(s). Existing files were left untouched."
+  fi
+  if [[ "$installed" -gt 0 ]]; then
+    echo "Verified managed Kaola-Workflow agents."
+  fi
+}
+
+install_agent_files
 
 # Install commands
 if [[ ! -d "$SOURCE_COMMANDS_DIR" ]]; then
@@ -326,6 +369,10 @@ verification_failed=0
 for command_file in "$SOURCE_COMMANDS_DIR"/*.md; do
   [[ -f "$command_file" ]] || continue
   verify_installed_file "$COMMANDS_DIR/$(basename "$command_file")" "command" || verification_failed=1
+done
+
+for agent in "${REQUIRED_AGENTS[@]}"; do
+  verify_installed_file "$AGENTS_DIR/$agent.md" "agent" || verification_failed=1
 done
 
 for script_name in "${SUPPORT_SCRIPT_NAMES[@]}"; do

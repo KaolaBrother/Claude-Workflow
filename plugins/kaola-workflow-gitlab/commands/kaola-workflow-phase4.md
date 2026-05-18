@@ -230,7 +230,7 @@ next_command: /kaola-workflow-phase4 {project}
 inline_emergency_fallback_authorized: no
 ```
 
-Invoke ECC `tdd-guide` for the task.
+Invoke the Claude Code agent `tdd-guide` for the task.
 
 Provide:
 - the full task definition from `phase3-plan.md`
@@ -240,7 +240,7 @@ Provide:
   the user or project convention explicitly requires them
 
 Agent task:
-- Execute using ECC `tdd-workflow`
+- Execute using `tdd-workflow`
 - write/update tests first and verify RED
 - implement minimum code for GREEN
 - refactor only while tests stay green

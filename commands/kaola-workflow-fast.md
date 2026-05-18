@@ -80,7 +80,7 @@ Write a `fast-summary.md` stub with status `IN_PROGRESS`.
 
 ## Step 2 - Execute
 
-Apply the plan changes directly. No ECC implementation agent is spawned for
+Apply the plan changes directly. No Claude Code implementation agent is spawned for
 fast-path; the main session implements inline.
 
 Inline implementation constraints:

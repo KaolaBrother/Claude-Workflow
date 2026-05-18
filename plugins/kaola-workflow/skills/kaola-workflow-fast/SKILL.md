@@ -22,7 +22,7 @@ Write `fast-summary.md` stub with status `IN_PROGRESS`.
 
 ## Step 2 - Execute
 
-Apply changes inline (no ECC implementation agent). Constraints:
+Apply changes inline (no Claude Code implementation agent). Constraints:
 
 - no new external package dependencies
 - no public API, schema, or shared infrastructure changes

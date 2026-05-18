@@ -127,7 +127,7 @@ fix_owner: tdd-guide or build-error-resolver
 inline_emergency_fallback_authorized: no
 ```
 
-Invoke ECC `code-reviewer`.
+Invoke the Claude Code agent `code-reviewer`.
 
 Provide modified files from `phase4-progress.md` and instruct:
 
@@ -147,7 +147,7 @@ kaola-workflow/{project}/.cache/code-reviewer.md
 
 Perform a file-risk scan from Phase 4 modified files.
 
-If security-sensitive files were touched, invoke ECC `security-reviewer` with:
+If security-sensitive files were touched, invoke the Claude Code agent `security-reviewer` with:
 
 ```text
 Review only; do not edit files.

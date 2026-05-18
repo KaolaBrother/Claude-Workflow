@@ -1,5 +1,5 @@
 ---
-description: Kaola-Workflow Phase 1. Research/discovery only, with durable checkpoints and ECC exploration.
+description: Kaola-Workflow Phase 1. Research/discovery only, with durable checkpoints and agent exploration.
 argument-hint: <task description, GitLab issue, or project name>
 ---
 
@@ -94,7 +94,7 @@ inline_emergency_fallback_authorized: no
 
 ## Step 2 - Codebase Exploration
 
-Invoke the ECC subagent `code-explorer`.
+Invoke the Claude Code agent `code-explorer`.
 
 Provide only the parsed requirement, linked issue summary when present, and
 suspected affected area. Ask it to return:

@@ -110,19 +110,19 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - ECC hooks are background hygiene, not workflow validation.
 - Do not duplicate hook checks unless the phase requires broader validation or relevant files changed after the hook ran.
 - Record hook output as evidence only with command, scope, result, and evidence path.
-- For heavy Phase 4 implementation bursts or many subagents, prefer `ECC_HOOK_PROFILE=minimal claude`.
+- If you separately use ECC hooks during heavy Phase 4 implementation bursts, keep them minimal.
 
 ## Kaola-Workflow
 
 - Use `/workflow-next` as the workflow entrypoint and router.
 - Keep phase work scoped, resumable, and recorded under `kaola-workflow/`.
 - Maintain `workflow-state.md` for active work; it records current phase, step, pending gates, and next command.
-- Delegate phase-specific work to ECC agents by default; the main session owns orchestration, review, validation, integration, and final decisions.
+- Delegate phase-specific work to the vendored Claude Code agents by default; the main session owns orchestration, review, validation, integration, and final decisions.
 - Phase boundaries: Phase 1 discovers facts, Phase 2 chooses strategy, Phase 3 creates the executable blueprint.
 - In Phase 1, spawn `code-explorer` for codebase research and `docs-lookup` when external/library/API documentation is needed.
-- In Phase 4, spawn `tdd-guide` per task as the executor. `tdd-guide` is the ECC agent; `tdd-workflow` is the RED -> GREEN -> REFACTOR playbook it follows.
+- In Phase 4, spawn `tdd-guide` per task as the executor. `tdd-guide` is the executor agent; `tdd-workflow` is the RED -> GREEN -> REFACTOR playbook it follows.
 - Route build/type/lint validation failures to `build-error-resolver`; route behavior or coverage failures back to `tdd-guide`.
-- Use the ECC agent names exactly as Claude Code lists them; prefer short names like `planner` when available, otherwise use the `everything-claude-code:` prefix.
+- Use the vendored agent names exactly as installed under `~/.claude/agents`; prefer short names like `planner`.
 - At `/workflow-next` startup, fetch remote-tracking refs, classify local/upstream sync state, and ask before any risky synchronization.
 - Use `/goal` or equivalent prompt-based Stop-hook wording so each phase continues until its objective and completion audit are satisfied.
 - The `/goal` template must not use "next issue in line" or any phrasing that implies automatic cross-issue continuation. Each `/workflow-next` run targets one issue; finishing it is the terminal event. The single-issue completion contract requires explicit re-direction for the next issue.

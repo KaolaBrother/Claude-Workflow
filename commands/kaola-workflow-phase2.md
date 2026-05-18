@@ -73,7 +73,7 @@ fix_owner: planner for missing strategy analysis
 inline_emergency_fallback_authorized: no
 ```
 
-Invoke ECC `planner` with relevant Phase 1 excerpts only. Ask for:
+Invoke the Claude Code agent `planner` with relevant Phase 1 excerpts only. Ask for:
 
 - 2-3 implementation approaches
 - pros, cons, risks, complexity

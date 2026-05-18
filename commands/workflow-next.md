@@ -19,7 +19,7 @@ Use `$ARGUMENTS` as either:
 ## Router Rules
 
 - Do not implement, review, fix, or finalize work in this router.
-- Do not invoke phase ECC agents from this router.
+- Do not invoke phase agents from this router.
 - Do not cross a phase boundary while any `Required Agent Compliance` row is
   `pending`, missing, or lacks evidence/skip reason.
 - Prefer `workflow-state.md` for exact resume position.

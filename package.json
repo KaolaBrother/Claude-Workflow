@@ -15,12 +15,13 @@
     "workflow",
     "agents",
     "tdd",
-    "ecc",
-    "everything-claude-code"
+    "claude-agents"
   ],
   "files": [
     ".agents/plugins/",
+    "agents/",
     "commands/",
+    "docs/agents-source.md",
     "hooks/",
     "plugins/",
     "scripts/",
@@ -32,17 +33,9 @@
   ],
   "scripts": {
     "test": "npm run test:kaola-workflow:claude && npm run test:kaola-workflow:codex",
-    "test:kaola-workflow:claude": "node scripts/validate-script-sync.js && bash -n install.sh uninstall.sh && node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8'))\" && node scripts/validate-workflow-contracts.js && node scripts/simulate-workflow-walkthrough.js",
+    "test:kaola-workflow:claude": "node scripts/validate-script-sync.js && node scripts/validate-vendored-agents.js && bash -n install.sh uninstall.sh && node -e \"JSON.parse(require('fs').readFileSync('package.json', 'utf8'))\" && node scripts/validate-workflow-contracts.js && node scripts/simulate-workflow-walkthrough.js",
     "test:kaola-workflow:codex": "node scripts/validate-script-sync.js && node scripts/validate-kaola-workflow-contracts.js && node plugins/kaola-workflow/scripts/simulate-kaola-workflow-walkthrough.js",
-    "test:kaola-workflow:gitlab": "node plugins/kaola-workflow-gitlab/scripts/validate-kaola-workflow-gitlab-contracts.js && node plugins/kaola-workflow-gitlab/scripts/simulate-gitlab-workflow-walkthrough.js && node plugins/kaola-workflow-gitlab/scripts/simulate-gitlab-codex-workflow-walkthrough.js"
-  },
-  "peerDependencies": {
-    "ecc-universal": ">=1.10.0 || >=2.0.0-rc.0"
-  },
-  "peerDependenciesMeta": {
-    "ecc-universal": {
-      "optional": true
-    }
+    "test:kaola-workflow:gitlab": "node scripts/validate-vendored-agents.js && node plugins/kaola-workflow-gitlab/scripts/validate-kaola-workflow-gitlab-contracts.js && node plugins/kaola-workflow-gitlab/scripts/simulate-gitlab-workflow-walkthrough.js && node plugins/kaola-workflow-gitlab/scripts/simulate-gitlab-codex-workflow-walkthrough.js"
   },
   "license": "MIT"
 }

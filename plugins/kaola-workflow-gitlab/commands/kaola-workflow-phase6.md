@@ -256,7 +256,7 @@ Read project root `CLAUDE.md`. Look for `Documentation Update Checklist`.
 
 This is a required documentation gate.
 
-If checklist exists, invoke ECC `doc-updater` with changed files and checklist.
+If checklist exists, invoke the Claude Code agent `doc-updater` with changed files and checklist.
 
 If missing, create or append the checklist, then invoke `doc-updater`:
 

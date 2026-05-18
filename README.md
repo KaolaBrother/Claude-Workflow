@@ -25,45 +25,31 @@ Phase 6 closes issue #N and archives the active folder, the agent stops and awai
 explicit re-direction. Do not use "next issue in line" phrasing in `/goal`
 templates — cross-issue continuation is never automatic.
 
-## Dependency — Everything Claude Code (ECC)
+## Vendored Claude Code Agents
 
-> **This plugin requires ECC to be installed.**
->
-> The workflow delegates work to ECC-provided agents at each phase:
->
-> | Agent | Phase | Model |
-> |-------|-------|-------|
-> | `code-explorer` | 1 — Research/Discovery (code facts) | Sonnet |
-> | `docs-lookup` | 1 — Research/Discovery (external docs, when needed) | Sonnet |
-> | `planner` | 2 — Ideation | Opus |
-> | `code-architect` | 3 — Plan | Sonnet |
-> | `tdd-guide` | 4 — Execute (per-task TDD executor) | Sonnet |
-> | `build-error-resolver` | 4–6 — Validation repair when needed | Sonnet |
-> | `code-reviewer` | 5 — Review | Sonnet |
-> | `security-reviewer` | 5 — Review (conditional) | Sonnet |
-> | `doc-updater` | 6 — Finalize | Haiku |
->
-> Install ECC first — see <https://github.com/affaan-m/everything-claude-code> for install instructions.
->
-> **Minimal Kaola-Workflow ECC configuration**
->
-> - **Hooks:** do not enable ECC hooks (see [ECC Hook Policy](#ecc-hook-policy) below)
-> - **Subagents:** install only the ECC subagents listed in the table above
-> - **Language rules:** do not install ECC language rules as part of Kaola-Workflow setup
-> - **Common rules:** user choice based on your own project preferences
->
-> ECC's current npm package name is `ecc-universal`; the older `everything-claude-code`
-> npm package name is not the active install surface.
->
-> The Opus advisor gates in Phases 2, 3, and conditional Phase 5 require
-> `"advisorModel": "opus"` in `~/.claude/settings.json` or an equivalent
-> Claude Code advisor configuration.
->
-> If ECC is installed only as a Claude Code plugin, agents may appear with the
-> `everything-claude-code:` prefix. The workflow supports either form.
->
-> In ECC terms, `tdd-guide` is the spawnable agent. `tdd-workflow` is the
-> maintained TDD playbook that the agent follows for RED → GREEN → REFACTOR.
+Kaola-Workflow installs the Claude Code agents it needs directly from this
+repository. The agent prompts are derived from Everything Claude Code (ECC) and
+vendored under the MIT License; see [docs/agents-source.md](docs/agents-source.md)
+for the pinned upstream commit, attribution, and refresh procedure.
+
+| Agent | Phase | Model |
+|-------|-------|-------|
+| `code-explorer` | 1 — Research/Discovery (code facts) | Sonnet |
+| `docs-lookup` | 1 — Research/Discovery (external docs, when needed) | Sonnet |
+| `planner` | 2 — Ideation | Opus |
+| `code-architect` | 3 — Plan | Sonnet |
+| `tdd-guide` | 4 — Execute (per-task TDD executor) | Sonnet |
+| `build-error-resolver` | 4–6 — Validation repair when needed | Sonnet |
+| `code-reviewer` | 5 — Review | Sonnet |
+| `security-reviewer` | 5 — Review (conditional) | Sonnet |
+| `doc-updater` | 6 — Finalize | Haiku |
+
+The Opus advisor gates in Phases 2, 3, and conditional Phase 5 require
+`"advisorModel": "opus"` in `~/.claude/settings.json` or an equivalent Claude
+Code advisor configuration.
+
+In ECC terms, `tdd-guide` is the spawnable agent. `tdd-workflow` is the
+maintained TDD playbook that the agent follows for RED → GREEN → REFACTOR.
 
 ## Installation
 
@@ -213,9 +199,9 @@ kaola-workflow-finalize
 
 Both Codex packs keep the same six-phase shape, state repair, compliance ledger,
 TDD evidence, review, documentation docking, roadmap refresh, archive, and final
-Git gate. They do not depend on ECC agents. Instead, `kaola-workflow-init`
-automatically installs Codex-native role profiles that mirror the ECC workflow
-roles:
+Git gate. They do not depend on external ECC agent installs. Instead,
+`kaola-workflow-init` automatically installs Codex-native role profiles that
+mirror the Claude workflow roles:
 
 ```text
 code-explorer
@@ -461,10 +447,11 @@ rerun the same check unless the phase requires broader validation or relevant
 files changed after the hook ran. Hook output counts as workflow evidence only
 when recorded with command, scope, result, and evidence path.
 
-Kaola-Workflow recommends **not enabling ECC hooks**. Most ECC hook functionality
-is now covered by native Claude Code features (Session Memory, `/cost`, status-line
-cost display), and the remaining hooks add friction without meaningful workflow
-benefit. Run Claude Code without any `ECC_HOOK_PROFILE` setting.
+Kaola-Workflow recommends **not enabling ECC hooks** if you separately use ECC.
+Most ECC hook functionality is now covered by native Claude Code features
+(Session Memory, `/cost`, status-line cost display), and the remaining hooks add
+friction without meaningful workflow benefit. Run Claude Code without any
+`ECC_HOOK_PROFILE` setting.
 
 Phase 6 still owns the final full relevant validation gate. It also performs
 documentation docking to match code changes with docs and issue/roadmap state,

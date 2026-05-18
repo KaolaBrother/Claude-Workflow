@@ -67,7 +67,7 @@ fix_owner: code-architect for blueprint revisions
 inline_emergency_fallback_authorized: no
 ```
 
-Invoke ECC `code-architect` with relevant excerpts from Phase 1 and Phase 2.
+Invoke the Claude Code agent `code-architect` with relevant excerpts from Phase 1 and Phase 2.
 Ask for:
 
 - files to create: path, purpose, key interfaces
