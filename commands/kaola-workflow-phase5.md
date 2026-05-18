@@ -27,46 +27,7 @@ kaola-workflow/{project}/phase3-plan.md
 kaola-workflow/{project}/phase4-progress.md
 ```
 
-## Session Heartbeat
 
-If a claim session is active or recoverable, ensure the background heartbeat ticker is running:
-
-```bash
-kaola_script(){ _n="$1"; for _p in "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}" "$HOME/.claude/kaola-workflow/scripts/$_n" "./scripts/$_n"; do [ -f "$_p" ] && { printf '%s\n' "$_p"; return; }; done; return 1; }
-_CLAIM_JS="$(kaola_script kaola-workflow-claim.js)"
-if [ -f "$_CLAIM_JS" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
-  KAOLA_SESSION_ID="$(node "$_CLAIM_JS" session 2>/dev/null || true)"
-  [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
-fi
-if [ -f "$_CLAIM_JS" ] && [ -n "${KAOLA_SESSION_ID:-}" ]; then
-  node "$_CLAIM_JS" session --project "{project}" --session "$KAOLA_SESSION_ID" >/dev/null || {
-    echo "Kaola-Workflow: {project} is owned by another session; use explicit recovery/handoff to continue it."
-    exit 1
-  }
-fi
-if [ -n "${KAOLA_SESSION_ID:-}" ] && [ -f "$_CLAIM_JS" ]; then
-  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
-  if [ ! -f "$_TICKER_PID_FILE" ] || ! kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-    nohup node "$_CLAIM_JS" ticker \
-      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
-    disown
-  fi
-fi
-```
-
-## Startup Receipt Guard
-
-For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
-exists and authorizes this exact project with `claim: "owned"` or
-`claim: "acquired"` before doing phase work. Run the script-level verifier and
-stop on failure:
-
-```bash
-node "$_CLAIM_JS" verify-startup --session "$KAOLA_SESSION_ID" --project "{project}" >/dev/null || {
-  echo "Kaola-Workflow: startup receipt does not authorize {project}; run startup or explicit recovery instead."
-  exit 1
-}
-```
 
 ## Resume Detection
 

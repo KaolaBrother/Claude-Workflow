@@ -64,7 +64,7 @@ case "$FORGE" in
     SUPPORT_SCRIPT_NAMES=(
       kaola-workflow-repair-state.js
       kaola-workflow-claim.js
-      kaola-workflow-session-env.js
+      kaola-workflow-active-folders.js
       kaola-workflow-sink-merge.js
       kaola-workflow-sink-pr.js
       kaola-workflow-roadmap.js
@@ -82,7 +82,7 @@ case "$FORGE" in
     SUPPORT_SCRIPT_NAMES=(
       kaola-workflow-repair-state.js
       kaola-workflow-claim.js
-      kaola-workflow-session-env.js
+      kaola-workflow-active-folders.js
       kaola-workflow-compact-context.js
       kaola-workflow-sink-merge.js
       kaola-workflow-sink-mr.js

@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { getCoordRoot, removeWorktree } = require('./kaola-workflow-claim.js');
+const { getCoordRoot, readActiveFolders, removeWorktree } = require('./kaola-workflow-claim.js');
 
 const OFFLINE = process.env.KAOLA_WORKFLOW_OFFLINE === '1';
 const FORCE_FF_FAIL = parseInt(process.env.KAOLA_WORKFLOW_FORCE_FF_FAIL || '0', 10);
@@ -221,10 +221,10 @@ function main() {
       process.stderr.write('sink-merge: could not chdir to main root before worktree removal: ' + e.message + '\n');
     }
 
-    const lockFilePath = path.join(coordRoot, 'kaola-workflow', '.locks', args.project + '.lock');
-    let lock = null;
-    try { lock = JSON.parse(fs.readFileSync(lockFilePath, 'utf8')); } catch (_) {}
-    if (lock) { try { removeWorktree(coordRoot, args.project, lock); } catch (_) {} }
+    const root = mainRootFromCoord(coordRoot);
+    const folder = readActiveFolders(root, { excludeClosedIssues: false })
+      .find(item => item.project === args.project);
+    if (folder) { try { removeWorktree(root, args.project, folder); } catch (_) {} }
   }
 
   // Step 1 — git fetch (skip if OFFLINE; fatal throw on error)

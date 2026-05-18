@@ -70,53 +70,6 @@ function isSafeName(name) {
   return Boolean(name) && !name.includes('/') && !name.includes('\\') && name !== '.' && name !== '..';
 }
 
-function currentSessionId() {
-  return process.env.KAOLA_SESSION_ID ||
-    process.env.CODEX_THREAD_ID ||
-    process.env.CLAUDE_SESSION_ID ||
-    '';
-}
-
-function projectOwner(workflowDir, project) {
-  // Try coordRoot path first (new storage location), fall back to legacy
-  let lockFilePath;
-  try {
-    const repoRoot = path.dirname(workflowDir); // workflowDir is root/kaola-workflow, so repoRoot is root
-    const raw = require('child_process').execFileSync('git', ['rev-parse', '--git-common-dir'], {
-      cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore']
-    }).trim();
-    const coordRoot = path.resolve(repoRoot, raw);
-    lockFilePath = path.join(coordRoot, 'kaola-workflow', '.locks', project + '.lock');
-    if (!fs.existsSync(lockFilePath)) {
-      lockFilePath = path.join(workflowDir, '.locks', project + '.lock');
-    }
-  } catch (_) {
-    lockFilePath = path.join(workflowDir, '.locks', project + '.lock');
-  }
-
-  try {
-    const lock = JSON.parse(readFile(lockFilePath));
-    if (isSafeName(lock.session_id)) return lock.session_id;
-  } catch (_) {}
-
-  const stateFile = path.join(workflowDir, project, 'workflow-state.md');
-  try {
-    const content = readFile(stateFile);
-    if (/^status:\s*active\s*$/m.test(content)) {
-      const sessionId = field(content, 'session_id');
-      if (isSafeName(sessionId)) return sessionId;
-    }
-  } catch (_) {}
-
-  return '';
-}
-
-function ownedByCurrentSession(workflowDir, project, sessionId) {
-  if (!sessionId) return false;
-  const owner = projectOwner(workflowDir, project);
-  return !owner || owner === sessionId;
-}
-
 function projectHasPhaseArtifacts(projectDir) {
   return fs.readdirSync(projectDir).some(file => /^phase\d.+\.md$/.test(file));
 }
@@ -136,7 +89,7 @@ function projectHasActiveState(projectDir) {
     );
 }
 
-function activeProjects(workflowDir, sessionId) {
+function activeProjects(workflowDir) {
   if (!exists(workflowDir)) return [];
 
   return fs.readdirSync(workflowDir, { withFileTypes: true })
@@ -146,22 +99,17 @@ function activeProjects(workflowDir, sessionId) {
       const projectDir = path.join(workflowDir, entry.name);
       return projectHasPhaseArtifacts(projectDir) || projectHasActiveState(projectDir);
     })
-    .filter(entry => ownedByCurrentSession(workflowDir, entry.name, sessionId))
     .map(entry => entry.name)
     .sort();
 }
 
 function selectProject(workflowDir, argument) {
-  const sessionId = currentSessionId();
   const requested = String(argument || '').trim().split(/\s+/)[0];
   if (isSafeName(requested) && exists(path.join(workflowDir, requested))) {
-    if (!ownedByCurrentSession(workflowDir, requested, sessionId)) {
-      return { reason: `project ${requested} is owned by another session` };
-    }
     return { project: requested };
   }
 
-  const projects = activeProjects(workflowDir, sessionId);
+  const projects = activeProjects(workflowDir);
   if (projects.length === 1) {
     return { project: projects[0] };
   }
@@ -170,9 +118,7 @@ function selectProject(workflowDir, argument) {
     return { reason: `ambiguous active projects: ${projects.join(', ')}` };
   }
 
-  return { reason: sessionId
-    ? 'no active workflow projects owned by current session'
-    : 'no active workflow projects with phase artifacts or active state' };
+  return { reason: 'no active workflow projects with phase artifacts or active state' };
 }
 
 function complianceRows(content) {
@@ -336,7 +282,7 @@ function extractSection(content, heading) {
 }
 
 function preservedStateBlocks(existingContent) {
-  return ['Sink', 'Lease']
+  return ['Sink']
     .map(section => extractSection(existingContent, section))
     .filter(Boolean);
 }

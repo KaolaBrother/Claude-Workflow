@@ -271,21 +271,20 @@ Document coding style, testing rules, Git practices, naming, and review expectat
 - Initialized Kaola-Workflow documentation structure.
 ```
 
-## Session Initialization
+## Active Folder Initialization
 
-If `KAOLA_SESSION_ID` is not already set, generate a UUID and claim the issue before starting:
+If a GitHub issue is known, create the active workflow folder before starting:
 
 ```bash
-export KAOLA_SESSION_ID="$(node -e "process.stdout.write(require('crypto').randomUUID())")"
 kaola_script(){ _n="$1"; for _p in "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}" "$HOME/.claude/kaola-workflow/scripts/$_n" "./scripts/$_n"; do [ -f "$_p" ] && { printf '%s\n' "$_p"; return; }; done; return 1; }
 CLAIM_JS="$(kaola_script kaola-workflow-claim.js)"
 [ -f "$CLAIM_JS" ] && node "$CLAIM_JS" claim \
-  --session "$KAOLA_SESSION_ID" --project "{project}" --issue {N}
+  --project "{project}" --issue {N}
 ```
 
 Replace `{project}` with the workflow project folder name (e.g., `multi-session-substrate`) and `{N}` with the GitHub issue number. If the issue number is unknown, omit `--issue`.
 
-If `kaola-workflow-claim.js` is unavailable (manual install without the script), skip this step and proceed without session tracking.
+If `kaola-workflow-claim.js` is unavailable (manual install without the script), skip this step and proceed with local phase artifacts.
 
 ---
 

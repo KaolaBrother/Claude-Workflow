@@ -21,7 +21,7 @@ user-owned choices, such as risky Git synchronization, destructive rewrites,
 credential or deployment actions, or issue/roadmap reorganization.
 
 The single-issue completion contract applies at the end of every run: after
-Phase 6 closes issue #N and releases the lease, the agent stops and awaits
+Phase 6 closes issue #N and archives the active folder, the agent stops and awaits
 explicit re-direction. Do not use "next issue in line" phrasing in `/goal`
 templates — cross-issue continuation is never automatic.
 
@@ -308,56 +308,35 @@ is detected at test time by `scripts/validate-script-sync.js`.
 
 | Script | Purpose | Phase |
 |--------|---------|-------|
-| `kaola-workflow-repair-state.js` | Reconstruct workflow state from phase artifacts (fixes empty session IDs returning true; now returns false) | Init / Resume |
-| `kaola-workflow-claim.js` | Multi-session lease management (claim, release, heartbeat, ticker, sweep, status, patch-branch, watch-pr, **bootstrap** (requires `--target-issue N`), derive-session, finalize, **pick-next, resume, worktree-status, worktree-finalize**); `--runtime claude\|codex` flag on claim and bootstrap; closed-issue cleanup via fast-path in sweep; step:complete + phase6-summary.md archive detection; `cmdResume` ownership guard via `--session` | All phases |
+| `kaola-workflow-repair-state.js` | Reconstruct workflow state from phase artifacts | Init / Resume |
+| `kaola-workflow-claim.js` | Active-folder coordination: claim, release/discard, status, patch-branch, watch-pr, bootstrap/startup, finalize, pick-next, resume, worktree-status, worktree-finalize | All phases |
 | `kaola-workflow-sink-merge.js` | Branch-per-issue auto-merge sink — rebase-then-ff-merge sequence | Phase 6 |
 | `kaola-workflow-roadmap.js` | ROADMAP.md regenerator — generate/migrate/validate/init-issue/project-name subcommands; reads `kaola-workflow/.roadmap/issue-{N}.md` per-issue files | Phase 1, Phase 6 |
-| `kaola-workflow-classifier.js` | Parallel-work classifier — classifies open issues as green/yellow/red/blocked before claim; reads lock files, issue file sets, and active remote claim markers | Startup (Step 0) |
+| `kaola-workflow-classifier.js` | Parallel-work classifier: classifies open issues as green/yellow/red/blocked using active folders, roadmap metadata, and GitHub state | Startup |
 | `kaola-workflow-sink-pr.js` | PR-based sink — pushes branch, opens GitHub PR via `gh pr create`, records PR URL; optionally enables auto-merge | Phase 6 |
 
-### Session Identity Binding
+### Active Folder Coordination
 
-Session identity is derived from the Claude ancestor process rather than self-asserted via `KAOLA_SESSION_ID`. This prevents accidental cross-session conflicts and enforces true session isolation.
-
-**Kernel-Derived Identity Model:**
-- Session start (`SessionStart` hook) writes an O_EXCL identity file at `<coordRoot>/kaola-workflow/.runtime/<claude_pid>.identity` containing the session ID, Claude PID, and start time
-- `derive-session` subcommand walks the process tree to locate a Claude ancestor, reads its identity file, validates the ancestor is still alive with matching start time, and returns the derived session ID
-- `kaola-workflow-pre-commit.sh` hook uses `derive-session` to block cross-session commits
+Kaola-Workflow treats `kaola-workflow/{project}/workflow-state.md` plus GitHub issue/PR state as the durable coordination contract. No lease/session layer remains.
 
 **Environment Variables:**
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `KAOLA_ENFORCE_PLATFORM_SESSION` | (unset) | Set to `1` to enable kernel-derived session identity enforcement; mutating commands (claim, release, heartbeat, etc.) exit 3 on session mismatch |
-| `KAOLA_KERNEL_SESSION_SKIP` | (unset) | Set to `1` to skip kernel derivation and use `KAOLA_SESSION_ID` directly (backward compatibility, direct git usage) |
-| `KAOLA_KERNEL_SESSION_FAKE_PID` | (unset) | TEST ONLY — override `walkToClaudePid()` return value for testing without running inside Claude |
-| `KAOLA_COORD_ROOT` | (auto) | Override the coordination root path; normally discovered via `git rev-parse --git-common-dir` |
-| `KAOLA_WORKFLOW_DEBUG_CWD` | (unset) | DEV/TEST ONLY — when set, `sink-merge.js` writes the final `process.cwd()` to the named file on exit. Used by test suite to verify CWD restoration after worktree removal. Not for production use. |
-| `KAOLA_WORKTREE_NATIVE` | `0` | Set to `1` to enable worktree-as-primary-signal mode. `workflow-next.md` routes to `pick-next` instead of `startup`; Phase 4 resolves `ACTIVE_WORKTREE_PATH` from the issue worktree path instead of `$(pwd)`. Legacy session-lease path remains active when this flag is unset. |
-| `KAOLA_PATH` | (unset) | Set to `fast` to request fast-path workflow execution (Plan+Execute+Review single-pass for small, well-scoped issues); defaults to `full` (standard 6-phase workflow). Fast path requires ≤2 closely related files and mandates escalation to full workflow on scope growth. |
+| `KAOLA_WORKFLOW_OFFLINE` | `0` | Skip GitHub calls for local tests or air-gapped usage |
+| `KAOLA_WORKFLOW_DEBUG_CWD` | (unset) | DEV/TEST ONLY — when set, `sink-merge.js` writes its final cwd to this file |
+| `KAOLA_PATH` | (unset) | Set to `fast` to request fast-path workflow execution; defaults to the full six-phase flow |
 
-**Worktree-Native Subcommands (`KAOLA_WORKTREE_NATIVE=1`):**
-
-Four new subcommands implement the worktree-as-primary-signal model. Enable with `KAOLA_WORKTREE_NATIVE=1`. Legacy subcommands remain active when the flag is unset.
+**Active-folder subcommands:**
 
 | Subcommand | Usage | Description |
 |------------|-------|-------------|
-| `pick-next` | `node scripts/kaola-workflow-claim.js pick-next --session <id> --runtime <claude\|codex> [--sink <merge\|pr>]` | Finds first unclaimed open issue, provisions a linked worktree, sets `workflow:in-progress` label (online), and emits `{verdict:'acquired', issue, project, branch, worktree_path}` or `{verdict:'none'}` |
-| `resume` | `node scripts/kaola-workflow-claim.js resume [--project <name>] [--session <id>]` | Scans phase artifacts in the main worktree to determine the current phase and emit the next slash command. Derives project from current branch if `--project` is omitted |
-| `worktree-status` | `node scripts/kaola-workflow-claim.js worktree-status` | Lists all `workflow/issue-*` linked worktrees with GitHub issue metadata; entries include `closed: true\|false` for linked-issue state, and unregistered dirs in the `*.kw/` parent appear with `registered: false` and `abandoned: true\|false` flags |
-| `worktree-finalize` | `node scripts/kaola-workflow-claim.js worktree-finalize --project <name> [--session <id>]` | Copies phase artifacts from main worktree into the issue worktree and commits them on the issue branch |
-
-**`derive-session` Subcommand:**
-
-```bash
-node scripts/kaola-workflow-claim.js derive-session [--json]
-```
-
-Walks the process tree to find the Claude ancestor PID, reads its identity file, validates the ancestor is alive and has a matching start time, and returns the derived session ID. Exits with code 4 if no valid Claude ancestor is found.
-
-- Output (plain): session ID to stdout
-- Output (`--json`): `{ "sid": "<session-id>", "source": "file|skip|invalid_sid|null" }` to stdout
-- Exit codes: 0 (success), 4 (no Claude ancestor found)
+| `startup` / `bootstrap` | `node scripts/kaola-workflow-claim.js startup --target-issue <N> [--runtime claude|codex] [--sink merge|pr]` | Validates and atomically creates or reuses the active folder for issue N |
+| `status` | `node scripts/kaola-workflow-claim.js status` | Lists active folders and their issue, branch, phase, sink, and worktree metadata |
+| `release` / `discard` | `node scripts/kaola-workflow-claim.js release --project <name>` | Archives an active folder as abandoned and clears advisory GitHub labels when online |
+| `finalize` | `node scripts/kaola-workflow-claim.js finalize --project <name>` | Marks the folder closed and moves it to `kaola-workflow/archive/` |
+| `watch-pr` | `node scripts/kaola-workflow-claim.js watch-pr` | Archives PR-backed folders when GitHub reports MERGED or CLOSED |
+| `worktree-status` / `worktree-finalize` | see `--help` usage errors | Lists workflow worktrees and mirrors final artifacts into the linked worktree |
 
 ### Classifier Configuration
 
@@ -371,7 +350,7 @@ The `kaola-workflow-classifier.js` script uses `~/.config/kaola-workflow/config.
 
 Valid `parallel_mode` values:
 
-- `auto` (default): Classify each issue as green/yellow/red/blocked before claiming, based on dependency graphs, exact file-path overlaps, file-area overlaps, and lock files.
+- `auto` (default): Classify each issue as green/yellow/red/blocked before claiming, based on dependency graphs, exact file-path overlaps, file-area overlaps, and active folders.
 - Other values: Bypass classification; treat all issues as green for fast claiming.
 
 Exact file-path overlap returns `red`, including shared-infrastructure files such as `scripts/kaola-workflow-claim.js` and packaged plugin files under `plugins/kaola-workflow/`. Different files in the same shared-infrastructure directory can still return `yellow`. Offline roadmap classification reads explicit paths and `touches:` metadata from `kaola-workflow/.roadmap/issue-{N}.md`.
@@ -389,31 +368,12 @@ Issue selection is an agent decision, not a hidden script decision. Agents must:
 5. Pass the chosen issue number via `KAOLA_TARGET_ISSUE=N` before calling `/workflow-next`
 
 The startup script validates the agent's choice:
-- Issue must be unclaimed (no active lock)
+- Issue must be unclaimed (no active folder)
 - Issue must be green or yellow (not blocked or red)
-- No duplicate claims across sessions
+- No duplicate active folder for the same issue
 
-If the agent does not provide an explicit target issue, startup refuses and emits a structured error with the `recovery` field indicating the next action.
+If the agent does not provide an explicit target issue, startup refuses with `verdict: no_target`.
 
-**Startup Receipt Priority Information** — The startup receipt includes a `ranking` array listing `{ issue, tier, priority_label, override_label }` for all candidate issues. This helps agents make informed decisions. Ranking sorts by:
-
-1. **`workflow:queued` label** — queued issues always win, regardless of priority tier.
-2. **Priority tier** — P0 (highest) → P1 → P2 → P3 → unlabeled (lowest). Determined by GitHub label names.
-3. **Issue number** — ascending (lowest number wins among equal-priority issues).
-
-**Top-tier override labels** — any label listed in `priority_top_tier_labels` is forced to tier 0, overriding P-label ranking. When an override label fires, `priority_label` is `null` and `override_label` is the matched label name.
-
-Configure top-tier labels in either config layer (union of both arrays applies):
-
-```json
-// ~/.config/kaola-workflow/config.json  (global)
-// <repo>/kaola-workflow/config.json     (project-local)
-{
-  "priority_top_tier_labels": ["hotfix", "Engine Showcase Gap"]
-}
-```
-
-Both config files are read-only on startup; missing or malformed files silently return an empty label list.
 
 ### PR Sink
 
@@ -431,17 +391,17 @@ The sink mode is set at claim time and determines how Phase 6 delivers the compl
 }
 ```
 
-- `false` (default): open PR and watch for manual merge; `watch-pr` detects MERGED/CLOSED and releases lease automatically
+- `false` (default): open PR and watch for manual merge; `watch-pr` detects MERGED/CLOSED and archives the active folder automatically
 - `true`: open PR and also call `gh pr merge --auto --squash --delete-branch` (requires branch protection rules to be enabled on the repo; failure is non-fatal)
 
 **`watch-pr` subcommand** (`kaola-workflow-claim.js watch-pr`):
 
-Called automatically at `/workflow-next` Startup Step 0 (order: sweep → watch-pr → classify → claim). Scans all `.lock` files for entries with `sink: pr` and a `pr_url`. For each:
-- `MERGED`: releases lease, deletes local branch via `git branch -D`
-- `CLOSED` (no merge): releases lease with reason=aborted; does NOT delete branch; issue stays open
-- `OPEN`: updates `last_heartbeat` and extends `expires` in the lock file
+Called automatically at `/workflow-next` startup. Scans active folders with `sink: pr` and `pr_url`. For each:
+- `MERGED`: archives the folder as closed and clears advisory GitHub labels
+- `CLOSED` (no merge): archives the folder as abandoned and clears advisory GitHub labels
+- `OPEN`: leaves the folder active
 
-**OFFLINE behavior**: `kaola-workflow-sink-pr.js` writes `OFFLINE_PLACEHOLDER` and `0` to the lock file, workflow-state.md Sink block, and phase6-summary.md, then exits 0.
+**OFFLINE behavior**: `kaola-workflow-sink-pr.js` writes `OFFLINE_PLACEHOLDER` and `0` to the workflow-state.md Sink block and phase6-summary.md, then exits 0.
 
 The sink-merge script is invoked after the Phase 6 final commit gate to automate the final merge sequence. It performs: git fetch, clean-worktree guard, checkout of the requested workflow branch, merge-base skip-check, rebase onto origin/main, post-rebase validation, FF-only merge with race-condition retry loop (MAX_AUTOMERGE_RETRIES=3), push, issue close, and branch cleanup. Exit codes: 0 (success), 1 (error), 2 (FF race exhausted).
 
@@ -512,53 +472,18 @@ make the next command unsafe.
 
 When installed as a Claude Code plugin, `hooks/hooks.json` injects a compact resume reminder after context compaction. Manual command install copies slash commands only; use plugin install when you want the compaction resume hook.
 
-## Multi-Session Support
+## Parallel Active Work
 
-Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets a distinct project. Session management is handled by `kaola-workflow-claim.js`:
+Multiple Kaola-Workflow runs can coexist when each targets a distinct active folder. The source of truth is `kaola-workflow/{project}/workflow-state.md`, with GitHub issue state used to reject closed issues and PR state used by `watch-pr`.
 
-### Session Leases & Coordination State
+- Startup requires an explicit `--target-issue N`; the agent chooses the issue and scripts validate it.
+- Claiming uses atomic folder creation, so two agents cannot create the same `kaola-workflow/{project}/` folder.
+- `status` lists active folders; `release` archives abandoned work; `finalize` archives completed work.
+- The pre-commit hook blocks commits that stage multiple workflow project folders together.
 
-- Automatic on startup via `/workflow-next`; it uses `KAOLA_SESSION_ID` when set, otherwise derives it from the host platform (`CODEX_THREAD_ID` in Codex, Claude Code `SessionStart.session_id` via the plugin hook), and generates a fallback only when no platform id is available
-- Manual claim/release: `kaola-workflow-claim.js claim --session <id> --project <name> --issue <N>`
-- Explicit recovery/handoff: check `kaola-workflow-claim.js can-handoff --project <name> --session <id>` first, then use `kaola-workflow-claim.js handoff --project <name> --session <id>` to transfer an unfinished project only when the user intentionally wants to pick it up
-- Background ticker (`ticker` subcommand) keeps leases active across machines with 15-min heartbeat intervals
-- Claim race tiebreaker: lowest GitHub comment ID wins; losers yield cleanly and release the lease
-- `bootstrap` requires explicit `--target-issue N`; the agent selects the issue before invoking bootstrap. Auto-scan removed.
-- Remote sweeper (`sweep` subcommand) checks GitHub comment `updated_at` — skips active sessions (< 24h), clears stale ones (≥ 24h); **first-pass closed-fast-path**: if linked GitHub issue is CLOSED, immediately removes label/assignee/worktree without 24h cutoff; **second pass** garbage-collects orphaned active directories (no lock file + expired >30 minutes + no phase artifacts) as `status: abandoned` AND archives completed workflows (`step: complete` + `phase6-summary.md` present + no lock file); **third pass** removes `.abandoned-<ISO>` directories in the `*.kw/` parent dir that are older than 30 minutes
-- `status` subcommand now includes `'issue closed'` in the drift array when the linked GitHub issue is in CLOSED state
-- Pre-commit hook blocks commits that stage files from a project owned by a different session
+### Per-Issue Git Worktrees
 
-**Shared coordination state (coordRoot)**: All linked worktrees of the same repository share lock, session, and ticker state via the canonical git common directory (`<repo>/.git/kaola-workflow/`). Discovered via `git rev-parse --git-common-dir`. This ensures that a session is uniquely bound to an issue across all worktrees on the same machine or across different machines accessing the same repository.
-
-### Per-Session Git Worktrees
-
-When a session claims an issue, `kaola-workflow-claim.js` automatically provisions a dedicated git worktree at `<repo-parent>/<repo-name>.kw/<project>/` via the `provisionWorktree()` helper. The worktree path is stored in the lock file as `worktree_path`, and the environment variable `KAOLA_WORKTREE_PATH` is exported after provisioning. The startup receipt also includes `worktree_path` for `owned` and `acquired` claim outcomes, allowing agents and scripts to read the worktree path directly without querying the lock file.
-
-**Worktree lifecycle management:**
-- `removeWorktree()`: removes worktree on PR MERGED, sink-merge success, or explicit release
-- Dirty worktrees are renamed to `.abandoned-<ISO-timestamp>` and left for manual cleanup
-- Removal of own current working directory is deferred to `.pending-removal/<project>.json` for processing on next startup/sweep
-- `drainPendingRemovals()`: processes deferred removals during startup sweep and after sink completion
-- `cmdWatchPr()`: automatically removes worktree on PR MERGED or CLOSED
-- `sink-merge.js`: removes worktree before final branch deletion
-- `cmdSweep()`: runs `drainPendingRemovals()` followed by `git worktree prune`
-
-**Environment variable**: All workflow phases should use `KAOLA_WORKTREE_PATH` when present. The 6 SKILL.md files include a Session Heartbeat shim that changes directory: `cd "$KAOLA_WORKTREE_PATH" 2>/dev/null || true`.
-
-### Session State & Resumption
-
-Normal startup resumes only work whose lease `session_id` exactly matches the current `KAOLA_SESSION_ID`. Active work owned by a different live session is treated as occupied, so `/workflow-next` skips it and claims the next free issue. If no free issue exists, startup stops with a no-unclaimed-work message instead of adopting the foreign lease.
-
-Session id lifecycle:
-
-- Claude Code: new startup, `/clear`, and normal exit/re-enter produce a fresh session id. `--continue`, `--resume`, and `/resume` keep the resumed session id. The plugin SessionStart hook persists that id as `KAOLA_SESSION_ID` for later Bash commands.
-- Codex: fresh threads, `/clear`, `/new`, and `/fork` produce a fresh thread id. `/compact`, `/resume`, and `codex resume <SESSION_ID>` keep the same resumed thread id. Kaola uses `CODEX_THREAD_ID` when `KAOLA_SESSION_ID` is unset.
-
-Use recovery/handoff only when a user intentionally switches a new session to continue a specific unfinished project. Recovery is never triggered implicitly by being in the same folder or by there being only one active workflow project. Normal handoff is blocked by live local Claude session history, an alive ticker PID, an unexpired lock, or a recent heartbeat; `--force-live-takeover` is reserved for explicit dangerous recovery.
-
-**Backwards compatibility**: On every startup, an idempotent migrator (`migrateLegacyCoordState()`) runs to move coordination state from the legacy `<worktree>/kaola-workflow/` location to the shared coordRoot. No manual migration needed.
-
-Cross-machine hardening ensures that only one session can hold an issue lease at a time, with automatic cleanup if a session becomes inactive. For full details, see `commands/workflow-next.md` "Startup Step 0" and "Co-active Leases".
+When Git is available, `kaola-workflow-claim.js` provisions a sibling worktree at `<repo-parent>/<repo-name>.kw/<project>/`. The path is stored in the active folder Sink block as `worktree_path`, so commands can resolve the linked worktree without consulting a lock file.
 
 ## Updating
 

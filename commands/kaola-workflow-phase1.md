@@ -21,48 +21,9 @@ architecture, or write implementation code.
 - Do not ask the user to confirm generated project/folder names. Routine naming
   is nonessential workflow bookkeeping and is chosen autonomously.
 
-## Session Heartbeat
-
-If a claim session is active or recoverable, ensure the background heartbeat ticker is running:
-
-```bash
-kaola_script(){ _n="$1"; for _p in "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}" "$HOME/.claude/kaola-workflow/scripts/$_n" "./scripts/$_n"; do [ -f "$_p" ] && { printf '%s\n' "$_p"; return; }; done; return 1; }
-_CLAIM_JS="$(kaola_script kaola-workflow-claim.js)"
-if [ -f "$_CLAIM_JS" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
-  KAOLA_SESSION_ID="$(node "$_CLAIM_JS" session 2>/dev/null || true)"
-  [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
-fi
-if [ -f "$_CLAIM_JS" ] && [ -n "${KAOLA_SESSION_ID:-}" ]; then
-  node "$_CLAIM_JS" session --project "{project}" --session "$KAOLA_SESSION_ID" >/dev/null || {
-    echo "Kaola-Workflow: {project} is owned by another session; use explicit recovery/handoff to continue it."
-    exit 1
-  }
-fi
-if [ -n "${KAOLA_SESSION_ID:-}" ] && [ -f "$_CLAIM_JS" ]; then
-  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
-  if [ ! -f "$_TICKER_PID_FILE" ] || ! kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-    nohup node "$_CLAIM_JS" ticker \
-      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
-    disown
-  fi
-fi
-```
 
 ## Resume Detection
 
-## Startup Receipt Guard
-
-For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
-exists and authorizes this exact project with `claim: "owned"` or
-`claim: "acquired"` before doing phase work. Run the script-level verifier and
-stop on failure:
-
-```bash
-node "$_CLAIM_JS" verify-startup --session "$KAOLA_SESSION_ID" --project "{project}" >/dev/null || {
-  echo "Kaola-Workflow: startup receipt does not authorize {project}; run startup or explicit recovery instead."
-  exit 1
-}
-```
 
 If `$ARGUMENTS` is an existing project, read:
 
@@ -111,7 +72,7 @@ name, or if multiple unrelated issues/tasks are competing for the same workflow
 cycle.
 
 Create or update `kaola-workflow/{project-name}/workflow-state.md`. If the
-file already contains `## Sink` or `## Lease`, preserve those blocks exactly;
+file already contains `## Sink`, preserve those blocks exactly;
 only update the phase position, pending gates, and evidence fields. Do not
 replace the whole file with the minimal snippet below.
 
@@ -240,7 +201,7 @@ step: complete
 next_command: /kaola-workflow-phase2 {project-name}
 ```
 
-Preserve any existing `## Sink` and `## Lease` blocks during this update.
+Preserve any existing `## Sink` blocks during this update.
 
 Continue to Phase 2 when Phase 1 evidence and compliance rows are complete.
 
@@ -319,19 +280,16 @@ else
 fi
 ```
 
-**Stage 1 migration** — if the Sink block showed `branch: TBD` before the
-branch name was resolved, call `patch-branch` to backfill the lock file, Sink
-block, and GitHub claim comment:
+If the Sink block showed `branch: TBD` before the branch name was resolved,
+call `patch-branch` to backfill the Sink block:
 
 ```bash
-# Only if the stored branch was TBD (legacy lease)
 if [ "$(grep '^branch:' kaola-workflow/{project}/workflow-state.md | awk '{print $2}')" = "TBD" ]; then
   kaola_script(){ _n="$1"; for _p in "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}" "$HOME/.claude/kaola-workflow/scripts/$_n" "./scripts/$_n"; do [ -f "$_p" ] && { printf '%s\n' "$_p"; return; }; done; return 1; }
   CLAIM_JS="$(kaola_script kaola-workflow-claim.js)"
   [ -f "$CLAIM_JS" ] && node "$CLAIM_JS" \
     patch-branch \
     --project {project} \
-    --session "$KAOLA_SESSION_ID" \
     --branch "$SINK_BRANCH"
 fi
 ```
@@ -347,6 +305,6 @@ step: complete
 next_command: /kaola-workflow-phase2 {project-name}
 ```
 
-Preserve any existing `## Sink` and `## Lease` blocks during this update.
+Preserve any existing `## Sink` blocks during this update.
 
 Continue to Phase 2 when Phase 1 evidence and compliance rows are complete.

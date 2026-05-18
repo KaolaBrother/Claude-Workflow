@@ -68,7 +68,7 @@ Add a concise `## Kaola-Workflow` section if none exists:
 - Verify relevant tests before claiming completion.
 - Kaola-Workflow agent profiles live in `.codex/agents/kaola-workflow/` and are
   wired by the managed block in `.codex/config.toml`.
-- Session lifecycle: `kaola-workflow-claim.js` manages claim (acquires lock, starts heartbeat), release (frees lock), and sweep (expires stale locks). Sessions heartbeat every 5 minutes via `ticker`; locks expire after 30 minutes of silence.
+- Active folder lifecycle: `kaola-workflow-claim.js` manages claim/startup (atomic folder create), status, release/discard, watch-pr, and finalize/archive. No legacy coordination layer is used.
 - Active issue work runs in a sibling worktree at `<repo>.kw/<project>/` when `KAOLA_WORKTREE_NATIVE=1`; see README for the full contract.
 - Top-priority labels: declare in `kaola-workflow/config.json` (`priority_top_tier_labels`) when the repo uses something other than P0–P3 naming.
 

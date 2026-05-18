@@ -15,51 +15,9 @@ Before declaring completion, audit every explicit requirement against concrete
 evidence. Stop only for true external authorization, materially user-owned
 choices, or ambiguity that blocks correctness.
 
-## Session Heartbeat
-
-If a session is active or recoverable, ensure the background heartbeat ticker is running:
-
-```bash
-claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
-if [ ! -f "$claim_script" ]; then
-  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
-fi
-if [ -f "$claim_script" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
-  KAOLA_SESSION_ID="$(node "$claim_script" session 2>/dev/null || true)"
-  [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
-fi
-if [ -f "$claim_script" ] && [ -n "${KAOLA_SESSION_ID:-}" ] && [ -n "${KAOLA_PROJECT:-}" ]; then
-  node "$claim_script" session --project "$KAOLA_PROJECT" --session "$KAOLA_SESSION_ID" >/dev/null || {
-    echo "Kaola-Workflow: $KAOLA_PROJECT is owned by another session; use explicit recovery/handoff to continue it."
-    exit 1
-  }
-fi
-[ -n "${KAOLA_SESSION_ID:-}" ] && {
-  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
-  if [ ! -f "$_TICKER_PID_FILE" ] || ! kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-    nohup node "$claim_script" ticker \
-      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
-    disown
-  fi
-  cd "$KAOLA_WORKTREE_PATH" 2>/dev/null || true
-}
-```
 
 ## Guardrails
 
-## Startup Receipt Guard
-
-For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
-exists and authorizes this exact project with `claim: "owned"` or
-`claim: "acquired"` before doing phase work. Run the script-level verifier and
-stop on failure:
-
-```bash
-node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KAOLA_PROJECT" >/dev/null || {
-  echo "Kaola-Workflow: startup receipt does not authorize $KAOLA_PROJECT; run startup or explicit recovery instead."
-  exit 1
-}
-```
 
 - Run or cite fresh final validation before claiming completion.
 - Do not close issues until acceptance criteria pass.
@@ -72,14 +30,7 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
 1. Final validation: run the full relevant project commands once against the final candidate state. Save output to `.cache/final-validation.md`.
 2. Acceptance check: verify Phase 1 success criteria, Phase 3 tasks, tests, review status, and absence of debug artifacts.
    ```bash
-   # Resolve linked worktree path for this session
-   _COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
-   if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
-   _LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/${KAOLA_PROJECT}.lock"
-   ACTIVE_WORKTREE_PATH=""
-   if [ -f "$_LOCK_FILE" ]; then
-     ACTIVE_WORKTREE_PATH="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
-   fi
+   ACTIVE_WORKTREE_PATH="$(node -e "try{const fs=require('fs');const s=fs.readFileSync('kaola-workflow/' + process.env.KAOLA_PROJECT + '/workflow-state.md','utf8');const m=s.match(/^worktree_path:\\s*(.+)$/m);process.stdout.write(m?m[1].trim():'');}catch(e){}" 2>/dev/null)" || true
    [ -z "$ACTIVE_WORKTREE_PATH" ] && ACTIVE_WORKTREE_PATH="$(pwd)"
    ```
 
@@ -90,44 +41,14 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
 7. Archive is performed atomically by `cmdFinalize` in step 8b below. Do not perform a manual copy or git mv here.
 8. Commit and push only approved files.
 
-   ### Cross-Session Staging Guard
+   ### Staging Guard
 
-   Before any `git add` of files under `kaola-workflow/${KAOLA_PROJECT}/`,
-   verify this session owns the project's lease. Codex relies on this
-   prompt-level check (no PreToolUse hook); run it unconditionally when
-   `KAOLA_SESSION_ID` is set:
-
-   ```bash
-   if [ -n "${KAOLA_SESSION_ID:-}" ]; then
-     LOCK_FILE="kaola-workflow/.locks/${KAOLA_PROJECT}.lock"
-     OWNER=""
-     if [ -f "$LOCK_FILE" ]; then
-       OWNER="$(node -e "
-         try {
-           const d = JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8'));
-           process.stdout.write(d.session_id || '');
-         } catch(e) { process.stdout.write(''); }
-       " "$LOCK_FILE" 2>/dev/null)" || true
-     fi
-     if [ -z "$OWNER" ]; then
-       STATE_FILE="kaola-workflow/${KAOLA_PROJECT}/workflow-state.md"
-       [ -f "$STATE_FILE" ] && OWNER="$(grep -m1 '^session_id:' "$STATE_FILE" | sed 's/^session_id:[[:space:]]*//')" || true
-     fi
-     if [ -n "$OWNER" ] && [ "$OWNER" != "$KAOLA_SESSION_ID" ]; then
-       echo "BLOCKED: cross-session staging on project '${KAOLA_PROJECT}'. Lock held by ${OWNER}; current session is ${KAOLA_SESSION_ID}." >&2
-       exit 1
-     fi
-   fi
-   ```
-
-   Also enforce the single-project rule — if more than one
+   Enforce the single-project rule. If more than one
    `kaola-workflow/*/` project is staged at once, split the commit:
 
    ```bash
    PROJECT_COUNT=$(git diff --cached --name-only \
      | grep '^kaola-workflow/' \
-     | grep -v '^kaola-workflow/\.locks/' \
-     | grep -v '^kaola-workflow/\.sessions/' \
      | grep -v '^kaola-workflow/archive/' \
      | grep -v '^kaola-workflow/\.roadmap/' \
      | grep -v '^kaola-workflow/ROADMAP\.md$' \
@@ -138,9 +59,7 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
    fi
    ```
 
-   If either check fails, do not stage; release the project under another
-   lease, or coordinate manually. Do not attempt to bypass this guard.
-
+   If the check fails, do not stage; split the commit or coordinate manually.
    Before mirroring artifacts, resolve the linked worktree and copy Phase 6 artifacts:
 
    ```bash
@@ -148,12 +67,9 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
    # Mirror MUST run after all Phase 6 artifact writes.
    _COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
    if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
-   _LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/${KAOLA_PROJECT}.lock"
    ACTIVE_WORKTREE_PATH="$(pwd)"
-   if [ -f "$_LOCK_FILE" ]; then
-     _WT="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
-     [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
-   fi
+   _WT="$(node -e "try{const fs=require('fs');const s=fs.readFileSync('kaola-workflow/' + process.env.KAOLA_PROJECT + '/workflow-state.md','utf8');const m=s.match(/^worktree_path:\\s*(.+)$/m);process.stdout.write(m?m[1].trim():'');}catch(e){}" 2>/dev/null)" || true
+   [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
    if [ "$ACTIVE_WORKTREE_PATH" != "$(pwd)" ]; then
      mkdir -p "$ACTIVE_WORKTREE_PATH/kaola-workflow/${KAOLA_PROJECT}/"
      cp -R "kaola-workflow/${KAOLA_PROJECT}/." "$ACTIVE_WORKTREE_PATH/kaola-workflow/${KAOLA_PROJECT}/"
@@ -177,8 +93,7 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
    SINK_KIND="${SINK_KIND:-merge}"
    SINK_BRANCH=$(grep '^branch:' "kaola-workflow/${KAOLA_PROJECT}/workflow-state.md" | awk '{print $2}')
    (cd "$ACTIVE_WORKTREE_PATH" && node "$CLAIM_JS" finalize \
-     --project "$KAOLA_PROJECT" \
-     --session "$KAOLA_SESSION_ID")
+     --project "$KAOLA_PROJECT")
    ```
 
    This atomically writes `status: closed` + `step: complete` to `workflow-state.md` and
@@ -192,12 +107,9 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
    ```bash
    _COORD_ROOT_RAW="$(git rev-parse --git-common-dir 2>/dev/null || echo ".git")"
    if [[ "$_COORD_ROOT_RAW" != /* ]]; then _COORD_ROOT_RAW="$(pwd)/$_COORD_ROOT_RAW"; fi
-   _LOCK_FILE="${_COORD_ROOT_RAW}/kaola-workflow/.locks/${KAOLA_PROJECT}.lock"
    ACTIVE_WORKTREE_PATH="$(pwd)"
-   if [ -f "$_LOCK_FILE" ]; then
-     _WT="$(node -e "try{const d=JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'));process.stdout.write(d.worktree_path||'');}catch(e){}" "$_LOCK_FILE" 2>/dev/null)" || true
-     [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
-   fi
+   _WT="$(node -e "try{const fs=require('fs');const s=fs.readFileSync('kaola-workflow/' + process.env.KAOLA_PROJECT + '/workflow-state.md','utf8');const m=s.match(/^worktree_path:\\s*(.+)$/m);process.stdout.write(m?m[1].trim():'');}catch(e){}" 2>/dev/null)" || true
+   [ -n "$_WT" ] && [ -d "$_WT" ] && ACTIVE_WORKTREE_PATH="$_WT"
    git -C "$ACTIVE_WORKTREE_PATH" status --short
    git -C "$ACTIVE_WORKTREE_PATH" add <approved-files-only>
    git -C "$ACTIVE_WORKTREE_PATH" commit -m "chore: finalize ${KAOLA_PROJECT}"
@@ -226,8 +138,7 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
        _SINK_MERGE_EXIT=$?
        if [ "$_SINK_MERGE_EXIT" -eq 3 ]; then
          node "$scripts_dir/kaola-workflow-claim.js" sink-fallback \
-           --project "$KAOLA_PROJECT" \
-           --session "${KAOLA_SESSION_ID:-}"
+           --project "$KAOLA_PROJECT"
          node "$scripts_dir/kaola-workflow-sink-pr.js" --branch "$SINK_BRANCH" --project "$KAOLA_PROJECT"
          exit $?
        fi
@@ -264,6 +175,6 @@ State remains in `workflow-state.md` until archive is complete.
 
 ## Completion Contract
 
-This skill closes exactly one issue. After issue #N is closed and the lease is released,
+This skill closes exactly one issue. After issue #N is closed and the active folder is archived,
 the single-issue completion contract is satisfied. Stop and await explicit re-direction
 from the user. Do not auto-route into the next issue in line.

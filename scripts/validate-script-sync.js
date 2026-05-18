@@ -21,8 +21,8 @@ const codexDir = path.join(repoRoot, 'plugins', 'kaola-workflow', 'scripts');
 //     roadmap sync). A previous "sync everything" pass (commit 308f747) clobbered
 //     the Codex variant with the Claude one; do not repeat that.
 //
-//   kaola-workflow-compact-context.js, kaola-workflow-session-env.js (Claude-only) —
-//     these implement Claude Code SessionStart hooks that have no Codex equivalent.
+//   kaola-workflow-compact-context.js (Claude-only) —
+//     this implements the Claude Code compact-context hook that has no Codex equivalent.
 //     The Codex simulation invokes kaola-workflow-compact-context.js via a repo-root
 //     absolute path (see `plugins/kaola-workflow/scripts/simulate-kaola-workflow-walkthrough.js`),
 //     so no plugin-local copy is needed.
@@ -41,6 +41,7 @@ const codexDir = path.join(repoRoot, 'plugins', 'kaola-workflow', 'scripts');
 //   security divergence — keep both files in sync.
 const COMMON_SCRIPTS = [
   'kaola-workflow-claim.js',
+  'kaola-workflow-active-folders.js',
   'kaola-workflow-classifier.js',
   'kaola-workflow-repair-state.js',
   'kaola-workflow-roadmap.js',

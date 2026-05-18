@@ -15,51 +15,9 @@ selected a safe workflow project name, written `phase1-research.md`, and updated
 only for true external authorization, materially user-owned choices, or
 ambiguity that blocks correctness.
 
-## Session Heartbeat
-
-If a session is active or recoverable, ensure the background heartbeat ticker is running:
-
-```bash
-claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
-if [ ! -f "$claim_script" ]; then
-  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
-fi
-if [ -f "$claim_script" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
-  KAOLA_SESSION_ID="$(node "$claim_script" session 2>/dev/null || true)"
-  [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
-fi
-if [ -f "$claim_script" ] && [ -n "${KAOLA_SESSION_ID:-}" ] && [ -n "${KAOLA_PROJECT:-}" ]; then
-  node "$claim_script" session --project "$KAOLA_PROJECT" --session "$KAOLA_SESSION_ID" >/dev/null || {
-    echo "Kaola-Workflow: $KAOLA_PROJECT is owned by another session; use explicit recovery/handoff to continue it."
-    exit 1
-  }
-fi
-[ -n "${KAOLA_SESSION_ID:-}" ] && {
-  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
-  if [ ! -f "$_TICKER_PID_FILE" ] || ! kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-    nohup node "$claim_script" ticker \
-      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
-    disown
-  fi
-  cd "$KAOLA_WORKTREE_PATH" 2>/dev/null || true
-}
-```
 
 ## Steps
 
-## Startup Receipt Guard
-
-For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
-exists and authorizes this exact project with `claim: "owned"` or
-`claim: "acquired"` before doing phase work. Run the script-level verifier and
-stop on failure:
-
-```bash
-node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KAOLA_PROJECT" >/dev/null || {
-  echo "Kaola-Workflow: startup receipt does not authorize $KAOLA_PROJECT; run startup or explicit recovery instead."
-  exit 1
-}
-```
 
 1. Parse the request:
    - deliverable
@@ -80,7 +38,7 @@ node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KA
 4. Use the `docs-lookup` Codex agent role only when current external behavior matters; otherwise record why docs lookup is N/A.
 5. Write raw notes to `.cache/code-explorer.md` and `.cache/docs-lookup.md` when used.
 6. Score completeness from 0-10. Stop and ask if below 7.
-7. Write `kaola-workflow/{project}/phase1-research.md` and update `workflow-state.md`. Preserve any existing `## Sink` and `## Lease` blocks exactly; never replace the whole state file with phase-only fields.
+7. Write `kaola-workflow/{project}/phase1-research.md` and update `workflow-state.md`. Preserve any existing `## Sink` blocks exactly; never replace the whole state file with phase-only fields.
 
 ## Phase File
 
@@ -133,18 +91,17 @@ node "$roadmap_script" init-issue \
   --next-step "ready"
 ```
 
-9. If a claim session is active and a branch has been cut, patch the lock file with the branch name:
+9. If a branch has been cut, patch the Sink block with the branch name:
 
 ```bash
 claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
 if [ ! -f "$claim_script" ]; then
   claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
 fi
-[ -n "${KAOLA_SESSION_ID:-}" ] && node "$claim_script" patch-branch \
-  --session "$KAOLA_SESSION_ID" \
+node "$claim_script" patch-branch \
   --project "$KAOLA_PROJECT" \
   --branch "$(git rev-parse --abbrev-ref HEAD)"
 ```
 
 State next pointer: `next_skill: kaola-workflow-ideation {project}`. Preserve
-any existing `## Sink` and `## Lease` blocks during this update.
+any existing `## Sink` blocks during this update.

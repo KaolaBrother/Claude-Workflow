@@ -51,9 +51,9 @@ do not auto-pick; the agent owns this decision.
 
 1. Read `kaola-workflow/ROADMAP.md` for open unfinished issues.
 2. Fetch GitHub issue list if available (`gh issue list --limit 100 --json number,title,state,labels`).
-3. Check active locks: `node "$CLAIM_JS" status 2>/dev/null` to find already-claimed issues.
+3. Check active folders: `node "$CLAIM_JS" status 2>/dev/null` to find already-active issues.
 4. Apply sequencing judgment: prefer foundational or dependency-unblocked issues; avoid issues blocked by open dependencies or already active in another session.
-5. If the session already owns a project (startup will return `verdict: owned`), skip steps 1-4 and route to that owned project.
+5. If exactly one active folder is already present (startup will return `verdict: owned`), skip steps 1-4 and route to that project.
 6. If `$ARGUMENTS` names a specific issue number or project, use that as the explicit target.
 7. State the selected issue number aloud before calling startup.
 
@@ -72,59 +72,42 @@ Keyword matching is agent-level prose detection, not a bash conditional.
 ## Startup Step 0b - Startup Transaction
 
 If `kaola-workflow-claim.js` and `kaola-workflow-classifier.js` are available,
-run the startup transaction with the agent-selected target. Resolve the current
-session id from `KAOLA_SESSION_ID`, then the host platform id, then a generated
-fallback. The startup script validates, runs `watch-pr` for PR lease monitoring,
-claims, and receipts the explicit target.
+run the startup transaction with the agent-selected target. The startup script
+validates the explicit target, refreshes PR-backed folders with `watch-pr`, and
+atomically creates `kaola-workflow/{project}/workflow-state.md`.
 
 ```bash
 kaola_script(){ _n="$1"; for _p in "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}" "$HOME/.claude/kaola-workflow/scripts/$_n" "./scripts/$_n"; do [ -f "$_p" ] && { printf '%s\n' "$_p"; return; }; done; return 1; }
 CLAIM_JS="$(kaola_script kaola-workflow-claim.js)"
 if [ -f "$CLAIM_JS" ]; then
-  KAOLA_STARTUP_SESSION="$(node "$CLAIM_JS" session 2>/dev/null || true)"
-  [ -n "$KAOLA_STARTUP_SESSION" ] && export KAOLA_SESSION_ID="$KAOLA_STARTUP_SESSION"
-  if [ "${KAOLA_WORKTREE_NATIVE:-0}" = "1" ]; then
-    PICK_NEXT_OUT="$(node "$CLAIM_JS" pick-next --session "$KAOLA_STARTUP_SESSION" --runtime claude ${KAOLA_SINK:+--sink $KAOLA_SINK} ${KAOLA_TARGET_ISSUE:+--target-issue $KAOLA_TARGET_ISSUE} 2>/dev/null)" || true
-    PICK_NEXT_VERDICT="$(node -e "try{process.stdout.write(JSON.parse(process.argv[1]).verdict||'')}catch(e){}" "$PICK_NEXT_OUT" 2>/dev/null)" || true
-    PICK_NEXT_PROJECT="$(node -e "try{process.stdout.write(JSON.parse(process.argv[1]).project||'')}catch(e){}" "$PICK_NEXT_OUT" 2>/dev/null)" || true
-    if [ "$PICK_NEXT_VERDICT" = "acquired" ] && [ -n "$PICK_NEXT_PROJECT" ]; then
-      STARTUP_OUT="$PICK_NEXT_OUT"
-    elif [ "$PICK_NEXT_VERDICT" = "owned" ] && [ -n "$PICK_NEXT_PROJECT" ]; then
-      STARTUP_OUT="$PICK_NEXT_OUT"
-    else
-      echo "pick-next: no actionable issue (verdict: ${PICK_NEXT_VERDICT:-none})" >&2
-      exit 0
-    fi
-  fi
-  if [ -z "${STARTUP_OUT:-}" ]; then
-    KAOLA_SINK_FLAG=""
-    [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
-    KAOLA_TARGET_FLAG=""
-    [ -n "${KAOLA_TARGET_ISSUE:-}" ] && KAOLA_TARGET_FLAG="--target-issue $KAOLA_TARGET_ISSUE"
-    STARTUP_OUT=$(node "$CLAIM_JS" startup \
-      --session "$KAOLA_STARTUP_SESSION" \
-      --runtime claude \
-      $KAOLA_SINK_FLAG \
-      $KAOLA_TARGET_FLAG 2>/dev/null) || true
-  fi
+  node "$CLAIM_JS" watch-pr >/dev/null 2>&1 || true
+  KAOLA_SINK_FLAG=""
+  [ -n "${KAOLA_SINK:-}" ] && KAOLA_SINK_FLAG="--sink $KAOLA_SINK"
+  KAOLA_TARGET_FLAG=""
+  [ -n "${KAOLA_TARGET_ISSUE:-}" ] && KAOLA_TARGET_FLAG="--target-issue $KAOLA_TARGET_ISSUE"
+  STARTUP_OUT=$(node "$CLAIM_JS" startup \
+    --runtime claude \
+    $KAOLA_SINK_FLAG \
+    $KAOLA_TARGET_FLAG 2>/dev/null) || true
+  KAOLA_WORKTREE_PATH="$(node -e "try{process.stdout.write(JSON.parse(process.argv[1]).worktree_path||'')}catch(e){}" "$STARTUP_OUT" 2>/dev/null)" || true
+  [ -n "$KAOLA_WORKTREE_PATH" ] && [ -d "$KAOLA_WORKTREE_PATH" ] && export KAOLA_WORKTREE_PATH
 else
-  echo "BLOCKED: kaola-workflow startup unavailable; cannot select issue-backed work without a startup receipt." >&2
+  echo "BLOCKED: kaola-workflow startup unavailable; cannot select issue-backed work." >&2
   exit 1
 fi
 ```
 
-If `STARTUP_OUT` is JSON, its `session` field is the active session id. A
-verdict of `owned` routes that owned project. If startup returns `verdict: no_target`,
-the agent must select a target issue per Step 0 and re-run. If startup returns `claim: "none"`,
-normal routing must stop; do not inspect active project folders and recover/handoff
-them from a skipped `already claimed` entry unless the user explicitly requested
-recovery for a specific unfinished project. If startup returns a
+If `STARTUP_OUT` is JSON, a verdict of `owned` routes the single active folder
+and a verdict of `acquired` routes the newly created folder. If startup returns
+`verdict: no_target`, the agent must select a target issue per Step 0 and re-run.
+If startup returns `claim: "none"`, normal routing must stop; do not adopt
+unrelated active folders unless the user explicitly names that project. If startup returns a
 typed refusal (`target_occupied`, `user_target_blocked`, `user_target_red`,
 `target_mismatch`, `target_unavailable`), read the `reasoning` field and either
 stop, select a different issue, or escalate to the user. If startup is unavailable
-or the startup receipt is missing/malformed, stop for repair.
-If startup returns `claim: "none"`, stop normal routing; do not inspect active project folders for recovery. On startup, also run `watch-pr` to release PR leases for merged or closed PRs before selecting new work.
-If `KAOLA_PATH=fast` is set, startup records `workflow_path: fast`. Agent sets this env var after reading `analyzeIssue` advisory output from the startup receipt.
+or malformed, stop for repair. On startup, also run `watch-pr` to archive PR
+folders for merged or closed PRs before selecting new work.
+If `KAOLA_PATH=fast` is set, startup records `workflow_path: fast`.
 
 ## Startup Step 1 - Git Freshness
 
@@ -196,18 +179,13 @@ ask the user what to implement. New work starts with:
 /kaola-workflow-phase1 <task description or issue>
 ```
 
-## Co-active Leases
+## Co-active Folders
 
-Multiple sessions may hold leases simultaneously when each targets a distinct project. Session A on `issue-3` and Session B on `issue-4` are coexistent. The pre-commit guard blocks only commits that stage files from a project owned by a different session.
-
-Use explicit recovery/handoff only when a user intentionally switches a new session to an unfinished project. Check handoff eligibility first; live local Claude sessions, unexpired locks, recent heartbeats, and receipts for a different project block normal handoff:
-
-```bash
-node "$CLAIM_JS" can-handoff --project <project> --session "$KAOLA_SESSION_ID"
-node "$CLAIM_JS" handoff --project <project> --session "$KAOLA_SESSION_ID"
-```
-
-Use `--force-live-takeover` only for explicitly requested dangerous recovery.
+Parallel work is represented by distinct active folders. `issue-63` and
+`issue-65` can both be active when each has its own
+`kaola-workflow/{project}/workflow-state.md` and branch/worktree metadata.
+The pre-commit guard blocks only commits that stage multiple workflow project
+folders together.
 
 ## Resume Detection
 
@@ -293,7 +271,7 @@ printing the next command.
 ## Completion Contract
 
 Each `/workflow-next` run implements exactly one issue. After Phase 6 closes issue #N
-and releases the lease, the agent must stop and await explicit re-direction from the user.
+and archives the active folder, the agent must stop and await explicit re-direction from the user.
 Do not auto-route into the next issue in line. The single-issue completion contract means
 finishing issue #N is the terminal event of the run. To start issue #N+1, the user must
 invoke `/workflow-next` again.

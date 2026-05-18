@@ -31,22 +31,6 @@ function getRoot() {
   }
 }
 
-function getCoordRoot() {
-  const root = getRoot();
-  try {
-    const raw = execFileSync('git', ['rev-parse', '--git-common-dir'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    }).trim();
-    return path.resolve(root, raw);
-  } catch (_) {
-    return path.join(root, '.git');
-  }
-}
-
-function locksDir(coordRoot) { return path.join(coordRoot, 'kaola-workflow', '.locks'); }
-function lockPath(coordRoot, project) { return path.join(locksDir(coordRoot), project + '.lock'); }
-
 function readConfig() {
   const defaults = { pr_auto_merge: false };
   try {
@@ -70,18 +54,6 @@ function parseArgs(argv) {
     if (argv[i] === '--project' && argv[i + 1]) { args.project = argv[++i]; continue; }
   }
   return args;
-}
-
-function patchLockFile(coordRoot, project, prUrl, prNumber) {
-  const lp = lockPath(coordRoot, project);
-  try {
-    const raw = fs.readFileSync(lp, 'utf8');
-    const lock = JSON.parse(raw);
-    const updated = Object.assign({}, lock, { pr_url: prUrl, pr_number: prNumber });
-    fs.writeFileSync(lp, JSON.stringify(updated, null, 2) + '\n');
-  } catch (_) {
-    // Lock file absent or unreadable — skip silently
-  }
 }
 
 function updateStateSinkBlock(stateFile, prUrl, prNumber) {
@@ -136,7 +108,6 @@ function main() {
   }
 
   const root = getRoot();
-  const coordRoot = getCoordRoot();
   const config = readConfig();
   const stateFile = path.join(root, 'kaola-workflow', args.project, 'workflow-state.md');
   const summaryFile = path.join(root, 'kaola-workflow', args.project, 'phase6-summary.md');
@@ -144,7 +115,6 @@ function main() {
   if (OFFLINE) {
     const prUrl = 'OFFLINE_PLACEHOLDER';
     const prNumber = 0;
-    patchLockFile(coordRoot, args.project, prUrl, prNumber);
     updateStateSinkBlock(stateFile, prUrl, prNumber);
     appendSummary(summaryFile, prUrl, prNumber);
     return;
@@ -173,16 +143,13 @@ function main() {
   const prNumMatch = prUrl.match(/\/pull\/(\d+)/);
   const prNumber = prNumMatch ? parseInt(prNumMatch[1], 10) : 0;
 
-  // Step 7 — patch lock file
-  patchLockFile(coordRoot, args.project, prUrl, prNumber);
-
-  // Step 8 — update workflow-state.md Sink block
+  // Step 7 — update workflow-state.md Sink block
   updateStateSinkBlock(stateFile, prUrl, prNumber);
 
-  // Step 9 — append to phase6-summary.md
+  // Step 8 — append to phase6-summary.md
   appendSummary(summaryFile, prUrl, prNumber);
 
-  // Step 10 — optional auto-merge
+  // Step 9 — optional auto-merge
   if (config.pr_auto_merge === true) {
     try {
       ghExec(['pr', 'merge', prUrl, '--auto', '--squash', '--delete-branch']);

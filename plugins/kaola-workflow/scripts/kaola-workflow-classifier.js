@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
+const { readActiveFolders } = require('./kaola-workflow-active-folders');
 
 const OFFLINE = process.env.KAOLA_WORKFLOW_OFFLINE === '1';
 
@@ -50,19 +51,6 @@ function getRoot() {
   }
 }
 
-function getCoordRoot() {
-  const root = getRoot();
-  try {
-    const raw = execFileSync('git', ['rev-parse', '--git-common-dir'], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore']
-    }).trim();
-    return path.resolve(root, raw);
-  } catch (_) {
-    return path.join(root, '.git');
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Config utilities
 // ---------------------------------------------------------------------------
@@ -78,41 +66,6 @@ function readOrCreateConfig() {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaults, null, 2) + '\n');
     return defaults;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Lock-file reader
-// ---------------------------------------------------------------------------
-
-function readLockFiles(coordRoot, root) {
-  const seen = new Set();
-  const result = [];
-  for (const dir of [path.join(coordRoot, 'kaola-workflow', '.locks'), root ? path.join(root, 'kaola-workflow', '.locks') : null]) {
-    if (!dir || !fs.existsSync(dir)) continue;
-    for (const f of fs.readdirSync(dir).filter(f => f.endsWith('.lock'))) {
-      if (seen.has(f)) continue;
-      seen.add(f);
-      try { result.push(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))); } catch (_) {}
-    }
-  }
-  return result;
-}
-
-function readActiveStateIssueNumbers(root) {
-  const workflowDir = path.join(root, 'kaola-workflow');
-  if (!fs.existsSync(workflowDir)) return new Set();
-  const issues = new Set();
-  for (const entry of fs.readdirSync(workflowDir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.name === 'archive' || entry.name.startsWith('.')) continue;
-    const stateFile = path.join(workflowDir, entry.name, 'workflow-state.md');
-    if (!fs.existsSync(stateFile)) continue;
-    let content = '';
-    try { content = fs.readFileSync(stateFile, 'utf8'); } catch (_) { continue; }
-    if (!/^status:\s*active\s*$/m.test(content)) continue;
-    const issue = parseInt(field(content, 'issue_number'), 10);
-    if (Number.isFinite(issue) && issue > 0) issues.add(issue);
-  }
-  return issues;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +192,7 @@ function parseArgs(argv) {
 
 const SHARED_INFRA = new Set(['scripts', 'hooks', 'plugins/kaola-workflow/scripts']);
 
-function scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels, claimedLocks, root) {
+function scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels, activeFolders, root) {
   let hasExactOverlap = false;
   let exactOverlapPath = '';
   let hasDirectOverlap = false;
@@ -249,9 +202,9 @@ function scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels,
   let hasAreaLabelOverlap = false;
   let anyClaimedAtPhaseLeTwo = false;
 
-  for (const lock of claimedLocks) {
-    if (!isSafeName(lock.project)) continue;
-    const projectDir = path.join(root, 'kaola-workflow', lock.project);
+  for (const folder of activeFolders) {
+    if (!isSafeName(folder.project)) continue;
+    const projectDir = path.join(root, 'kaola-workflow', folder.project);
     if (!fs.existsSync(projectDir)) continue;
 
     let phase3Content = '';
@@ -308,7 +261,7 @@ function checkDependsOn(depN) {
   return null;
 }
 
-function classify(issue, claimedLocks, root) {
+function classify(issue, activeFolders, root) {
   const depN = parseDependsOn(issue.labels || []);
   if (depN !== null) {
     const blocked = checkDependsOn(depN);
@@ -325,7 +278,7 @@ function classify(issue, claimedLocks, root) {
     hasDirectOverlap, directOverlapArea,
     hasSharedInfraOverlap, sharedOverlapArea,
     hasAreaLabelOverlap, anyClaimedAtPhaseLeTwo,
-  } = scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels, claimedLocks, root);
+  } = scanClaimedOverlap(candidatePaths, candidateAreas, candidateAreaLabels, activeFolders, root);
 
   if (hasExactOverlap) {
     return { verdict: 'red', reasoning: 'exact file path overlap at "' + exactOverlapPath + '" with a claimed project' };
@@ -336,7 +289,7 @@ function classify(issue, claimedLocks, root) {
   }
 
   const noPathInfo = candidateAreas.size === 0 && candidateAreaLabels.size === 0;
-  if (noPathInfo && claimedLocks.length > 0 && anyClaimedAtPhaseLeTwo) {
+  if (noPathInfo && activeFolders.length > 0 && anyClaimedAtPhaseLeTwo) {
     return { verdict: 'red', reasoning: 'no extractable file paths or area labels; claimed project in phase <= 2; conservative red' };
   }
 
@@ -366,12 +319,11 @@ function cmdClassify() {
   }
 
   const root = getRoot();
-  const coordRoot = getCoordRoot();
-  const locks = readLockFiles(coordRoot, root);
-  const activeStateIssues = readActiveStateIssueNumbers(root);
+  const activeFolders = readActiveFolders(root);
+  const activeStateIssues = new Set(activeFolders.map(folder => folder.issue_number).filter(Boolean));
 
   // Already claimed → exit 2, no stdout
-  if (locks.some(l => l.issue_number === args.issue) || activeStateIssues.has(args.issue)) {
+  if (activeStateIssues.has(args.issue)) {
     process.exitCode = 2;
     return;
   }
@@ -391,7 +343,7 @@ function cmdClassify() {
       for (const area of parseAreaLabelsFromText(content)) labels.push({ name: 'area:' + area });
       body = content;
     }
-    const result = classify({ number: args.issue, labels, body }, locks, root);
+    const result = classify({ number: args.issue, labels, body }, activeFolders, root);
     process.stdout.write(JSON.stringify(result) + '\n');
     return;
   }
@@ -416,7 +368,7 @@ function cmdClassify() {
     return;
   }
 
-  const result = classify(issue, locks, root);
+  const result = classify(issue, activeFolders, root);
   process.stdout.write(JSON.stringify(result) + '\n');
 }
 

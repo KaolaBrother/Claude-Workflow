@@ -7,35 +7,6 @@ description: Use when Phase 4 tasks are complete and Kaola-Workflow for Codex, a
 
 Phase 5 reviews completed work. Review findings come first; fixes are implemented only after classification.
 
-## Session Heartbeat
-
-If a session is active or recoverable, ensure the background heartbeat ticker is running:
-
-```bash
-claim_script="plugins/kaola-workflow/scripts/kaola-workflow-claim.js"
-if [ ! -f "$claim_script" ]; then
-  claim_script="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/kaola-workflow-claim.js' -print -quit 2>/dev/null)"
-fi
-if [ -f "$claim_script" ] && [ -z "${KAOLA_SESSION_ID:-}" ]; then
-  KAOLA_SESSION_ID="$(node "$claim_script" session 2>/dev/null || true)"
-  [ -n "$KAOLA_SESSION_ID" ] && export KAOLA_SESSION_ID
-fi
-if [ -f "$claim_script" ] && [ -n "${KAOLA_SESSION_ID:-}" ] && [ -n "${KAOLA_PROJECT:-}" ]; then
-  node "$claim_script" session --project "$KAOLA_PROJECT" --session "$KAOLA_SESSION_ID" >/dev/null || {
-    echo "Kaola-Workflow: $KAOLA_PROJECT is owned by another session; use explicit recovery/handoff to continue it."
-    exit 1
-  }
-fi
-[ -n "${KAOLA_SESSION_ID:-}" ] && {
-  _TICKER_PID_FILE="$(git rev-parse --show-toplevel)/kaola-workflow/.tickers/${KAOLA_SESSION_ID}.pid"
-  if [ ! -f "$_TICKER_PID_FILE" ] || ! kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
-    nohup node "$claim_script" ticker \
-      --session "$KAOLA_SESSION_ID" >/dev/null 2>&1 &
-    disown
-  fi
-  cd "$KAOLA_WORKTREE_PATH" 2>/dev/null || true
-}
-```
 
 ## Goal Contract
 
@@ -47,19 +18,6 @@ correctness.
 
 ## Inputs
 
-## Startup Receipt Guard
-
-For issue-backed work, verify that `kaola-workflow/.sessions/${KAOLA_SESSION_ID}.startup.json`
-exists and authorizes this exact project with `claim: "owned"` or
-`claim: "acquired"` before doing phase work. Run the script-level verifier and
-stop on failure:
-
-```bash
-node "$claim_script" verify-startup --session "$KAOLA_SESSION_ID" --project "$KAOLA_PROJECT" >/dev/null || {
-  echo "Kaola-Workflow: startup receipt does not authorize $KAOLA_PROJECT; run startup or explicit recovery instead."
-  exit 1
-}
-```
 
 Read:
 
