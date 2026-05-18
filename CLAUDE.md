@@ -74,4 +74,3 @@ Must exit 0 with "Workflow walkthrough simulation passed".
 - Keep this file under 200 lines; move detail to `docs/` or skills.
 - Add rules only after repeated mistakes, review feedback, or stable project conventions.
 - Do not use `@path` imports for optional reference material.
-- `CLAUDE.md` and `AGENTS.md` are listed in `.gitignore` for downstream projects; this repo ships its own `CLAUDE.md` intentionally.
