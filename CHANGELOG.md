@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added — GitLab Edition Launch Gate (issues #65, #66, #72, #67, #68, #69, #70, #71)
+
+- Documented GitHub vs GitLab edition selection for Claude Code and Codex installs, including GitLab prerequisites, manual `--forge` install/uninstall choices, and both marketplace plugin entries.
+- Fixed the manual GitLab installer support-script list so `./install.sh --forge=gitlab` installs the `kaola-gitlab-workflow-*` runtime scripts used by the GitLab command resolvers.
+- Added GitLab launch validation coverage for the manual installer script list and final install/uninstall smoke gates.
+
 ## [3.8.0] — 2026-05-18
 
 ### Added — GitLab Workflow Support + Active-Folders State + Classifier Coverage (issues #55, #60, #64)

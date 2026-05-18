@@ -43,15 +43,18 @@ Set `KAOLA_TARGET_ISSUE` to the chosen issue number before calling startup.
 Before the startup transaction, check the user's initial prompt for MR sink intent.
 
 If the prompt contains any of the following (case-insensitive):
-- "open a PR"
-- "create a PR"
+- "open an MR"
+- "create an MR"
 - "merge request"
 - "sink=mr"
 - "KAOLA_SINK=mr"
 - "MR sink"
+- "open a PR" (compatibility alias)
+- "create a PR" (compatibility alias)
 
-Then export `KAOLA_SINK=mr` before the startup call. The existing
-`${KAOLA_SINK:+--sink $KAOLA_SINK}` pass-througlab in Startup Step 0 propagates
+The PR phrases are accepted only as compatibility aliases. Then export
+`KAOLA_SINK=mr` before the startup call. The existing
+`${KAOLA_SINK:+--sink $KAOLA_SINK}` pass-through in Startup Step 0 propagates
 this value without modification.
 
 Do not set `KAOLA_SINK` if none of the keywords match. Keyword matching is

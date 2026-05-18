@@ -122,7 +122,7 @@ summary, classification, evidence path, and next route.
 Avoid redundant validation runs.
 
 - Phase 4 validates affected task scope, not the full project, unless the task
-  plan explicitly requires a full command or the touched surface is higlab risk.
+  plan explicitly requires a full command or the touched surface is high risk.
 - If the same command already passed against the same relevant file set and no
   relevant files changed afterward, cite the prior evidence path instead of
   rerunning it.

@@ -56,7 +56,7 @@ Extract:
 Generate a 2-4 word kebab-case name that describes the deliverable. Check for
 existing `kaola-workflow/{name}/`; if it exists, append the first available
 numeric suffix, for example `{name}-2`, `{name}-3`, and so on. Name generation
-must be deterministic enouglab to resume safely: derive it from the issue title
+must be deterministic enough to resume safely: derive it from the issue title
 or task description, normalize to lowercase alphanumeric words joined by
 hyphens, and preserve the recorded name in `workflow-state.md`.
 
@@ -67,7 +67,7 @@ kaola-workflow/{project-name}/
 kaola-workflow/{project-name}/.cache/
 ```
 
-Ask only if the input does not contain enouglab information to produce a safe
+Ask only if the input does not contain enough information to produce a safe
 name, or if multiple unrelated issues/tasks are competing for the same workflow
 cycle.
 

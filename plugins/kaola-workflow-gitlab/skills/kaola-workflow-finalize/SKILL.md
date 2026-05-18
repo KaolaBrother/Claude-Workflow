@@ -130,7 +130,7 @@ choices, or ambiguity that blocks correctness.
    fi
    scripts_dir="$(dirname "$claim_script")"
    case "$SINK_KIND" in
-     pr)
+     mr|pr)
        node "$scripts_dir/kaola-gitlab-workflow-sink-mr.js" --branch "$SINK_BRANCH" --project "$KAOLA_PROJECT"
        ;;
      merge|*)

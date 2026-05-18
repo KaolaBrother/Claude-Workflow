@@ -168,7 +168,7 @@ an explicit no-impact reason. Save the docking record to:
 kaola-workflow/{project}/.cache/doc-docking.md
 ```
 
-If docking finds gaps, update the docs througlab `doc-updater` or the Trivial
+If docking finds gaps, update the docs through `doc-updater` or the Trivial
 Inline Edit Exception, then rerun docking before continuing.
 
 ## Closure Decision Gate
@@ -498,7 +498,7 @@ This atomically writes `status: closed` + `step: complete` to `workflow-state.md
 ## Step 8 - Commit Gate
 
 The sink must only receive committed work. Before dispatching to `sink-merge`
-or `sink-pr`, stage only the approved implementation, documentation, roadmap,
+or `sink-mr`, stage only the approved implementation, documentation, roadmap,
 archive, and workflow artifacts for this project, then create the final
 conventional commit on the workflow branch.
 
@@ -548,10 +548,10 @@ Dispatch based on `SINK_KIND`:
 
 ```bash
 case "$SINK_KIND" in
-  pr)
+  mr|pr)
     kaola_script(){ _n="$1"; for _p in "${CLAUDE_PLUGIN_ROOT:+$CLAUDE_PLUGIN_ROOT/scripts/$_n}" "$HOME/.claude/kaola-workflow-gitlab/scripts/$_n" "./plugins/kaola-workflow-gitlab/scripts/$_n"; do [ -f "$_p" ] && { printf '%s\n' "$_p"; return; }; done; return 1; }
-    SINK_PR_JS="$(kaola_script kaola-gitlab-workflow-sink-mr.js)"
-    node "$SINK_PR_JS" \
+    SINK_MR_JS="$(kaola_script kaola-gitlab-workflow-sink-mr.js)"
+    node "$SINK_MR_JS" \
       --branch "$SINK_BRANCH" \
       $SINK_ISSUE_FLAG \
       --project {project}
@@ -569,8 +569,8 @@ case "$SINK_KIND" in
       CLAIM_JS="$(kaola_script kaola-gitlab-workflow-claim.js)"
       node "$CLAIM_JS" sink-fallback \
         --project {project}
-      SINK_PR_JS="$(kaola_script kaola-gitlab-workflow-sink-mr.js)"
-      node "$SINK_PR_JS" \
+      SINK_MR_JS="$(kaola_script kaola-gitlab-workflow-sink-mr.js)"
+      node "$SINK_MR_JS" \
         --branch "$SINK_BRANCH" \
         $SINK_ISSUE_FLAG \
         --project {project}
@@ -589,11 +589,11 @@ cd "$_MAIN_ROOT" 2>/dev/null || true
 - Exit 2: FF race exhausted after MAX_AUTOMERGE_RETRIES retries. Follow printed remediation instructions.
 - Exit 3: merge-impossible (branch protection, non-fast-forward, permission denied). Receipt written to `.cache/sink-fallback.json`. Phase 6 pivots to MR creation automatically.
 
-`sink-pr.js` exit codes:
+`sink-mr.js` exit codes:
 - Exit 0: branch pushed, MR opened, URL recorded in the `## Sink` block. If `mr_auto_merge: true` in config, auto-merge was requested.
-- Exit 1: fatal error (push failed or `glab pr create` failed). Error printed to stderr.
+- Exit 1: fatal error (push failed or `glab mr create` failed). Error printed to stderr.
 
-After `sink-pr.js` exits 0, the active folder remains open. It is archived automatically when `watch-mr` detects the PR is MERGED or CLOSED on the next `/workflow-next` startup.
+After `sink-mr.js` exits 0, the active folder remains open. It is archived automatically when `watch-mr` detects the MR is MERGED or CLOSED on the next `/workflow-next` startup.
 
 ## Completion Contract
 

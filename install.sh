@@ -96,14 +96,15 @@ case "$FORGE" in
     SOURCE_SCRIPTS_DIR="$SCRIPT_DIR/plugins/kaola-workflow-gitlab/scripts"
     SOURCE_HOOKS_DIR="$SCRIPT_DIR/plugins/kaola-workflow-gitlab/hooks"
     SUPPORT_SCRIPT_NAMES=(
-      kaola-workflow-repair-state.js
-      kaola-workflow-claim.js
-      kaola-workflow-active-folders.js
-      kaola-workflow-compact-context.js
-      kaola-workflow-sink-merge.js
-      kaola-workflow-sink-mr.js
-      kaola-workflow-roadmap.js
-      kaola-workflow-classifier.js
+      kaola-gitlab-forge.js
+      kaola-gitlab-workflow-active-folders.js
+      kaola-gitlab-workflow-claim.js
+      kaola-gitlab-workflow-classifier.js
+      kaola-gitlab-workflow-compact-context.js
+      kaola-gitlab-workflow-repair-state.js
+      kaola-gitlab-workflow-roadmap.js
+      kaola-gitlab-workflow-sink-merge.js
+      kaola-gitlab-workflow-sink-mr.js
     )
     SUPPORT_HOOK_NAMES=(
       kaola-workflow-pre-commit.sh

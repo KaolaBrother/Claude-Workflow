@@ -67,13 +67,26 @@ templates — cross-issue continuation is never automatic.
 
 ## Installation
 
+### Choose An Edition
+
+Kaola-Workflow has two sibling editions:
+
+- **GitHub edition**: default. Uses GitHub issues, pull requests, and `gh`.
+- **GitLab edition**: opt-in. Uses GitLab issues, merge requests, and `glab`.
+
+The workflow commands keep the same names in both editions, so a manual Claude
+Code command install should choose one forge at a time. Marketplace and Codex
+plugin installs expose separate plugin entries for each edition.
+
 ### Claude Code
+
+GitHub edition, default behavior:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KaolaBrother/Kaola-Workflow/main/install.sh | bash
 ```
 
-For GitLab forge:
+GitLab edition:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/KaolaBrother/Kaola-Workflow/main/install.sh | bash -s -- --forge=gitlab
@@ -84,7 +97,9 @@ From a local clone:
 ```bash
 git clone https://github.com/KaolaBrother/Kaola-Workflow.git
 cd Kaola-Workflow
-./install.sh
+./install.sh --forge=github  # default GitHub edition
+# or
+./install.sh --forge=gitlab  # GitLab edition
 ```
 
 Then in Claude Code:
@@ -97,15 +112,40 @@ Then in Claude Code:
 Uninstall:
 
 ```bash
-./uninstall.sh
+./uninstall.sh --forge=github
+./uninstall.sh --forge=gitlab
+./uninstall.sh --forge=all
 ```
 
-## Codex Pack
+Claude marketplace installs use `.claude-plugin/marketplace.json`, which
+contains both plugin entries:
 
-This repository also includes a self-use Codex pack under
-`plugins/kaola-workflow/`. It exposes the same Kaola-Workflow identity through
-Codex-native skills, using `kaola-workflow/` project artifacts and `AGENTS.md`
-guidance rather than Claude Code slash commands and `CLAUDE.md`.
+- `kaola-workflow`
+- `kaola-workflow-gitlab`
+
+### GitLab Prerequisites
+
+Before using the GitLab edition in a target project:
+
+- Install and authenticate `glab`.
+- Use a GitLab-hosted project remote, or provide an explicit GitLab project
+  selection when the CLI cannot infer one from `origin`.
+- Enable GitLab issues and merge requests for the project.
+- Keep the workflow labels available: `workflow:queued` and
+  `workflow:in-progress`.
+
+## Codex Packs
+
+This repository also includes Codex packs under `plugins/`. They expose the same
+Kaola-Workflow identity through Codex-native skills, using `kaola-workflow/`
+project artifacts and `AGENTS.md` guidance rather than Claude Code slash
+commands and `CLAUDE.md`.
+
+- GitHub edition: `plugins/kaola-workflow/`
+- GitLab edition: `plugins/kaola-workflow-gitlab/`
+
+The Codex marketplace file `.agents/plugins/marketplace.json` contains both
+entries: `kaola-workflow` and `kaola-workflow-gitlab`.
 
 ### Install On Another Computer
 
@@ -125,19 +165,28 @@ git clone https://github.com/KaolaBrother/Kaola-Workflow.git ~/kaola-workflow
 codex plugin marketplace add ~/kaola-workflow
 ```
 
-For direct config enablement, add to your Codex configuration:
+The local marketplace exposes both entries: `kaola-workflow` for GitHub and
+`kaola-workflow-gitlab` for GitLab.
+
+For direct config enablement, add the desired entry to your Codex configuration:
 
 ```toml
 [plugins."kaola-workflow@kaolabrother-kaola-workflow"]
 enabled = true
+
+[plugins."kaola-workflow-gitlab@kaolabrother-kaola-workflow"]
+enabled = true
 ```
 
 After restarting Codex, open the target project and ask Codex to initialize the
-workflow:
+selected workflow:
 
 ```text
 Use Kaola-Workflow for Codex in this repo.
 Run workflow-init for Kaola-Workflow for Codex.
+
+Use Kaola-Workflow GitLab for Codex in this repo.
+Run workflow-init for Kaola-Workflow GitLab for Codex.
 ```
 
 Update an existing Codex install:
@@ -166,9 +215,9 @@ kaola-workflow-review
 kaola-workflow-finalize
 ```
 
-The Codex pack keeps the same six-phase shape, state repair, compliance ledger,
+Both Codex packs keep the same six-phase shape, state repair, compliance ledger,
 TDD evidence, review, documentation docking, roadmap refresh, archive, and final
-Git gate. It does not depend on ECC agents. Instead, `kaola-workflow-init`
+Git gate. They do not depend on ECC agents. Instead, `kaola-workflow-init`
 automatically installs Codex-native role profiles that mirror the ECC workflow
 roles:
 
@@ -215,12 +264,19 @@ performs the same review locally when no detached advisor profile is available.
 Current official release versions:
 
 - Claude Code `kaola-workflow` package/plugin: `3.8.0`
+- Claude Code `kaola-workflow-gitlab` plugin: `3.8.0`
 - Codex `kaola-workflow` plugin manifest: `1.4.0`
+- Codex `kaola-workflow-gitlab` plugin manifest: `1.4.0`
 
 The root `package.json` version is the official repository and Claude Code
-release version. The Codex plugin has its own manifest version in
-`plugins/kaola-workflow/.codex-plugin/plugin.json`; bump it whenever the Codex
-plugin install surface, skills, agent profiles, or workflow behavior changes.
+release version. The GitLab Claude plugin follows that same version in
+`plugins/kaola-workflow-gitlab/.claude-plugin/plugin.json`. Codex plugins have
+their own manifest versions in `plugins/*/.codex-plugin/plugin.json`; bump the
+affected Codex manifest whenever that plugin's install surface, skills, agent
+profiles, or workflow behavior changes.
+
+The npm package includes `"plugins/"` in `package.json#files`, so both Codex
+packs and the GitLab Claude plugin are part of the packaged release surface.
 
 Use SemVer for both versions:
 

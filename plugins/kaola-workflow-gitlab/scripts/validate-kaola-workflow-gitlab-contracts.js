@@ -103,6 +103,31 @@ const scriptFiles = [
 ];
 for (const script of scriptFiles) assert(exists(pluginRoot + '/scripts/' + script), script + ' missing');
 
+const installScript = read('install.sh');
+const installSupportScripts = [
+  'kaola-gitlab-forge.js',
+  'kaola-gitlab-workflow-active-folders.js',
+  'kaola-gitlab-workflow-claim.js',
+  'kaola-gitlab-workflow-classifier.js',
+  'kaola-gitlab-workflow-compact-context.js',
+  'kaola-gitlab-workflow-repair-state.js',
+  'kaola-gitlab-workflow-roadmap.js',
+  'kaola-gitlab-workflow-sink-merge.js',
+  'kaola-gitlab-workflow-sink-mr.js'
+];
+for (const script of installSupportScripts) {
+  assert(installScript.includes(script), 'install.sh must install GitLab support script: ' + script);
+}
+
+assert(
+  read(pluginRoot + '/commands/kaola-workflow-phase6.md').includes('mr|pr)'),
+  'GitLab Phase 6 command must dispatch canonical mr sink plus pr compatibility alias'
+);
+assert(
+  read(pluginRoot + '/skills/kaola-workflow-finalize/SKILL.md').includes('mr|pr)'),
+  'GitLab finalize skill must dispatch canonical mr sink plus pr compatibility alias'
+);
+
 for (const file of listFiles(pluginRoot + '/scripts', file =>
   file.endsWith('.js') && !file.endsWith('validate-kaola-workflow-gitlab-contracts.js')
 )) {

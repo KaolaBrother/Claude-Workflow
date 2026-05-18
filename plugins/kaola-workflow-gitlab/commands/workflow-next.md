@@ -64,9 +64,10 @@ Set `KAOLA_TARGET_ISSUE` to the chosen issue number before calling startup.
 ## Startup Step 0a — MR Intent Capture
 
 Before the startup transaction, check the user's initial prompt for MR sink intent.
-If it contains "open a PR", "create a PR", "merge request", "sink=mr", "KAOLA_SINK=mr",
-or "MR sink" (case-insensitive), export `KAOLA_SINK=mr` before the startup call.
-The `${KAOLA_SINK:+--sink $KAOLA_SINK}` pass-througlab in Startup Step 0 propagates it.
+If it contains "open an MR", "create an MR", "merge request", "sink=mr", "KAOLA_SINK=mr",
+"MR sink", or the compatibility aliases "open a PR" / "create a PR" (case-insensitive),
+export `KAOLA_SINK=mr` before the startup call.
+The `${KAOLA_SINK:+--sink $KAOLA_SINK}` pass-through in Startup Step 0 propagates it.
 Keyword matching is agent-level prose detection, not a bash conditional.
 
 ## Startup Step 0b - Startup Transaction
@@ -105,7 +106,7 @@ unrelated active folders unless the user explicitly names that project. If start
 typed refusal (`target_occupied`, `user_target_blocked`, `user_target_red`,
 `target_mismatch`, `target_unavailable`), read the `reasoning` field and either
 stop, select a different issue, or escalate to the user. If startup is unavailable
-or malformed, stop for repair. On startup, also run `watch-mr` to archive PR
+or malformed, stop for repair. On startup, also run `watch-mr` to archive MR
 folders for merged or closed MRs before selecting new work.
 If `KAOLA_PATH=fast` is set, startup records `workflow_path: fast`.
 
