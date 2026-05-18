@@ -55,11 +55,12 @@ Must exit 0 with "Workflow walkthrough simulation passed".
 ## Non-Negotiable Rules
 
 - Think before coding: state assumptions, surface ambiguity, and ask when unclear.
-- Read before writing: inspect the target file and relevant surrounding conventions immediately before editing or creating files. (Project-specific deepening: see Workflow Design Principles → Read Before Writing.)
 - Keep it simple: solve the requested problem without speculative abstractions.
 - Make surgical changes: touch only what the task requires.
 - Preserve user changes; never revert unrelated work without explicit request.
 - Verify with the relevant command before claiming completion.
+
+Read-before-writing is covered separately in Workflow Design Principles above.
 
 ## Validation Policy
 
