@@ -228,7 +228,10 @@ function main() {
 
     const folder = readActiveFolders(mainRoot, { excludeClosedIssues: false })
       .find(item => item.project === args.project);
-    if (folder) { try { removeWorktree(mainRoot, args.project, folder); } catch (_) {} }
+    // Always attempt removeWorktree — even when folder is archived (not found in active folders),
+    // the worktree may still be registered. removeWorktree falls back to worktreePathFor when
+    // folder is undefined, which computes the canonical sibling .kw path and removes it.
+    try { removeWorktree(mainRoot, args.project, folder); } catch (_) {}
   }
 
   // Step 1 — git fetch (skip if OFFLINE; fatal throw on error)

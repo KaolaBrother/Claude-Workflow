@@ -418,6 +418,26 @@ function runClaimOnline(args, cwd, binDir, extraEnv) {
   return JSON.parse(result.stdout);
 }
 
+// Like runClaimOnline but parses the last non-empty JSON line from stdout.
+// Needed for commands (e.g. worktree-finalize) that emit git progress text
+// before the final JSON object on the last line.
+function runClaimOnlineLastJson(args, cwd, binDir, extraEnv) {
+  const result = spawnSync(process.execPath, [claimScript, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      ...(extraEnv || {}),
+      KAOLA_WORKFLOW_OFFLINE: '0',
+      PATH: binDir + path.delimiter + (process.env.PATH || '')
+    }
+  });
+  assert(result.status === 0, 'online claim should exit 0, got ' + result.status + '\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
+  const lastLine = result.stdout.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
+  assert(lastLine, 'expected a JSON object line in stdout, got: ' + result.stdout);
+  return JSON.parse(lastLine);
+}
+
 function testStartupJsonAndSiblingWorktrees() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-startup-worktrees-'));
   const kwRoot = fs.realpathSync(tmp) + '.kw';
@@ -991,6 +1011,252 @@ function testReadPriorityConfig() {
   console.log('testReadPriorityConfig: PASSED');
 }
 
+function testE2EGitHubMergeFullChain() {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kw-e2e-merge-')));
+  const kwRoot = tmp + '.kw';
+  try {
+    initGitRepo(tmp);
+    const binDir = path.join(tmp, 'bin');
+    writeGhShimForStartup(binDir);
+
+    // Step 1: startup
+    const s850 = runClaimOnline(['startup', '--target-issue', '850'], tmp, binDir);
+    assert(s850.claim === 'acquired', 'startup 850 should acquire, got: ' + JSON.stringify(s850));
+    const wt850 = s850.worktree_path;
+    assert(fs.existsSync(wt850), 'worktree dir must exist after startup');
+
+    // Step 2: feature commit on linked worktree branch
+    fs.writeFileSync(path.join(wt850, 'feature-850.txt'), 'feature\n');
+    spawnSync('git', ['add', 'feature-850.txt'], { cwd: wt850 });
+    spawnSync('git', ['commit', '-m', 'feat: issue 850'], { cwd: wt850 });
+
+    // Step 3: worktree-finalize (cwd=tmp, reads worktree_path from main active folder)
+    const wfResult = runClaimOnlineLastJson(['worktree-finalize', '--project', 'issue-850'], tmp, binDir);
+    assert(wfResult.finalized === true, 'worktree-finalize should succeed');
+    assert(
+      fs.existsSync(path.join(wt850, 'kaola-workflow', 'issue-850', 'workflow-state.md')),
+      'workflow-state.md must exist in linked worktree after worktree-finalize'
+    );
+
+    // Step 4: finalize --keep-worktree (cwd=wt850, cleans main worktree copy, preserves linked worktree)
+    const finResult = spawnSync(process.execPath, [
+      claimScript, 'finalize', '--project', 'issue-850', '--keep-worktree'
+    ], { cwd: wt850, env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }, encoding: 'utf8' });
+    assert(finResult.status === 0, 'finalize --keep-worktree should exit 0\nstderr: ' + finResult.stderr);
+    assert(
+      fs.existsSync(path.join(wt850, 'kaola-workflow', 'archive', 'issue-850')),
+      'archive must exist in linked worktree after finalize --keep-worktree'
+    );
+    assert(
+      !fs.existsSync(path.join(tmp, 'kaola-workflow', 'issue-850')),
+      'main active folder must be removed after finalize from linked worktree'
+    );
+    assert(fs.existsSync(wt850), 'linked worktree must survive --keep-worktree finalize');
+
+    // Capture feature HEAD before sink-merge removes the worktree
+    const featureHead = spawnSync('git', ['rev-parse', 'workflow/issue-850'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+
+    // Step 5: sink-merge (cwd=wt850, OFFLINE)
+    const smResult = spawnSync(process.execPath, [
+      sinkMergeScript, '--project', 'issue-850', '--branch', 'workflow/issue-850', '--issue', '850'
+    ], { cwd: wt850, env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }, encoding: 'utf8' });
+    assert(smResult.status === 0,
+      'sink-merge should exit 0\nstdout: ' + smResult.stdout + '\nstderr: ' + smResult.stderr);
+
+    const mainAfter = spawnSync('git', ['rev-parse', 'main'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(mainAfter === featureHead,
+      'main must advance to feature HEAD after sink-merge, got: ' + mainAfter);
+    const branchList = spawnSync('git', ['branch', '--list', 'workflow/issue-850'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(branchList === '', 'workflow/issue-850 branch must be deleted after sink-merge');
+    assert(!fs.existsSync(wt850), 'linked worktree must be removed by sink-merge');
+    const gitStatus = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(gitStatus === '', 'main worktree must be clean after sink-merge, got: ' + gitStatus);
+
+    console.log('testE2EGitHubMergeFullChain: PASSED');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    try { fs.rmSync(kwRoot, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
+function testE2EGitHubPrFullChain() {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kw-e2e-pr-')));
+  const kwRoot = tmp + '.kw';
+  try {
+    initGitRepo(tmp);
+    const binDir = path.join(tmp, 'bin');
+    // Custom gh shim: handles startup calls + watch-pr pr view
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, 'gh'), [
+      '#!/bin/sh',
+      'ARGS="$@"',
+      'case "$ARGS" in',
+      '  *"repo view"*) echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
+      '  *"issue view"*) echo \'{"number":860,"title":"pr-chain-fixture","body":"README.md","labels":[],"state":"open"}\' ;;',
+      '  *"pr view"*) echo \'{"state":"MERGED","number":1}\' ;;',
+      '  *"api"*) echo \'[]\' ;;',
+      '  *) echo "" ;;',
+      'esac',
+      ''
+    ].join('\n'));
+    fs.chmodSync(path.join(binDir, 'gh'), 0o755);
+
+    // Step 1: startup with sink=pr
+    const s860 = runClaimOnline(['startup', '--target-issue', '860'], tmp, binDir, { KAOLA_SINK: 'pr' });
+    assert(s860.claim === 'acquired', 'startup 860 should acquire, got: ' + JSON.stringify(s860));
+    const wt860 = s860.worktree_path;
+    assert(fs.existsSync(wt860), 'worktree dir must exist after startup');
+
+    // Step 2: worktree-finalize (cwd=tmp)
+    const wfResult = runClaimOnlineLastJson(['worktree-finalize', '--project', 'issue-860'], tmp, binDir);
+    assert(wfResult.finalized === true, 'worktree-finalize 860 should succeed');
+    const kwDir860 = path.join(wt860, 'kaola-workflow', 'issue-860');
+    assert(fs.existsSync(kwDir860), 'linked worktree issue folder must exist after worktree-finalize');
+
+    // Step 3: plant phase6-summary.md (required by sink-pr appendSummary)
+    fs.writeFileSync(path.join(kwDir860, 'phase6-summary.md'), '# Phase 6 Summary\n');
+    spawnSync('git', ['add', '-A'], { cwd: wt860 });
+    const diff = spawnSync('git', ['-C', wt860, 'diff', '--cached', '--quiet'], { stdio: 'pipe' });
+    if (diff.status !== 0) {
+      spawnSync('git', ['commit', '-m', 'chore: pre-sink-pr state'], { cwd: wt860 });
+    }
+
+    // Step 4: sink-pr (cwd=wt860, OFFLINE) — production ordering: sink-pr runs before finalize/archive
+    const spResult = spawnSync(process.execPath, [
+      sinkPrScript, '--branch', 'workflow/issue-860', '--project', 'issue-860', '--issue', '860'
+    ], { cwd: wt860, env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }, encoding: 'utf8' });
+    assert(spResult.status === 0,
+      'sink-pr offline should exit 0\nstdout: ' + spResult.stdout + '\nstderr: ' + spResult.stderr);
+
+    const linkedState = fs.readFileSync(path.join(kwDir860, 'workflow-state.md'), 'utf8');
+    assert(linkedState.includes('pr_url:'), 'linked worktree workflow-state.md must contain pr_url after sink-pr');
+    const prStatus = spawnSync('git', ['-C', wt860, 'status', '--porcelain', '--untracked-files=no'],
+      { stdio: 'pipe' });
+    assert(prStatus.stdout.toString().trim() === '', 'linked worktree must be clean after sink-pr');
+
+    // test-only: mirror linked-worktree state to main; production runs sink-pr before finalize from main worktree
+    const mainStateFile = path.join(tmp, 'kaola-workflow', 'issue-860', 'workflow-state.md');
+    fs.writeFileSync(mainStateFile, linkedState);
+
+    // Step 5: watch-pr (cwd=tmp, ONLINE via runClaimOnline; gh shim returns MERGED)
+    const wpResult = runClaimOnline(['watch-pr'], tmp, binDir);
+    assert(wpResult.watched === 1, 'watch-pr should watch 1 PR-sink folder, got: ' + JSON.stringify(wpResult));
+
+    assert(
+      fs.existsSync(path.join(tmp, 'kaola-workflow', 'archive', 'issue-860')),
+      'archive/issue-860 must exist after watch-pr MERGED'
+    );
+    assert(
+      !fs.existsSync(path.join(tmp, 'kaola-workflow', 'issue-860')),
+      'active folder must be gone after watch-pr archives'
+    );
+    assert(!fs.existsSync(wt860), 'linked worktree must be removed by watch-pr');
+
+    console.log('testE2EGitHubPrFullChain: PASSED');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    try { fs.rmSync(kwRoot, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
+function testParallelIssueIndependence() {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kw-e2e-parallel-')));
+  const kwRoot = tmp + '.kw';
+  try {
+    initGitRepo(tmp);
+    const binDir = path.join(tmp, 'bin');
+    // Custom shim: each issue has a distinct body with extractable file paths so the
+    // classifier can compute non-empty candidatePaths and avoid the noPathInfo
+    // conservative-red path that blocks the second startup when both are in phase <= 2.
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, 'gh'), [
+      '#!/bin/sh',
+      'ARGS="$@"',
+      'case "$ARGS" in',
+      '  *"repo view"*) echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
+      '  *"issue view 870"*) echo \'{"number":870,"title":"feature-870","body":"scripts/feature-870.js","labels":[],"state":"open"}\' ;;',
+      '  *"issue view 871"*) echo \'{"number":871,"title":"feature-871","body":"scripts/feature-871.js","labels":[],"state":"open"}\' ;;',
+      '  *"api"*) echo \'[]\' ;;',
+      '  *) echo "" ;;',
+      'esac',
+      ''
+    ].join('\n'));
+    fs.chmodSync(path.join(binDir, 'gh'), 0o755);
+
+    // Step 1: startup both issues from main worktree
+    const s870 = runClaimOnline(['startup', '--target-issue', '870'], tmp, binDir);
+    assert(s870.claim === 'acquired', 'startup 870 should acquire, got: ' + JSON.stringify(s870));
+    const wt870 = s870.worktree_path;
+    assert(fs.existsSync(wt870), 'wt870 must exist after startup');
+
+    const s871 = runClaimOnline(['startup', '--target-issue', '871'], tmp, binDir);
+    assert(s871.claim === 'acquired', 'startup 871 should acquire, got: ' + JSON.stringify(s871));
+    const wt871 = s871.worktree_path;
+    assert(fs.existsSync(wt871), 'wt871 must exist after startup');
+    assert(wt870 !== wt871, 'both worktrees must be distinct directories');
+
+    // Step 2: feature commit on 870 branch only
+    fs.writeFileSync(path.join(wt870, 'feature-870.txt'), 'feature\n');
+    spawnSync('git', ['add', 'feature-870.txt'], { cwd: wt870 });
+    spawnSync('git', ['commit', '-m', 'feat: issue 870'], { cwd: wt870 });
+
+    // Step 3: worktree-finalize 870 (cwd=tmp)
+    const wfResult = runClaimOnlineLastJson(['worktree-finalize', '--project', 'issue-870'], tmp, binDir);
+    assert(wfResult.finalized === true, 'worktree-finalize 870 should succeed');
+
+    // Step 4: finalize --keep-worktree 870 (cwd=wt870)
+    const finResult = spawnSync(process.execPath, [
+      claimScript, 'finalize', '--project', 'issue-870', '--keep-worktree'
+    ], { cwd: wt870, env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }, encoding: 'utf8' });
+    assert(finResult.status === 0,
+      'finalize 870 --keep-worktree should exit 0\nstderr: ' + finResult.stderr);
+
+    // Capture feature HEAD before sink-merge removes the worktree
+    const feature870Head = spawnSync('git', ['rev-parse', 'workflow/issue-870'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+
+    // Step 5: sink-merge 870 (cwd=wt870, OFFLINE)
+    const smResult = spawnSync(process.execPath, [
+      sinkMergeScript, '--project', 'issue-870', '--branch', 'workflow/issue-870', '--issue', '870'
+    ], { cwd: wt870, env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }, encoding: 'utf8' });
+    assert(smResult.status === 0,
+      'sink-merge 870 should exit 0\nstdout: ' + smResult.stdout + '\nstderr: ' + smResult.stderr);
+
+    const mainAfter870 = spawnSync('git', ['rev-parse', 'main'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(mainAfter870 === feature870Head,
+      'main must advance to 870 feature HEAD after sink-merge, got: ' + mainAfter870);
+
+    const branch870 = spawnSync('git', ['branch', '--list', 'workflow/issue-870'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(branch870 === '', 'workflow/issue-870 must be deleted after sink-merge');
+    assert(!fs.existsSync(wt870), 'wt870 must be removed by sink-merge');
+
+    // Step 6: verify 871 is fully untouched
+    assert(
+      fs.existsSync(path.join(tmp, 'kaola-workflow', 'issue-871')),
+      'issue-871 active folder must still exist after 870 completes'
+    );
+    assert(fs.existsSync(wt871), 'wt871 must still exist');
+    const state871 = fs.readFileSync(
+      path.join(tmp, 'kaola-workflow', 'issue-871', 'workflow-state.md'), 'utf8'
+    );
+    assert(state871.includes('status: active'), 'issue-871 state must still be active');
+    const branch871 = spawnSync('git', ['branch', '--list', 'workflow/issue-871'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(branch871 !== '', 'workflow/issue-871 branch must still exist');
+
+    console.log('testParallelIssueIndependence: PASSED');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    try { fs.rmSync(kwRoot, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
 async function main() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-active-folders-'));
   try {
@@ -1022,6 +1288,9 @@ async function main() {
     testSoleActiveRoundTrip();
     await testSinkPrLeavesCleanWorktree();
     testReadPriorityConfig();
+    testE2EGitHubMergeFullChain();
+    testE2EGitHubPrFullChain();
+    testParallelIssueIndependence();
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

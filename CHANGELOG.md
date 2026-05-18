@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Tests — E2E Coverage (issue #85)
+
+- test: add E2E regression coverage for GitHub merge/PR closure and parallel-issue independence (issue #85); GitLab E2E remains out of scope pending OFFLINE support in GitLab scripts
+
+### Fixed — sink-merge worktree removal after archive (issue #85)
+
+- **`scripts/kaola-workflow-sink-merge.js`** (and byte-identical plugin copy): always call `removeWorktree` in Step 0 regardless of whether the project folder appears in active folders. Previously, the `if (folder)` guard skipped `removeWorktree` when the folder had already been archived (e.g., after `finalize --keep-worktree`), leaving the linked worktree registered and causing `git checkout <branch>` to fail with "already used by worktree". The `removeWorktree` function has always handled the `folder=undefined` case via its `worktreePathFor` fallback; removing the guard lets it run unconditionally.
+
 ### Fixed — Priority Label Config Path and Key (issue #84)
 
 - **`readPriorityConfig` in `scripts/kaola-workflow-claim.js`** (and byte-identical plugin copy): now reads `kaola-workflow/config.json` + `priority_top_tier_labels` instead of `.kaola-workflow.json` + `top_tier_labels`. Aligns implementation with documented contract in SKILL.md and `commands/workflow-init.md`.
