@@ -704,3 +704,11 @@ cd Kaola-Workflow
 git pull
 ./install.sh
 ```
+
+## License
+
+Kaola-Workflow is released under the MIT License — see [LICENSE](LICENSE)
+for the full text. The vendored Claude Code agent prompts under
+`agents/` are derived from Everything Claude Code (ECC) and are also
+MIT-licensed; their pinned upstream commit and attribution live in
+[docs/agents-source.md](docs/agents-source.md).
