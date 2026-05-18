@@ -278,7 +278,7 @@ assertIncludes('commands/workflow-next.md', 'STARTUP_OUT');
 assertIncludes('commands/workflow-next.md', 'startup receipt');
 assertIncludes('commands/workflow-next.md', 'startup unavailable');
 assertIncludes('commands/workflow-next.md', 'stop for repair');
-assertIncludes('commands/workflow-next.md', 'claim: "none"');
+assertIncludes('commands/workflow-next.md', 'verdict: no_target');
 assertIncludes('commands/workflow-next.md', 'Parallel decision:');
 assertIncludes('commands/workflow-next.md', 'can-handoff');
 assertIncludes('commands/workflow-next.md', 'handoff --project');
