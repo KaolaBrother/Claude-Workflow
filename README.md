@@ -394,18 +394,33 @@ Fast path executes Plan, Implement, and Review in a single pass, writing `fast-s
 The workflow includes automation scripts installed by `install.sh` to
 `~/.claude/kaola-workflow/scripts/` for the GitHub edition or
 `~/.claude/kaola-workflow-gitlab/scripts/` for the GitLab edition. Commands
-prefer the installed support directory and fall back to the repo checkout when
-developing locally. Drift between `scripts/` and `plugins/kaola-workflow/scripts/`
-is detected at test time by `scripts/validate-script-sync.js`.
+prefer the installed support directory and fall back to the repo checkout
+when developing locally. Drift between `scripts/` and
+`plugins/kaola-workflow/scripts/` is detected at test time by
+`validate-script-sync.js`.
 
-| Script | Purpose | Phase |
-|--------|---------|-------|
-| `kaola-workflow-repair-state.js` | Reconstruct workflow state from phase artifacts | Init / Resume |
-| `kaola-workflow-claim.js` | Active-folder coordination: claim, release/discard, status, patch-branch, watch-pr, bootstrap/startup, finalize, pick-next, resume, worktree-status, worktree-finalize | All phases |
-| `kaola-workflow-sink-merge.js` | Branch-per-issue auto-merge sink — rebase-then-ff-merge sequence | Phase 6 |
-| `kaola-workflow-roadmap.js` | ROADMAP.md regenerator — generate/migrate/validate/init-issue/project-name subcommands; reads `kaola-workflow/.roadmap/issue-{N}.md` per-issue files | Phase 1, Phase 6 |
-| `kaola-workflow-classifier.js` | Parallel-work classifier: classifies open issues as green/yellow/red/blocked using active folders, roadmap metadata, and GitHub state | Startup |
-| `kaola-workflow-sink-pr.js` | PR-based sink — pushes branch, opens GitHub PR via `gh pr create`, records PR URL; optionally enables auto-merge | Phase 6 |
+### Operational scripts
+
+| Script | What it does | When it runs |
+|--------|--------------|--------------|
+| `kaola-workflow-claim.js` | Active-folder coordination: claim, release/discard, status, watch-pr, bootstrap/startup, finalize, pick-next, resume, worktree-status, worktree-finalize. Provisions a per-issue Git worktree when `KAOLA_WORKTREE_NATIVE=1`. | All phases |
+| `kaola-workflow-active-folders.js` | Shared library: reads the active-folder table from `kaola-workflow/{project}/workflow-state.md`. Imported by claim, classifier, and sink scripts. | Library |
+| `kaola-workflow-classifier.js` | Parallel-work classifier: marks each open issue green/yellow/red/blocked based on dependency graph, exact file-path overlaps, shared-infra directories, and active folders. | Startup |
+| `kaola-workflow-roadmap.js` | Regenerates `kaola-workflow/ROADMAP.md` from `kaola-workflow/.roadmap/issue-{N}.md`. Subcommands: `generate`, `migrate`, `validate`, `init-issue`, `project-name`. | Phase 1, Phase 6 |
+| `kaola-workflow-repair-state.js` | Reconstructs `workflow-state.md` from existing phase artifacts when state is missing or stale, so a resumed session has a single safe next command. | Init / Resume |
+| `kaola-workflow-sink-merge.js` | Phase 6 merge sink: fetch, rebase onto `origin/main`, FF-only merge with retry on race conditions, push, close the issue, and clean up the branch. Falls back to the PR sink when the merge is impossible. | Phase 6 |
+| `kaola-workflow-sink-pr.js` | Phase 6 PR sink: push the branch, open a GitHub PR via `gh pr create`, record the PR URL, and optionally enable auto-merge. | Phase 6 |
+| `kaola-workflow-compact-context.js` | Wired to the `SessionStart` (`compact`) hook. Reads the most recent `workflow-state.md` and injects a resume hint into the post-`/compact` session. | Hook |
+
+### Validation and test scripts
+
+| Script | What it asserts |
+|--------|-----------------|
+| `simulate-workflow-walkthrough.js` | End-to-end integration test of the claim, repair, roadmap, and hook surfaces. Must exit 0 with `Workflow walkthrough simulation passed`. Run before claiming any workflow-related change complete. |
+| `validate-workflow-contracts.js` | Contractual assertions on the Claude Code surface — command files, agent installs, and documented invariants. |
+| `validate-kaola-workflow-contracts.js` | Same contractual assertions on the Codex plugin surface under `plugins/kaola-workflow/`. |
+| `validate-script-sync.js` | Byte-identical drift guard between `scripts/` (Claude Code) and `plugins/kaola-workflow/scripts/` (Codex) for files that must stay in sync. |
+| `validate-vendored-agents.js` | Asserts the vendored Claude Code agent prompts match the pinned upstream Everything Claude Code commit. |
 
 ### Active folder coordination
 
@@ -515,16 +530,49 @@ Avoid redundant validation runs: Phase 4 uses targeted affected checks, Phase 5 
 
 ## Hook policy
 
-Hooks are background hygiene, not workflow validation. They may format, lint, or
-typecheck edited files automatically, but `/workflow-next` should not rerun the
-same check unless the phase requires broader validation or relevant files changed
-after the hook ran. Hook output counts as workflow evidence only when recorded
-with command, scope, result, and evidence path.
+Kaola-Workflow ships three Claude Code hooks via `install.sh`. They run
+silently in the background as background hygiene — they do not replace
+workflow validation, and `/workflow-next` should not re-run a check the
+hook already performed unless the phase requires broader validation or
+the relevant files changed after the hook fired. Hook output counts as
+workflow evidence only when recorded with command, scope, result, and
+evidence path.
+
+### Installed hooks
+
+| Hook ID | Event (matcher) | Purpose | Script |
+|---------|-----------------|---------|--------|
+| `kaola-workflow:compact-context` | `SessionStart` (`compact`) | After Claude Code's `/compact`, injects a resume hint (active project, current phase, current step, next command, fallback authorization) read from the most recent `workflow-state.md` | `scripts/kaola-workflow-compact-context.js` |
+| `kaola-workflow:pre-commit-guard` | `PreToolUse` (`Bash`) | Blocks `git commit` invocations whose staged files span more than one `kaola-workflow/{project}/` folder (archive, `.roadmap/`, and `ROADMAP.md` are exempt) | `hooks/kaola-workflow-pre-commit.sh` |
+| `kaola-workflow:phantom-advisor` | `PostToolUse` (`Write\|Edit`) | Blocks writes/edits to files under `kaola-workflow/{project}/` that cite the advisor without a backing `.cache/advisor-*.md` evidence file in the same project | `hooks/kaola-workflow-phantom-advisor.sh` |
+
+### Installation and verification
+
+- `install.sh` copies hook files to `~/.claude/kaola-workflow/hooks/` and
+  auto-merges the three managed entries into `~/.claude/settings.json`.
+  The merge is idempotent and identifies managed entries by `id` prefix
+  `kaola-workflow:` or a command path containing `kaola-workflow`. Prior
+  settings are backed up under
+  `~/.claude/backups/settings.json.kaola-workflow.<ts>.bak`.
+- Verify with `jq '.hooks' ~/.claude/settings.json` — expect the three
+  ids above, each pointing at a script under
+  `~/.claude/kaola-workflow/hooks/` or
+  `~/.claude/kaola-workflow/scripts/`.
+- If hooks are missing, re-run `./install.sh --forge=github` (or
+  `--forge=gitlab`). Do not edit `~/.claude/settings.json` directly —
+  re-running the installer is the supported path.
+- Fallback when `python3` is unavailable or `--no-settings-merge` was
+  passed: `install.sh` prints a manual hint and the source of truth is
+  `~/.claude/kaola-workflow/hooks/hooks.json`. Merge its `hooks` block
+  into the user's `~/.claude/settings.json` `hooks` object, preserving
+  any non-`kaola-workflow:` entries.
+- `uninstall.sh` strips only entries matching the same managed-id rule;
+  it does not touch other hooks.
 
 Phase 6 still owns the final full validation gate. It also reconciles
-documentation with code changes and issue/roadmap state, consults the advisor
-before closing when deferred items or conflicts remain, and leaves
-commit-and-push as the final step on a clean, synced workspace.
+documentation with code changes and issue/roadmap state, consults the
+advisor before closing when deferred items or conflicts remain, and
+leaves commit-and-push as the final step on a clean, synced workspace.
 
 ## Phases
 
@@ -552,30 +600,8 @@ helper is available. It does not create state for brand-new work, ambiguous
 active projects, contradictory phase files, or unresolved compliance gates that
 make the next command unsafe.
 
-Hook installation is handled by `install.sh` — agents must not hand-merge or
-duplicate the hooks block.
-
-- `install.sh` copies hook files to `~/.claude/kaola-workflow/hooks/` and
-  auto-merges three managed entries into `~/.claude/settings.json`:
-  `kaola-workflow:compact-context` (SessionStart),
-  `kaola-workflow:pre-commit-guard` (PreToolUse Bash),
-  `kaola-workflow:phantom-advisor` (PostToolUse Write|Edit). The merge is
-  idempotent and identifies managed entries by `id` prefix `kaola-workflow:`
-  or a command path containing `kaola-workflow`. Prior settings are backed up
-  under `~/.claude/backups/settings.json.kaola-workflow.<ts>.bak`.
-- Verify with `jq '.hooks' ~/.claude/settings.json` — expect those three ids
-  present, each pointing at a script under `~/.claude/kaola-workflow/hooks/`
-  or `~/.claude/kaola-workflow/scripts/`.
-- If hooks are missing, re-run `./install.sh --forge=github` (or `--forge=gitlab`).
-  Do not edit `~/.claude/settings.json` directly to add them — re-running the
-  installer is the supported path.
-- Fallback when `python3` is unavailable or `--no-settings-merge` was passed:
-  `install.sh` prints a manual hint and the source of truth is
-  `~/.claude/kaola-workflow/hooks/hooks.json`. Merge its `hooks` block into
-  the user's `~/.claude/settings.json` `hooks` object, preserving any
-  non-`kaola-workflow:` entries.
-- `uninstall.sh` strips only entries matching the same managed-id rule; it
-  does not touch other hooks.
+Hook installation is covered in the [Hook policy](#hook-policy) section above —
+do not hand-merge entries into `~/.claude/settings.json`.
 
 ## Parallel active work
 
@@ -633,7 +659,35 @@ terminals, scope the goal text accordingly:
 
 ### Per-issue Git worktrees
 
-When Git is available, `kaola-workflow-claim.js` provisions a sibling worktree at `<repo-parent>/<repo-name>.kw/<project>/`. The path is stored in the active folder Sink block as `worktree_path`, so commands can resolve the linked worktree without consulting a lock file.
+When `KAOLA_WORKTREE_NATIVE=1`, `kaola-workflow-claim.js` provisions a
+sibling Git worktree on every claim so each active issue has its own
+checkout — separate from the main repo checkout and from every other
+active issue.
+
+**Why.** With one shared checkout, two parallel sessions stepping on the
+same files would collide on branch switches and stash state. A
+per-issue worktree gives each session its own working tree, so file
+edits, builds, and Phase 4 TDD runs in one issue do not affect another.
+
+**Where.** Worktrees live at `<repo-parent>/<repo-name>.kw/<project>/`.
+If the main repo is `~/Workspace/Kaola-Workflow`, the worktree for
+project `issue-42` is `~/Workspace/Kaola-Workflow.kw/issue-42/`. The
+absolute path is recorded in the active folder's Sink block as
+`worktree_path`, so phase commands can resolve the linked worktree
+without consulting a lock file.
+
+**How phases use it.** Phase 4 resolves `ACTIVE_WORKTREE_PATH` at
+startup — when `KAOLA_WORKTREE_NATIVE=0` (the default) it is the current
+directory; when `KAOLA_WORKTREE_NATIVE=1` it is the per-issue worktree.
+All `git`, `cp`, and path operations in Phases 4–6 are then anchored at
+that root. Phase 6's sink-merge runs against the worktree; `finalize`
+removes the worktree by default after archiving the active folder, or
+preserves it with `--keep-worktree` for the final commit gate.
+
+**Listing and removal.** `kaola-workflow-claim.js worktree-status` lists
+all active workflow worktrees with their issue, branch, and folder
+metadata. `worktree-finalize` mirrors the final phase artifacts into the
+linked worktree and commits them.
 
 ## Updating
 
