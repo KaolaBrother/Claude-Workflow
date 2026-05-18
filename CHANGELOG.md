@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added — Unified CLAUDE.md + AGENTS.md Canonical Convention (issue #79)
+
+- **AGENTS.md creation** — New AGENTS.md file added to repository root with mandatory redirect block. Directs agents to read CLAUDE.md before any action and establishes CLAUDE.md as the single canonical source for non-negotiable rules and project conventions.
+- **Dogfood convention in kaola-workflow itself** — The kaola-workflow project now uses its own AGENTS.md convention, demonstrating the pattern for downstream projects using this workflow.
+- **CLAUDE.md Non-Negotiable Rules update** — Reduced from 6 bullets to 5 by removing "Preserve user changes" (implicit in "Make surgical changes") and adding "Goal-driven execution" (define success criteria before starting, test-first for bugs/features). Non-negotiable rules remain exact and binding across all sessions.
+- **workflow-init automation updates** — Added Step 3 "Create AGENTS.md" in both GitHub and GitLab editions. CLAUDE.md template now KW-marked for idempotent application. All init validators check for AGENTS.md presence and MANDATORY sentinel.
+- **Validator contract enforcement** — Three validators updated to assert AGENTS.md exists, contains MANDATORY sentinel, and matches across init paths and skill definitions. Ensures downstream projects follow the unified convention.
+
 ### Added — Typed-Acknowledgement Delegation Gate (issue #77)
 
 - **Delegation Contract in workflow-next skills** (`plugins/kaola-workflow/skills/kaola-workflow-next/SKILL.md` and `kaola-workflow-gitlab` edition): Agents must establish a delegation policy with the user before phase work begins. Policy options are `delegate`, `local-authorized`, or `tool-unavailable`. Policy is written to `workflow-state.md` as `delegation_policy:` after startup.

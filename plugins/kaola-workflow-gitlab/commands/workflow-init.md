@@ -81,6 +81,7 @@ Optional content belongs elsewhere unless it must be read in every session:
 
 Append equivalent missing sections only. Treat headings with the same meaning as equivalent; do not duplicate. Replace bracketed placeholders with detected values; do not leave placeholder text in `CLAUDE.md`. Omit optional sections when there is no real content.
 
+<!-- KW-CLAUDE-TEMPLATE-START -->
 ```markdown
 # Claude Project Instructions
 
@@ -103,8 +104,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - Read before writing: inspect the target file and relevant surrounding conventions immediately before editing or creating files.
 - Keep it simple: solve the requested problem without speculative abstractions.
 - Make surgical changes: touch only what the task requires.
-- Preserve user changes; never revert unrelated work without explicit request.
-- Verify with the relevant command before claiming completion.
+- Goal-driven execution: Define verifiable success criteria before starting. Prefer write-the-failing-test-first for bugs and features. Loop until criteria pass; don't declare done on weak signals.
 
 ## Kaola-Workflow
 
@@ -161,6 +161,7 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 - Add rules only after repeated mistakes, review feedback, or stable project conventions.
 - Do not use `@path` imports for optional reference material.
 ```
+<!-- KW-CLAUDE-TEMPLATE-END -->
 
 Keep the Karpathy-style principles concise. If the local Karpathy skill file is available, use it only to confirm the short working-principle bullets; do not paste the long source into `CLAUDE.md`.
 
@@ -168,7 +169,73 @@ If an existing `CLAUDE.md` is bloated or duplicates the sections above, do not s
 
 ---
 
-## Step 3 — Create Missing Workflow Structure
+## Step 3 — Create `AGENTS.md`
+
+Check whether `AGENTS.md` exists in the project root. Detect conformance by
+reading the second non-blank line: if it equals
+`> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**`,
+the file is conforming — no-op. If the file is missing, write the canonical
+redirect block below. If the file exists but is non-conforming (second
+non-blank line does not match), prepend the redirect block, add a `---`
+divider, then append the original content with the migration note line.
+
+Worked example of a migrated AGENTS.md (two `---` dividers total):
+
+```text
+# AGENTS.md
+
+> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**
+>
+> `CLAUDE.md` in this repository root is the **single canonical source** for all
+> non-negotiable rules, project conventions, workflow constraints, and agent
+> behavior. AGENTS.md exists **only** to direct you there.
+>
+> **Required at session start, before any tool call, edit, or response:**
+>
+> 1. Read `CLAUDE.md` in full.
+> 2. Treat its `## Non-Negotiable Rules` section as binding for every action you take in this repo.
+> 3. If `CLAUDE.md` is missing, **stop and ask the user** — do not proceed on assumptions.
+>
+> Do not skip this step because the task looks small. Do not rely on prior
+> session memory. Re-read on every new session.
+
+---
+
+*All other guidance — workflow phases, scripts, conventions, gotchas — lives in `CLAUDE.md`. This file intentionally contains nothing else.*
+
+---
+> Note: content below was the prior AGENTS.md before init unified the contract.
+[original content here]
+```
+
+Canonical `AGENTS.md` redirect block to write:
+
+```markdown
+# AGENTS.md
+
+> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**
+>
+> `CLAUDE.md` in this repository root is the **single canonical source** for all
+> non-negotiable rules, project conventions, workflow constraints, and agent
+> behavior. AGENTS.md exists **only** to direct you there.
+>
+> **Required at session start, before any tool call, edit, or response:**
+>
+> 1. Read `CLAUDE.md` in full.
+> 2. Treat its `## Non-Negotiable Rules` section as binding for every action you take in this repo.
+> 3. If `CLAUDE.md` is missing, **stop and ask the user** — do not proceed on assumptions.
+>
+> Do not skip this step because the task looks small. Do not rely on prior
+> session memory. Re-read on every new session.
+
+---
+
+*All other guidance — workflow phases, scripts, conventions, gotchas — lives in `CLAUDE.md`. This file intentionally contains nothing else.*
+```
+
+---
+
+## Step 4 — Create Missing Workflow Structure
 
 Create only missing directories/files. Do not overwrite existing content.
 
@@ -287,7 +354,7 @@ If `kaola-gitlab-workflow-claim.js` is unavailable (manual install without the s
 
 ---
 
-## Step 4 — Git And Roadmap Summary
+## Step 5 — Git And Roadmap Summary
 
 After edits:
 
@@ -297,6 +364,7 @@ After edits:
    - whether Git is initialized
    - whether a GitLab remote exists
    - whether `CLAUDE.md` was created or updated
+   - whether AGENTS.md was created, was already conforming, or was migrated
    - which required `CLAUDE.md` sections are present
    - which docs/roadmap files were created
    - whether GitLab issues were available for sync

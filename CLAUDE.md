@@ -54,8 +54,7 @@ Must exit 0 with "Workflow walkthrough simulation passed".
 - Read before writing: inspect the target file and relevant surrounding conventions immediately before editing or creating files.
 - Keep it simple: solve the requested problem without speculative abstractions.
 - Make surgical changes: touch only what the task requires.
-- Preserve user changes; never revert unrelated work without explicit request.
-- Verify with the relevant command before claiming completion.
+- Goal-driven execution: Define verifiable success criteria before starting. Prefer write-the-failing-test-first for bugs and features. Loop until criteria pass; don't declare done on weak signals.
 
 ## Validation Policy
 

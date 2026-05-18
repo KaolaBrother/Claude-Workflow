@@ -187,8 +187,8 @@ assertConcept('scripts/simulate-workflow-walkthrough.js', 'startup and cleanup h
   'testClassifierCurrentClaimMarkerBlocks',
   'finalize should remove legacy lease blocks before archive'
 ]);
-assertIncludes('README.md', 'Active Folder Coordination');
-assertIncludes('README.md', 'Parallel Active Work');
+assertIncludes('README.md', 'Active folder coordination');
+assertIncludes('README.md', 'Parallel active work');
 assertIncludes('README.md', 'No lease/session layer remains.');
 assertConcept('README.md', 'pointer to detailed state contract', [
   'docs/workflow-state-contract.md',
@@ -196,6 +196,9 @@ assertConcept('README.md', 'pointer to detailed state contract', [
   'active artifacts include'
 ]);
 assertIncludes('CLAUDE.md', 'active folders');
+assert(exists('AGENTS.md'), 'AGENTS.md must exist at repo root (dogfood redirect)');
+assertIncludes('AGENTS.md', '> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**');
+assertIncludes('commands/workflow-init.md', '> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**');
 
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.js');
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-pr.js');

@@ -57,6 +57,33 @@ function assertNoForbidden(file) {
   for (const re of forbidden) assert(!re.test(text), file + ' contains forbidden reference: ' + re);
 }
 
+function assertIncludes(file, needle) {
+  assert(read(file).includes(needle), file + ' must include: ' + needle);
+}
+
+function assertNotIncludes(file, needle) {
+  assert(!read(file).includes(needle), file + ' must not include: ' + needle);
+}
+
+function assertConcept(file, concept, terms) {
+  const content = read(file).toLowerCase();
+  const missing = terms.filter(term => !content.includes(term.toLowerCase()));
+  assert(missing.length === 0,
+    file + ' must document ' + concept + '; missing: ' + missing.join(', '));
+}
+
+function extractClaudeTemplate(file) {
+  const text = read(file);
+  const START = '<!-- KW-CLAUDE-TEMPLATE-START -->';
+  const END = '<!-- KW-CLAUDE-TEMPLATE-END -->';
+  const startIdx = text.indexOf(START);
+  const endIdx = text.indexOf(END);
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    throw new Error(file + ': missing KW-CLAUDE-TEMPLATE-START/END markers');
+  }
+  return text.slice(startIdx + START.length, endIdx).trim();
+}
+
 const pluginJson = parseJson(pluginRoot + '/.codex-plugin/plugin.json');
 assert(pluginJson.name === 'kaola-workflow-gitlab', 'GitLab Codex plugin name mismatch');
 assert(pluginJson.skills === './skills/', 'GitLab Codex plugin must expose ./skills/');
@@ -241,6 +268,24 @@ assertPolicyBlocked('delegate', [
 assertPolicyBlocked('tool-unavailable', [
   ['code-reviewer', 'subagent-invoked', '.cache/code-reviewer.md', '']
 ], 'subagent row under tool-unavailable policy');
+
+const gitlabInitSkill = `${gitlabSkillsBase}/kaola-workflow-init/SKILL.md`;
+assertNotIncludes(gitlabInitSkill, 'Do not create or edit CLAUDE.md');
+assertIncludes(gitlabInitSkill, '> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**');
+assertConcept(gitlabInitSkill, 'GitLab init durable state contract', [
+  'kaola-workflow/.roadmap/issue-*.md',
+  'do not purge',
+  'kaola-workflow/{project}/',
+  'workflow-state.md',
+  'fast-summary.md',
+  '.cache/'
+]);
+
+// GitLab forge pair CLAUDE.md template must be byte-identical
+const gitlabCmdTemplate = extractClaudeTemplate(`${pluginRoot}/commands/workflow-init.md`);
+const gitlabSkillTemplate = extractClaudeTemplate(gitlabInitSkill);
+assert(gitlabCmdTemplate === gitlabSkillTemplate,
+  'CLAUDE.md template must be byte-identical within GitLab forge pair');
 
 for (const file of listFiles(pluginRoot + '/scripts', file =>
   file.endsWith('.js') && !file.endsWith('validate-kaola-workflow-gitlab-contracts.js')

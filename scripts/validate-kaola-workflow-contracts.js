@@ -88,6 +88,8 @@ assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, '--target-is
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'watch-pr');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-next/SKILL.md`, 'extract and reassign `delegation_policy:` alongside `phase` and `next_skill`');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'Active folder lifecycle');
+assertIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, '> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**');
+assertNotIncludes(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`, 'Do not create or edit CLAUDE.md');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-execute/SKILL.md`, 'Required Agent Compliance');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-review/SKILL.md`, 'codex review');
 assertIncludes(`${pluginRoot}/skills/kaola-workflow-finalize/SKILL.md`, 'Documentation Docking');
@@ -279,5 +281,62 @@ assertConcept(`${pluginRoot}/scripts/kaola-workflow-roadmap.js`, 'atomic roadmap
   "fs.openSync(filePath, 'wx')",
   'fs.fsyncSync(fd)'
 ]);
+
+function extractRedirectBlock(file) {
+  const text = read(file);
+  const fenceOpen = '```markdown';
+  const fenceClose = '\n```';
+  let idx = 0;
+  while (idx < text.length) {
+    const fence = text.indexOf(fenceOpen, idx);
+    if (fence === -1) break;
+    const blockStart = fence + fenceOpen.length;
+    const blockEnd = text.indexOf(fenceClose, blockStart);
+    if (blockEnd === -1) break;
+    const block = text.slice(blockStart, blockEnd + 1).trim();
+    if (block.includes('# AGENTS.md') && block.includes('> **MANDATORY — READ CLAUDE.md')) {
+      return block;
+    }
+    idx = blockEnd + fenceClose.length;
+  }
+  throw new Error(file + ': no AGENTS.md redirect block found (must contain # AGENTS.md and MANDATORY sentinel)');
+}
+
+function extractClaudeTemplate(file) {
+  const text = read(file);
+  const START = '<!-- KW-CLAUDE-TEMPLATE-START -->';
+  const END = '<!-- KW-CLAUDE-TEMPLATE-END -->';
+  const startIdx = text.indexOf(START);
+  const endIdx = text.indexOf(END);
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    throw new Error(file + ': missing KW-CLAUDE-TEMPLATE-START/END markers');
+  }
+  return text.slice(startIdx + START.length, endIdx).trim();
+}
+
+// AGENTS.md redirect block must be byte-identical across all four init files
+const initFiles = [
+  'commands/workflow-init.md',
+  'plugins/kaola-workflow-gitlab/commands/workflow-init.md',
+  `${pluginRoot}/skills/kaola-workflow-init/SKILL.md`,
+  'plugins/kaola-workflow-gitlab/skills/kaola-workflow-init/SKILL.md'
+];
+const redirectBlocks = initFiles.map(f => ({ file: f, block: extractRedirectBlock(f) }));
+const referenceBlock = redirectBlocks[0].block;
+for (const { file, block } of redirectBlocks.slice(1)) {
+  assert(block === referenceBlock,
+    'AGENTS.md redirect block must be byte-identical in ' + file + ' vs ' + redirectBlocks[0].file);
+}
+
+// CLAUDE.md template must be byte-identical within each forge pair
+const githubCmdTemplate = extractClaudeTemplate('commands/workflow-init.md');
+const githubSkillTemplate = extractClaudeTemplate(`${pluginRoot}/skills/kaola-workflow-init/SKILL.md`);
+assert(githubCmdTemplate === githubSkillTemplate,
+  'CLAUDE.md template must be byte-identical within GitHub forge pair (commands/workflow-init.md vs GitHub SKILL.md)');
+
+const gitlabCmdTemplate = extractClaudeTemplate('plugins/kaola-workflow-gitlab/commands/workflow-init.md');
+const gitlabSkillTemplate = extractClaudeTemplate('plugins/kaola-workflow-gitlab/skills/kaola-workflow-init/SKILL.md');
+assert(gitlabCmdTemplate === gitlabSkillTemplate,
+  'CLAUDE.md template must be byte-identical within GitLab forge pair');
 
 console.log('Kaola-Workflow Codex contract validation passed');
