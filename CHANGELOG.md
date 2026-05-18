@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed — Priority Label Config Path and Key (issue #84)
+
+- **`readPriorityConfig` in `scripts/kaola-workflow-claim.js`** (and byte-identical plugin copy): now reads `kaola-workflow/config.json` + `priority_top_tier_labels` instead of `.kaola-workflow.json` + `top_tier_labels`. Aligns implementation with documented contract in SKILL.md and `commands/workflow-init.md`.
+- **`readPriorityConfig` exported** from `kaola-workflow-claim.js` for direct unit testing.
+- **Regression test** (`testReadPriorityConfig`) in `scripts/simulate-workflow-walkthrough.js`: missing-file default, custom labels, non-array fallback.
+
 ### Fixed — GitLab Archive-Aware Sink and Fallback Behavior (issue #83)
 
 - **Private `resolveProjectFile` helper** (`plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-sink-merge.js`): New fallback resolution that checks the live `kaola-workflow/{project}/` path first, then falls back to `kaola-workflow/archive/{project}/` if the live path is missing. Enables sink scripts to work with both active and archived project metadata.

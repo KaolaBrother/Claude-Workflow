@@ -29,3 +29,33 @@ The Phase 6 sink is responsible for delivering completed work to the repository 
 - **Metadata commit**: Automatic follow-up commit written by sink script after PR creation; not a user action
 - **Offline support**: `KAOLA_WORKFLOW_OFFLINE=1` writes `OFFLINE_PLACEHOLDER` commit instead of real PR metadata
 - **Config**: `pr_auto_merge` key in `~/.config/kaola-workflow/config.json` enables `gh pr merge --auto --squash --delete-branch` (GitHub only, non-fatal if disabled by branch protection rules)
+
+## Configuration
+
+Configuration files control workflow behavior and issue sorting.
+
+### Global config
+
+`~/.config/kaola-workflow/config.json` (optional):
+
+```json
+{
+  "parallel_mode": "auto",
+  "pr_auto_merge": false
+}
+```
+
+- `parallel_mode` — Parallel-work classification strategy (`auto` or other); see README § Classifier configuration
+- `pr_auto_merge` — Enable automatic PR merge after creation (GitHub only, requires branch protection rules)
+
+### Project-local config
+
+`kaola-workflow/config.json` (optional, checked into repo):
+
+```json
+{
+  "priority_top_tier_labels": ["hotfix", "critical"]
+}
+```
+
+- `priority_top_tier_labels` — Array of custom priority labels that sort as tier 1 (high priority) regardless of P-label. Overrides default `["P0", "P1"]` when present. If not an array or missing, falls back to `["P0", "P1"]`. Read by `readPriorityConfig` in `scripts/kaola-workflow-claim.js` at startup to customize issue sort order.

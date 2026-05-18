@@ -964,6 +964,33 @@ async function testSinkPrLeavesCleanWorktree() {
   }
 }
 
+function testReadPriorityConfig() {
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-priority-config-'));
+  try {
+    const { readPriorityConfig } = require('./kaola-workflow-claim');
+    // Case 1: missing config → default ['P0','P1']
+    const defaults = readPriorityConfig(tmpRoot);
+    assert(Array.isArray(defaults) && defaults.length === 2 && defaults[0] === 'P0' && defaults[1] === 'P1',
+      'missing config must return ["P0","P1"], got: ' + JSON.stringify(defaults));
+    // Case 2: kaola-workflow/config.json with priority_top_tier_labels → custom labels returned
+    fs.mkdirSync(path.join(tmpRoot, 'kaola-workflow'), { recursive: true });
+    fs.writeFileSync(path.join(tmpRoot, 'kaola-workflow', 'config.json'),
+      JSON.stringify({ priority_top_tier_labels: ['critical', 'hotfix'] }));
+    const custom = readPriorityConfig(tmpRoot);
+    assert(Array.isArray(custom) && custom.length === 2 && custom[0] === 'critical' && custom[1] === 'hotfix',
+      'custom labels must be ["critical","hotfix"], got: ' + JSON.stringify(custom));
+    // Case 3: non-array priority_top_tier_labels → default
+    fs.writeFileSync(path.join(tmpRoot, 'kaola-workflow', 'config.json'),
+      JSON.stringify({ priority_top_tier_labels: 'not-an-array' }));
+    const nonArray = readPriorityConfig(tmpRoot);
+    assert(Array.isArray(nonArray) && nonArray[0] === 'P0',
+      'non-array value must fall back to ["P0","P1"], got: ' + JSON.stringify(nonArray));
+  } finally {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  }
+  console.log('testReadPriorityConfig: PASSED');
+}
+
 async function main() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-active-folders-'));
   try {
@@ -994,6 +1021,7 @@ async function main() {
     testNoTargetMultipleActive();
     testSoleActiveRoundTrip();
     await testSinkPrLeavesCleanWorktree();
+    testReadPriorityConfig();
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

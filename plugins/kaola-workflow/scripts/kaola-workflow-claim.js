@@ -60,10 +60,10 @@ function mainRootFromCoord(coordRoot) {
 }
 
 function readPriorityConfig(root) {
-  const file = path.join(root, '.kaola-workflow.json');
+  const file = path.join(root, 'kaola-workflow', 'config.json');
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return Array.isArray(parsed.top_tier_labels) ? parsed.top_tier_labels : ['P0', 'P1'];
+    return Array.isArray(parsed.priority_top_tier_labels) ? parsed.priority_top_tier_labels : ['P0', 'P1'];
   } catch (_) {
     return ['P0', 'P1'];
   }
@@ -618,6 +618,7 @@ module.exports = {
   projectNameForIssue,
   provisionWorktree,
   readActiveFolders,
+  readPriorityConfig,
   removeWorktree,
   worktreePathFor
 };

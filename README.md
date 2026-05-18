@@ -466,6 +466,33 @@ Exact file-path overlap returns `red`, including shared-infrastructure files suc
 
 When an issue receives a `yellow` verdict (shared infrastructure warning), a cache file is written to `kaola-workflow/{project}/.cache/parallel-classifier.md` to flag the caution for the phase team.
 
+### Priority label configuration
+
+The issue sort order in `/workflow-next` startup is determined by:
+
+1. **Workflow label** (`workflow:queued` always wins if present)
+2. **Priority tier** (based on issue labels)
+3. **Issue number** (older issues first)
+
+**Default priority tiers** use P-numbered labels:
+
+- `P0` → tier 0 (highest)
+- `P1` → tier 1
+- `P2`, `P3`, etc. → tier 2, 3, ...
+- Other labels → tier 99 (lowest)
+
+**Custom priority labels** (`kaola-workflow/config.json`):
+
+If your repo uses custom priority labels instead of the P0–P3 naming, declare them in `kaola-workflow/config.json`:
+
+```json
+{
+  "priority_top_tier_labels": ["hotfix", "critical", "urgent"]
+}
+```
+
+Any issue with a label matching `priority_top_tier_labels` will be sorted as tier 1 (high priority), regardless of P-label presence. The `listOpenIssues` function reads this config at startup to customize sort order.
+
 ### Agent-directed issue selection
 
 Issue selection is an agent decision, not a hidden script decision. Agents must:
