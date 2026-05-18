@@ -595,6 +595,12 @@ function testFinalizeReleaseCleansWorktree() {
     runClaimOnline(['finalize', '--project', 'issue-603', '--keep-worktree'], tmp, binDir);
     assert(fs.existsSync(wt603), 'keep-worktree finalize should preserve worktree for final commit');
     assert(fs.existsSync(path.join(tmp, 'kaola-workflow', 'archive', 'issue-603')), 'keep-worktree finalize should still archive active folder');
+    const s604 = runClaimOnline(['startup', '--target-issue', '604'], tmp, binDir);
+    assert(s604.claim === 'acquired', 'startup 604 should acquire');
+    const wt604 = s604.worktree_path;
+    assert(fs.existsSync(wt604), 'worktree 604 should exist after startup');
+    runClaimOnline(['release', '--project', 'issue-604', '--reason', 'git-freshness-block'], tmp, binDir);
+    assert(!fs.existsSync(wt604), 'worktree 604 should be gone after git-freshness-block release');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
     fs.rmSync(kwRoot, { recursive: true, force: true });

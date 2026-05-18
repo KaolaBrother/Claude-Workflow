@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed — workflow-next orphan on Git freshness block (issue #80)
+
+- **`commands/workflow-next.md`**: the `### Git Freshness Block Recovery` section now extracts `KAOLA_PROJECT` and `KAOLA_CLAIM` from `$STARTUP_OUT` and runs `node "$CLAIM_JS" release --project "$KAOLA_PROJECT" --reason git-freshness-block` when the block cannot be resolved by fast-forward. Guard is `[ "$KAOLA_CLAIM" = "acquired" ]` so prior-session (`owned`) folders are never released.
+- **`plugins/kaola-workflow-gitlab/skills/kaola-workflow-next/SKILL.md`**: inserted the missing `### Git Freshness Block Recovery` subsection with the same guarded release pattern (using `$PICK_NEXT_PROJECT` and `$claim_script`).
+- **`scripts/simulate-workflow-walkthrough.js`**: extended `testFinalizeReleaseCleansWorktree` with an issue-604 regression guard confirming `release --reason git-freshness-block` cleans the worktree.
+
 ## [3.8.1] — 2026-05-19
 
 ### Fixed — Sink-Merge Cwd-Independence (issue #94)
