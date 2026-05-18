@@ -280,6 +280,16 @@ assertConcept(gitlabInitSkill, 'GitLab init durable state contract', [
   'fast-summary.md',
   '.cache/'
 ]);
+assertConcept(`${pluginRoot}/scripts/kaola-gitlab-workflow-roadmap.js`, 'GitLab missing roadmap source safeguard', [
+  'guardAgainstMissingRoadmapSource',
+  'non-empty generated ROADMAP.md',
+  'kaola-workflow/.roadmap is missing'
+]);
+assertConcept(`${pluginRoot}/scripts/kaola-gitlab-workflow-roadmap.js`, 'GitLab atomic roadmap writes and exclusive issue source creation', [
+  'writeFileAtomicReplace',
+  'createFileExclusive',
+  'updated: issue-'
+]);
 
 // GitLab forge pair CLAUDE.md template must be byte-identical
 const gitlabCmdTemplate = extractClaudeTemplate(`${pluginRoot}/commands/workflow-init.md`);

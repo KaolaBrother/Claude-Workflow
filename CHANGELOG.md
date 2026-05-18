@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed — GitLab Roadmap Atomicity And Source Safeguards (issue #87)
+
+- Added GitLab roadmap missing-source protection so `generate` refuses to erase a non-empty generated `ROADMAP.md` when `kaola-workflow/.roadmap/` is absent.
+- Switched GitLab generated roadmap writes to atomic temp-file replacement and made explicit `init-issue` creation exclusive by default.
+- Added `init-issue --update` for deliberate GitLab roadmap source updates, with accurate `created`, `skip`, and `updated` output.
+- Added GitLab regression coverage for missing-source guard behavior, atomic generate cleanup, concurrent `init-issue`, and contract validation of the new hardening helpers.
+
 ### Added — Unified CLAUDE.md + AGENTS.md Canonical Convention (issue #79)
 
 - **AGENTS.md creation** — New AGENTS.md file added to repository root with mandatory redirect block. Directs agents to read CLAUDE.md before any action and establishes CLAUDE.md as the single canonical source for non-negotiable rules and project conventions.
