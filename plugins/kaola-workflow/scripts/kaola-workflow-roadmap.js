@@ -112,13 +112,57 @@ function guardAgainstMissingRoadmapSource(dir, outFile) {
   );
 }
 
-function writeIfDiff(filePath, content) {
+function writeFileAtomicReplace(filePath, content) {
   let existing = '';
   try { existing = fs.readFileSync(filePath, 'utf8'); } catch (_) {}
   if (existing === content) return false;
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, content, 'utf8');
+  const dir = path.dirname(filePath);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(
+    dir,
+    '.' + path.basename(filePath) + '.' + process.pid + '.' + Date.now() + '.' +
+      Math.random().toString(16).slice(2) + '.tmp'
+  );
+  let fd;
+  try {
+    fd = fs.openSync(tmp, 'wx');
+    fs.writeFileSync(fd, content, 'utf8');
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tmp, filePath);
+  } catch (err) {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+    try { fs.unlinkSync(tmp); } catch (_) {}
+    throw err;
+  }
   return true;
+}
+
+function createFileExclusive(filePath, content) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  let fd;
+  let created = false;
+  try {
+    fd = fs.openSync(filePath, 'wx');
+    created = true;
+    fs.writeFileSync(fd, content, 'utf8');
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    return true;
+  } catch (err) {
+    if (fd !== undefined) {
+      try { fs.closeSync(fd); } catch (_) {}
+    }
+    if (err && err.code === 'EEXIST') return false;
+    if (created) {
+      try { fs.unlinkSync(filePath); } catch (_) {}
+    }
+    throw err;
+  }
 }
 
 function parseRoadmapTable(text) {
@@ -147,7 +191,7 @@ function cmdGenerate() {
   guardAgainstMissingRoadmapSource(dir, outFile);
   const issues = readRoadmapIssues(dir);
   const content = buildRoadmapContent(issues);
-  const wrote = writeIfDiff(outFile, content);
+  const wrote = writeFileAtomicReplace(outFile, content);
   process.stdout.write(wrote ? 'generated\n' : 'up-to-date\n');
 }
 
@@ -162,11 +206,6 @@ function cmdMigrate() {
     const n = parseInt(row.issue.replace('#', ''), 10);
     if (!n || n <= 0) continue;
     const filePath = path.join(dir, 'issue-' + n + '.md');
-    if (fs.existsSync(filePath)) {
-      process.stdout.write('skip: issue-' + n + '.md already exists\n');
-      continue;
-    }
-    fs.mkdirSync(dir, { recursive: true });
     const content = [
       'issue: ' + row.issue,
       'title: ' + row.title.replace(/[\r\n]/g, ' '),
@@ -175,7 +214,10 @@ function cmdMigrate() {
       'next_step: ' + row.next_step.replace(/[\r\n]/g, ' '),
       '',
     ].join('\n');
-    fs.writeFileSync(filePath, content, 'utf8');
+    if (!createFileExclusive(filePath, content)) {
+      process.stdout.write('skip: issue-' + n + '.md already exists\n');
+      continue;
+    }
     process.stdout.write('created: issue-' + n + '.md\n');
   }
 }
@@ -211,11 +253,6 @@ function cmdInitIssue(argv) {
   const root = getRoot();
   const dir = roadmapDir(root);
   const filePath = path.join(dir, 'issue-' + n + '.md');
-  if (fs.existsSync(filePath)) {
-    process.stdout.write('skip: issue-' + n + '.md already exists\n');
-    return;
-  }
-  fs.mkdirSync(dir, { recursive: true });
   const content = [
     'issue: #' + n,
     'title: ' + title,
@@ -224,8 +261,8 @@ function cmdInitIssue(argv) {
     'next_step: ' + nextStep,
     '',
   ].join('\n');
-  fs.writeFileSync(filePath, content, 'utf8');
-  process.stdout.write('created: issue-' + n + '.md\n');
+  const created = createFileExclusive(filePath, content);
+  process.stdout.write(created ? 'created: issue-' + n + '.md\n' : 'skip: issue-' + n + '.md already exists\n');
 }
 
 function cmdProjectName(argv) {

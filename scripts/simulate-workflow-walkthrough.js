@@ -4,7 +4,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const repoRoot = path.resolve(__dirname, '..');
 const claimScript = path.join(repoRoot, 'scripts', 'kaola-workflow-claim.js');
@@ -24,6 +24,23 @@ function runNode(script, args, cwd) {
   });
   if (result.error) throw result.error;
   return result;
+}
+
+function runNodeAsync(script, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [script, ...args], {
+      cwd,
+      encoding: 'utf8',
+      env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', chunk => { stdout += chunk.toString(); });
+    child.stderr.on('data', chunk => { stderr += chunk.toString(); });
+    child.on('error', reject);
+    child.on('close', status => resolve({ status, stdout, stderr }));
+  });
 }
 
 function json(result) {
@@ -160,7 +177,60 @@ function testRoadmapGenerateMissingSourceGuard(tmp) {
   assert(generated.status === 0, 'generate should succeed once per-issue source files exist');
 }
 
-function main() {
+function testRoadmapGenerateAtomicReplace(tmp) {
+  const workflowDir = path.join(tmp, 'kaola-workflow');
+  fs.rmSync(workflowDir, { recursive: true, force: true });
+  const sourceDir = path.join(workflowDir, '.roadmap');
+  fs.mkdirSync(sourceDir, { recursive: true });
+  fs.writeFileSync(path.join(sourceDir, 'issue-998.md'), [
+    'issue: #998',
+    'title: Atomic roadmap fixture',
+    'status: open',
+    'workflow_project: atomic-roadmap-fixture',
+    'next_step: generate',
+    ''
+  ].join('\n'), 'utf8');
+
+  const generated = runNode(roadmapScript, ['generate'], tmp);
+  assert(generated.status === 0, 'generate should succeed');
+  const roadmap = read(path.join(workflowDir, 'ROADMAP.md'));
+  assert(roadmap.includes('| #998 | Atomic roadmap fixture | open | atomic-roadmap-fixture | generate |'), 'generated roadmap should contain the source row');
+  const tempFiles = fs.readdirSync(workflowDir).filter(name => /^\.ROADMAP\.md\..+\.tmp$/.test(name));
+  assert(tempFiles.length === 0, 'atomic generate should not leave temp files after success');
+}
+
+async function testRoadmapInitIssueConcurrentExclusive(tmp) {
+  const workflowDir = path.join(tmp, 'kaola-workflow');
+  fs.rmSync(workflowDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(workflowDir, '.roadmap'), { recursive: true });
+
+  const args = [
+    'init-issue',
+    '--issue', '997',
+    '--title', 'Exclusive init fixture',
+    '--status', 'open',
+    '--workflow-project', 'exclusive-init-fixture',
+    '--next-step', 'plan'
+  ];
+  const [first, second] = await Promise.all([
+    runNodeAsync(roadmapScript, args, tmp),
+    runNodeAsync(roadmapScript, args, tmp)
+  ]);
+  assert(first.status === 0, 'first concurrent init-issue should exit cleanly');
+  assert(second.status === 0, 'second concurrent init-issue should exit cleanly');
+
+  const outputs = [first.stdout, second.stdout].join('\n');
+  const created = (outputs.match(/created: issue-997\.md/g) || []).length;
+  const skipped = (outputs.match(/skip: issue-997\.md already exists/g) || []).length;
+  assert(created === 1, 'concurrent init-issue should create exactly one source file');
+  assert(skipped === 1, 'concurrent init-issue loser should skip cleanly');
+
+  const files = fs.readdirSync(path.join(workflowDir, '.roadmap')).filter(name => name === 'issue-997.md');
+  assert(files.length === 1, 'final-path exclusivity should leave exactly one issue source file');
+  assert(read(path.join(workflowDir, '.roadmap', 'issue-997.md')).includes('workflow_project: exclusive-init-fixture'), 'exclusive source file should contain the requested content');
+}
+
+async function main() {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-active-folders-'));
   try {
     testClaimStatusRelease(tmp);
@@ -168,10 +238,15 @@ function main() {
     testRepair(tmp);
     testHookSingleProjectGuard(tmp);
     testRoadmapGenerateMissingSourceGuard(tmp);
+    testRoadmapGenerateAtomicReplace(tmp);
+    await testRoadmapInitIssueConcurrentExclusive(tmp);
     console.log('Workflow walkthrough simulation passed');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 }
 
-main();
+main().catch(err => {
+  console.error(err && err.stack ? err.stack : String(err));
+  process.exitCode = 1;
+});

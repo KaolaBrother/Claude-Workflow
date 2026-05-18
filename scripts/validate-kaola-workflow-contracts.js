@@ -172,5 +172,13 @@ assertConcept(`${pluginRoot}/scripts/kaola-workflow-roadmap.js`, 'missing roadma
   'non-empty generated ROADMAP.md',
   'kaola-workflow/.roadmap is missing'
 ]);
+assertConcept(`${pluginRoot}/scripts/kaola-workflow-roadmap.js`, 'atomic roadmap writes and exclusive issue source creation', [
+  'writeFileAtomicReplace',
+  'createFileExclusive',
+  "fs.openSync(tmp, 'wx')",
+  'fs.renameSync(tmp, filePath)',
+  "fs.openSync(filePath, 'wx')",
+  'fs.fsyncSync(fd)'
+]);
 
 console.log('Kaola-Workflow Codex contract validation passed');

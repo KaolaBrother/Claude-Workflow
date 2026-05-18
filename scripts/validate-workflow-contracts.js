@@ -157,9 +157,23 @@ assertConcept('scripts/kaola-workflow-roadmap.js', 'missing roadmap source safeg
   'non-empty generated ROADMAP.md',
   'kaola-workflow/.roadmap is missing'
 ]);
+assertConcept('scripts/kaola-workflow-roadmap.js', 'atomic roadmap writes and exclusive issue source creation', [
+  'writeFileAtomicReplace',
+  'createFileExclusive',
+  "fs.openSync(tmp, 'wx')",
+  'fs.renameSync(tmp, filePath)',
+  "fs.openSync(filePath, 'wx')",
+  'fs.fsyncSync(fd)'
+]);
 assertConcept('scripts/simulate-workflow-walkthrough.js', 'roadmap safeguard behavior', [
   'testRoadmapGenerateMissingSourceGuard',
   'preserve existing active roadmap rows'
+]);
+assertConcept('scripts/simulate-workflow-walkthrough.js', 'roadmap concurrency regression behavior', [
+  'testRoadmapGenerateAtomicReplace',
+  'testRoadmapInitIssueConcurrentExclusive',
+  'concurrent init-issue should create exactly one source file',
+  'final-path exclusivity'
 ]);
 assertIncludes('README.md', 'Active Folder Coordination');
 assertIncludes('README.md', 'Parallel Active Work');
