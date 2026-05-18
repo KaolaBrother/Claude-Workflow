@@ -439,19 +439,13 @@ Each phase records a required-agent compliance ledger. Each active workflow also
 
 Avoid redundant validation runs: Phase 4 uses targeted affected checks, Phase 5 validates only review fixes or cites existing evidence, and Phase 6 runs each full final command once against the final candidate state. Small targeted commands may run in the main session, while expensive or noisy test/lint/type/build commands should be delegated and summarized from cache evidence.
 
-## ECC Hook Policy
+## Hook Policy
 
-ECC hooks are background hygiene, not workflow validation. They may format,
-lint, or typecheck edited files automatically, but `/workflow-next` should not
-rerun the same check unless the phase requires broader validation or relevant
-files changed after the hook ran. Hook output counts as workflow evidence only
-when recorded with command, scope, result, and evidence path.
-
-Kaola-Workflow recommends **not enabling ECC hooks** if you separately use ECC.
-Most ECC hook functionality is now covered by native Claude Code features
-(Session Memory, `/cost`, status-line cost display), and the remaining hooks add
-friction without meaningful workflow benefit. Run Claude Code without any
-`ECC_HOOK_PROFILE` setting.
+Hooks are background hygiene, not workflow validation. They may format, lint, or
+typecheck edited files automatically, but `/workflow-next` should not rerun the
+same check unless the phase requires broader validation or relevant files changed
+after the hook ran. Hook output counts as workflow evidence only when recorded
+with command, scope, result, and evidence path.
 
 Phase 6 still owns the final full relevant validation gate. It also performs
 documentation docking to match code changes with docs and issue/roadmap state,

@@ -12,6 +12,10 @@ Kaola-Workflow is a 6-phase workflow system built on top of GitHub issues and Cl
 
 ## Workflow Design Principles
 
+### Read Before Writing
+
+- Before editing or creating files, inspect the target file and relevant surrounding conventions. Do not write from stale memory or assumptions.
+
 ### Agent Owns Reasoning; Scripts Own Atomicity (issue #44)
 
 Issue selection is an agent decision, not a hidden script decision.

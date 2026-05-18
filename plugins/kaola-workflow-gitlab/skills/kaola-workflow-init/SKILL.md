@@ -68,6 +68,7 @@ Add a concise `## Kaola-Workflow` section if none exists:
 - Do not purge `kaola-workflow/.roadmap/`; closure removes only the closed issue source file.
 - Active work lives in `kaola-workflow/{project}/` until archived or safely discarded.
 - Active artifacts include `workflow-state.md`, phase files, optional `fast-summary.md`, and `.cache/` evidence.
+- Read before writing: inspect the target file and relevant surrounding conventions immediately before editing or creating files.
 - Preserve user changes and avoid destructive Git operations without explicit approval.
 - Verify relevant tests before claiming completion.
 - Kaola-Workflow agent profiles live in `.codex/agents/kaola-workflow/` and are

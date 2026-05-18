@@ -63,7 +63,7 @@ Use this policy:
 | Project Snapshot | yes | What this project is, stack, and main architecture in 2-5 bullets |
 | Commands | yes | Install, test, lint/typecheck/build, dev server commands; use `unknown` when not detected |
 | Non-Negotiable Rules | yes | Stable constraints agents must follow every session |
-| ECC Hook Policy | yes | Treat ECC hooks as background hygiene and avoid duplicate validation |
+| Validation Policy | yes | Treat background hooks as advisory and avoid duplicate validation |
 | Kaola-Workflow | yes | Orchestrator, roadmap, compliance, and archive rules in concise form |
 | Project Conventions | optional | Only real detected or user-provided conventions |
 | Known Gotchas | optional | Only repeated hazards that would waste time |
@@ -100,17 +100,11 @@ Append equivalent missing sections only. Treat headings with the same meaning as
 ## Non-Negotiable Rules
 
 - Think before coding: state assumptions, surface ambiguity, and ask when unclear.
+- Read before writing: inspect the target file and relevant surrounding conventions immediately before editing or creating files.
 - Keep it simple: solve the requested problem without speculative abstractions.
 - Make surgical changes: touch only what the task requires.
 - Preserve user changes; never revert unrelated work without explicit request.
 - Verify with the relevant command before claiming completion.
-
-## ECC Hook Policy
-
-- ECC hooks are background hygiene, not workflow validation.
-- Do not duplicate hook checks unless the phase requires broader validation or relevant files changed after the hook ran.
-- Record hook output as evidence only with command, scope, result, and evidence path.
-- If you separately use ECC hooks during heavy Phase 4 implementation bursts, keep them minimal.
 
 ## Kaola-Workflow
 
