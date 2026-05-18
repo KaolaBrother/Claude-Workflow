@@ -229,10 +229,12 @@ doc-updater
 
 The managed setup copies role configs into `.codex/agents/kaola-workflow/` and
 maintains a `# BEGIN kaola-workflow agents` block in `.codex/config.toml` while
-preserving unrelated config. When Codex subagents are available, phases use
-those roles for detached research, planning, execution, repair, review, and
-documentation work; otherwise the current Codex session follows the same role
-contracts locally.
+preserving unrelated config. At startup, Codex workflows ask the user to authorize
+a delegation policy (`delegate`, `local-authorized`, or `tool-unavailable`).
+When policy permits and subagents are available, phases invoke those roles for
+detached research, planning, execution, repair, review, and documentation work.
+Otherwise, the current Codex session performs the work locally under explicit
+user authorization.
 
 Codex profiles intentionally do not pin model names, so model upgrades can flow
 through the user's active Codex configuration. They only set reasoning effort:

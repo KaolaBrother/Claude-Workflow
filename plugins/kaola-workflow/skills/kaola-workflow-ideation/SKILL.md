@@ -29,7 +29,7 @@ kaola-workflow/{project}/.cache/code-explorer.md
 
 ## Steps
 
-1. Use the `planner` Codex agent role when subagents are available; otherwise perform the same strategy analysis in the current session.
+1. Use the `planner` Codex agent role for this step. Record status as `subagent-invoked` in the compliance ledger if delegation occurred, `local-fallback-explicit` if the user explicitly authorized local execution, or `local-fallback-tool-unavailable` if the subagent tooling was unavailable.
 2. Evaluate 2-3 grounded approaches from Phase 1 facts.
 3. For each option, record summary, pros, cons, risk, complexity, and what not to build.
 4. Consult the strongest available expert model/profile for the session or perform the same advisor gate locally: check for missing approaches, hidden risks, and overbuilt scope. Save it to `.cache/advisor-ideation.md`.
@@ -56,7 +56,7 @@ summary of .cache/advisor-ideation.md
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| planner | invoked | .cache/planner.md | |
+| planner | subagent-invoked/local-fallback-explicit/local-fallback-tool-unavailable | .cache/planner.md | |
 | advisor ideation gate | invoked | .cache/advisor-ideation.md | |
 ```
 

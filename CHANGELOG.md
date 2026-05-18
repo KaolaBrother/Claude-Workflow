@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Added — Typed-Acknowledgement Delegation Gate (issue #77)
+
+- **Delegation Contract in workflow-next skills** (`plugins/kaola-workflow/skills/kaola-workflow-next/SKILL.md` and `kaola-workflow-gitlab` edition): Agents must establish a delegation policy with the user before phase work begins. Policy options are `delegate`, `local-authorized`, or `tool-unavailable`. Policy is written to `workflow-state.md` as `delegation_policy:` after startup.
+- **Ungated fallback language removed**: Removed all conditional "when subagents are available; otherwise perform locally" language from 6 phase skills (GitHub + GitLab editions): research, ideation, plan, execute, review, and finalize. Delegation decisions are now explicit rather than implicit fallbacks.
+- **Four-token compliance vocabulary**: Updated compliance ledger status values in all phase skills to use typed tokens: `subagent-invoked`, `local-fallback-explicit`, `local-fallback-tool-unavailable`, or `N/A`. Replaces vague fallback language with clear audit trail of delegation decisions.
+- **Validator assertions**: `scripts/validate-kaola-workflow-contracts.js` and `plugins/kaola-workflow-gitlab/scripts/validate-kaola-workflow-gitlab-contracts.js` now assert presence of new vocabulary tokens and absence of ungated fallback language in all delegation-gated phase skills.
+
 ### Fixed — Finalization Sink Metadata And Worktree Cleanup
 
 - Captured Phase 6 sink metadata before archive in Claude and Codex finalization guidance so merge sinks no longer read `kaola-workflow/{project}/workflow-state.md` after it has moved to `archive/`.

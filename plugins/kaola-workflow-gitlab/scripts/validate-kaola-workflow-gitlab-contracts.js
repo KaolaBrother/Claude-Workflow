@@ -143,6 +143,37 @@ for (const skill of listFiles(pluginRoot + '/skills', file => file.endsWith('SKI
   assert(!read(skill).includes("*/kaola-workflow/*/scripts/kaola-gitlab"), skill + ' must use the GitLab Codex plugin cache path');
 }
 
+// Issue #77: typed-acknowledgement delegation gate — GitLab skills
+const gitlabSkillsBase = `${pluginRoot}/skills`;
+const delegationNegativeChecks = [
+  [`${gitlabSkillsBase}/kaola-workflow-research/SKILL.md`, 'when subagents are available; otherwise perform the same read-only research'],
+  [`${gitlabSkillsBase}/kaola-workflow-ideation/SKILL.md`, 'when subagents are available; otherwise perform the same strategy analysis'],
+  [`${gitlabSkillsBase}/kaola-workflow-plan/SKILL.md`, 'when subagents are available; otherwise produce the same blueprint'],
+  [`${gitlabSkillsBase}/kaola-workflow-execute/SKILL.md`, 'when subagents are available'],
+  [`${gitlabSkillsBase}/kaola-workflow-execute/SKILL.md`, 'Use the current Codex session as the fallback executor'],
+  [`${gitlabSkillsBase}/kaola-workflow-review/SKILL.md`, 'otherwise perform a review stance locally'],
+  [`${gitlabSkillsBase}/kaola-workflow-review/SKILL.md`, 'or perform the same security review locally'],
+  [`${gitlabSkillsBase}/kaola-workflow-finalize/SKILL.md`, 'subagents are available; otherwise update docs'],
+];
+for (const [file, needle] of delegationNegativeChecks) {
+  assert(!read(file).includes(needle), file + ' must not include: ' + needle);
+}
+const gitlabDelegationSkills = [
+  'kaola-workflow-research',
+  'kaola-workflow-ideation',
+  'kaola-workflow-plan',
+  'kaola-workflow-execute',
+  'kaola-workflow-review',
+  'kaola-workflow-finalize',
+  'kaola-workflow-next',
+];
+for (const skill of gitlabDelegationSkills) {
+  const skillFile = `${gitlabSkillsBase}/${skill}/SKILL.md`;
+  assert(read(skillFile).includes('subagent-invoked'), skillFile + ' must include: subagent-invoked');
+  assert(read(skillFile).includes('local-fallback-explicit'), skillFile + ' must include: local-fallback-explicit');
+  assert(read(skillFile).includes('local-fallback-tool-unavailable'), skillFile + ' must include: local-fallback-tool-unavailable');
+}
+
 for (const file of listFiles(pluginRoot + '/scripts', file =>
   file.endsWith('.js') && !file.endsWith('validate-kaola-workflow-gitlab-contracts.js')
 )) {

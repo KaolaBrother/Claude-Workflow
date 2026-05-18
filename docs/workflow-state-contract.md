@@ -12,7 +12,8 @@ here for the full contract.
   that issue source file before regenerating the mirror.
 - `kaola-workflow/{project}/workflow-state.md` is the active resume pointer. It
   records status, phase, step, pending gates, next command or skill, issue
-  number, sink mode, branch, and worktree path when known.
+  number, sink mode, branch, worktree path when known, and delegation policy.
+  See the Workflow State Fields section below for the complete field inventory.
 - Phase artifacts under `kaola-workflow/{project}/` are durable evidence while
   the project is active: `phase1-research.md`, `phase2-ideation.md`,
   `phase3-plan.md`, `phase4-progress.md`, `phase5-review.md`, and
@@ -22,6 +23,22 @@ here for the full contract.
   phase artifacts or summaries.
 - `kaola-workflow/archive/{project}/` keeps completed, abandoned, or stale
   project folders after finalize or discard.
+
+## Workflow State Fields
+
+The `workflow-state.md` file contains several key blocks:
+
+- `## Sink` — Issue number, sink mode (merge or pr), branch name, and worktree path
+- `## Lease` — (Legacy, deprecated) Coordination metadata; preserved for backward compatibility
+- `delegation_policy:` — User-authorized delegation mode for Codex workflows:
+  - `delegate` — Invoke subagent roles when available (records `subagent-invoked` in compliance ledgers)
+  - `local-authorized` — Execute locally with explicit user authorization (records `local-fallback-explicit`)
+  - `tool-unavailable` — Subagent tooling unavailable; execute locally (records `local-fallback-tool-unavailable`)
+
+Phase artifacts record delegation decisions in their **Required Agent Compliance** ledgers
+using the same four-token vocabulary: `subagent-invoked`, `local-fallback-explicit`,
+`local-fallback-tool-unavailable`, or `N/A`. This audit trail documents what authority
+was invoked for each delegated task.
 
 ## Generated Mirrors
 

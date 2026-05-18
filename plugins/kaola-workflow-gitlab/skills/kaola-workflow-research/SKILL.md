@@ -34,7 +34,7 @@ ambiguity that blocks correctness.
    `branch: TBD`, `issue_number: N`, `claimed_at: N/A`, and `sink: merge` so
    later sessions can recognize the active issue before `phase1-research.md`
    exists.
-3. Inspect relevant files, tests, config, docs, and issues. Use the `code-explorer` Codex agent role when subagents are available; otherwise perform the same read-only research in the current session.
+3. Inspect relevant files, tests, config, docs, and issues. Use the `code-explorer` Codex agent role for this step. Record status as `subagent-invoked` in the compliance ledger if delegation occurred, `local-fallback-explicit` if the user explicitly authorized local execution, or `local-fallback-tool-unavailable` if the subagent tooling was unavailable.
 4. Use the `docs-lookup` Codex agent role only when current external behavior matters; otherwise record why docs lookup is N/A.
 5. Write raw notes to `.cache/code-explorer.md` and `.cache/docs-lookup.md` when used.
 6. Score completeness from 0-10. Stop and ask if below 7.
@@ -71,7 +71,7 @@ X/10
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| code-explorer | invoked | .cache/code-explorer.md | |
+| code-explorer | subagent-invoked/local-fallback-explicit/local-fallback-tool-unavailable | .cache/code-explorer.md | |
 | docs-lookup | invoked/N/A | .cache/docs-lookup.md or docs-impact check | reason if N/A |
 ```
 

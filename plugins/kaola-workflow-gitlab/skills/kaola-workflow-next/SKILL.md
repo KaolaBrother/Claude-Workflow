@@ -24,6 +24,36 @@ decisions, consult the strongest available expert model/profile for the session,
 apply the chosen answer directly, and record it under `.cache/` or the phase
 artifact.
 
+## Delegation Contract
+
+Before proceeding with any phase work, the agent must establish a session delegation policy with the user. Subagent delegation is not assumed; it requires explicit authorization.
+
+**Skip this step if `delegation_policy:` is already set in `workflow-state.md`.**
+
+Ask the user once at startup:
+
+> "This workflow uses Codex subagent roles (code-explorer, planner, code-architect, tdd-guide, code-reviewer, security-reviewer, doc-updater) for delegated work. How should delegation be handled?
+>
+> - **delegate** — invoke subagent roles when available (records `subagent-invoked` in each compliance ledger)
+> - **local-authorized** — execute locally with your explicit authorization (records `local-fallback-explicit`)
+> - **tool-unavailable** — subagent tooling is unavailable; execute locally (records `local-fallback-tool-unavailable`)
+>
+> Please confirm your delegation policy."
+
+**Write order** — three steps, in sequence:
+
+1. Ask the user and receive their confirmation (hold policy in-session).
+2. Call the startup script (this creates `workflow-state.md`).
+3. After startup succeeds and `workflow-state.md` exists, patch the delegation policy into the file:
+
+```bash
+printf '\ndelegation_policy: %s\n' "$KAOLA_DELEGATION_POLICY" >> "kaola-workflow/${PICK_NEXT_PROJECT}/workflow-state.md"
+```
+
+Where `KAOLA_DELEGATION_POLICY` is `delegate`, `local-authorized`, or `tool-unavailable` based on the user's response.
+
+Do not re-ask during the session unless the user explicitly changes policy or `workflow-state.md` is absent.
+
 ## Agent Issue Selection (Required Before Startup)
 
 Before calling the startup script, the agent must select a target issue. Scripts

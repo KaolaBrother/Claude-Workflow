@@ -30,9 +30,9 @@ kaola-workflow/{project}/phase4-progress.md
 ## Review Steps
 
 1. Inspect changed files and task evidence.
-2. Use the `code-reviewer` Codex agent role or `codex review` when useful for a detached review pass; otherwise perform a review stance locally.
+2. Use the `code-reviewer` Codex agent role or `codex review` for a detached review pass. Record status as `subagent-invoked` in the compliance ledger if delegation occurred, `local-fallback-explicit` if the user explicitly authorized local execution, or `local-fallback-tool-unavailable` if the subagent tooling was unavailable.
 3. Check correctness, scope, naming, error handling, test coverage, debug statements, and validation evidence.
-4. Run a security-sensitive file scan. If auth, payments, user data, filesystem access, external APIs, or secrets changed, use the `security-reviewer` Codex agent role or perform the same security review locally.
+4. Run a security-sensitive file scan. If auth, payments, user data, filesystem access, external APIs, or secrets changed, use the `security-reviewer` Codex agent role. Record status as `subagent-invoked` in the compliance ledger if delegation occurred, `local-fallback-explicit` if the user explicitly authorized local execution, or `local-fallback-tool-unavailable` if the subagent tooling was unavailable.
 5. Route CRITICAL/HIGH findings back to implementation before Phase 6. MEDIUM/LOW findings may become follow-ups.
 6. Save raw review output to `.cache/code-reviewer.md` and `.cache/security-reviewer.md` when used.
 
@@ -55,9 +55,9 @@ ran yes/no and reason
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| quality review | invoked | .cache/code-reviewer.md | |
-| security review | invoked/N/A | .cache/security-reviewer.md or file-risk scan | reason if N/A |
-| review-fix executors | invoked/N/A | .cache/review-fix-*.md | reason if N/A |
+| quality review | subagent-invoked/local-fallback-explicit/local-fallback-tool-unavailable | .cache/code-reviewer.md | |
+| security review | subagent-invoked/local-fallback-explicit/local-fallback-tool-unavailable/N/A | .cache/security-reviewer.md or file-risk scan | reason if N/A |
+| review-fix executors | subagent-invoked/local-fallback-explicit/local-fallback-tool-unavailable/N/A | .cache/review-fix-*.md | reason if N/A |
 
 ## Review Status
 PASSED | PASSED WITH FOLLOW-UPS

@@ -34,7 +34,7 @@ choices, or ambiguity that blocks correctness.
    [ -z "$ACTIVE_WORKTREE_PATH" ] && ACTIVE_WORKTREE_PATH="$(pwd)"
    ```
 
-3. Documentation update: use the `doc-updater` Codex agent role when documentation changes are needed and subagents are available; otherwise update docs in the current session. Pass `Working directory: ${ACTIVE_WORKTREE_PATH}` to the doc-updater agent. Update docs only when behavior, API, setup, architecture, env, roadmap, or user-facing workflow changed. Save output to `.cache/doc-updater.md` or write a no-impact reason.
+3. Documentation update: use the `doc-updater` Codex agent role when documentation changes are needed. Record status as `subagent-invoked` in the compliance ledger if delegation occurred, `local-fallback-explicit` if the user explicitly authorized local execution, or `local-fallback-tool-unavailable` if the subagent tooling was unavailable. Pass `Working directory: ${ACTIVE_WORKTREE_PATH}` to the doc-updater agent. Update docs only when behavior, API, setup, architecture, env, roadmap, or user-facing workflow changed. Save output to `.cache/doc-updater.md` or write a no-impact reason.
 4. Documentation Docking: compare changed files with `README.md`, API docs, architecture docs, changelog, `.env.example`, roadmap, and issue comments when relevant. Save `.cache/doc-docking.md` with verdict `DOCKED` or `BLOCKED`.
 5. Closure decision: scan all phase files for deferred items or user decisions. Ask before reorganizing issues or roadmap.
 6. Refresh `kaola-workflow/ROADMAP.md`.
@@ -179,6 +179,7 @@ DOCKED, .cache/doc-docking.md
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
 | final validation | invoked | .cache/final-validation.md | |
+| doc-updater | subagent-invoked/local-fallback-explicit/local-fallback-tool-unavailable/N/A | .cache/doc-updater.md | reason if N/A |
 | documentation docking | invoked | .cache/doc-docking.md | |
 | roadmap refresh | invoked | kaola-workflow/ROADMAP.md | |
 | archive completed folder | invoked | kaola-workflow/archive/{project} | |

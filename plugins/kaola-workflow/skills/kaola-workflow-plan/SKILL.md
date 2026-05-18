@@ -34,7 +34,7 @@ Write `kaola-workflow/{project}/phase3-plan.md` with:
 - safe parallel groups only when write sets are disjoint
 - explicit out-of-scope items
 
-Use the `code-architect` Codex agent role when subagents are available; otherwise produce the same blueprint in the current session. Consult the strongest available expert model/profile for the session or perform the same plan self-review locally, then save it to `.cache/advisor-plan.md`. If gaps are found, revise the blueprint before execution.
+Use the `code-architect` Codex agent role for the blueprint step. Record status as `subagent-invoked` in the compliance ledger if delegation occurred, `local-fallback-explicit` if the user explicitly authorized local execution, or `local-fallback-tool-unavailable` if the subagent tooling was unavailable. Consult the strongest available expert model/profile for the session or perform the same plan self-review locally, then save it to `.cache/advisor-plan.md`. If gaps are found, revise the blueprint before execution.
 
 ## Task Template
 
@@ -56,7 +56,7 @@ Use the `code-architect` Codex agent role when subagents are available; otherwis
 ```markdown
 | Requirement | Status | Evidence | Skip Reason |
 |-------------|--------|----------|-------------|
-| code-architect | invoked | .cache/architect.md | |
+| code-architect | subagent-invoked/local-fallback-explicit/local-fallback-tool-unavailable | .cache/code-architect.md | |
 | advisor plan gate | invoked | .cache/advisor-plan.md | |
 | blueprint revisions | invoked/N/A | .cache/architect-revision-*.md | reason if N/A |
 ```
