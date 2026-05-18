@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [3.8.1] — 2026-05-19
+
+### Fixed — Sink-Merge Cwd-Independence (issue #94)
+
+- **`scripts/kaola-workflow-sink-merge.js` + Codex mirror**: every git call now passes `git -C <mainRoot>` explicitly. `mainRoot` is computed once from `getCoordRoot()` and threaded through `assertCleanWorktree`, `doRebase`, `ffMergeLoop`, and `postMergeCleanup`. Step 0's escape-chdir now targets `os.tmpdir()` instead of `mainRoot`, so the script is provably cwd-independent and Phase 6 invocations from a linked worktree no longer collide with the worktree registry's branch lock.
+- **`scripts/simulate-workflow-walkthrough.js`**: new `testSinkMergeFromLinkedWorktree` regression test (sink-merge had zero coverage in the walkthrough). The test fails fast if any `-C mainRoot` is dropped from the new code path.
+
+### Fixed — `kaola_script` Self-Detection (issue #95)
+
+- **Helper one-liner updated across 8 command markdowns (22 occurrences)** in both GitHub and GitLab editions: `commands/{workflow-init,workflow-next,kaola-workflow-phase1,kaola-workflow-phase6}.md` and `plugins/kaola-workflow-gitlab/commands/{same}`. The helper now reads `./package.json` and, when the name is `"kaola-workflow"`, prefers the workspace's local `./scripts/` (or `./plugins/kaola-workflow-gitlab/scripts/` for the GitLab edition) before falling back to `CLAUDE_PLUGIN_ROOT` and `$HOME/.claude/...`. Downstream projects retain the original resolution order.
+- **Why this matters**: previously, Phase 6 of a kaola-workflow self-fix branch silently resolved `CLAIM_JS` to the installed plugin and ran stale code, so the fix under test was never exercised by its own closure.
+
 ### Fixed — GitLab Roadmap Atomicity And Source Safeguards (issue #87)
 
 - Added GitLab roadmap missing-source protection so `generate` refuses to erase a non-empty generated `ROADMAP.md` when `kaola-workflow/.roadmap/` is absent.
