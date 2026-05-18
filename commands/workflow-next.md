@@ -116,9 +116,6 @@ typed refusal (`target_occupied`, `user_target_blocked`, `user_target_red`,
 `target_mismatch`, `target_unavailable`), read the `reasoning` field and either
 stop, select a different issue, or escalate to the user. If startup is unavailable
 or the startup receipt is missing/malformed, stop for repair.
-If startup returns `claim: "none"`, normal routing must stop; do not inspect active project folders
-and recover/handoff them from a skipped `already claimed` entry unless the user explicitly requested
-recovery for a specific unfinished project.
 If `KAOLA_PATH=fast` is set, startup records `workflow_path: fast`.
 Agent sets this env var after reading `analyzeIssue` advisory output from the startup receipt.
 
