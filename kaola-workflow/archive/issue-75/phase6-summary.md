@@ -60,7 +60,8 @@ No advisor consultation needed. All phase artifacts scanned — no partial imple
 
 ## Commit And Push
 
-Pending final Git gate. Final hash reported after push.
+Implementation commit: `4d80f11`
+Merge commit: `2d55260`
 
 ## GitHub Issue
 
@@ -87,4 +88,4 @@ Closing after final commit — all 8 AC bullets satisfied.
 | final commit and push | ready | git status/git diff/upstream check | final gate runs after this file is committed |
 
 ## Status
-READY FOR FINAL GIT GATE
+CLOSED — merged to main, GitHub issue #75 closed
