@@ -125,6 +125,29 @@ echo "Kaola-Workflow — installer"
 echo "Forge: $FORGE"
 echo ""
 
+# Refuse to install if kaola-workflow is already registered via the Claude Code
+# plugin runtime. Running both produces a parallel install: plugin-managed hooks
+# fire from ~/.claude/plugins/data/... while these manual commands shadow plugin
+# commands. The user must uninstall the plugin first.
+if command -v claude >/dev/null 2>&1; then
+  PLUGIN_LIST="$(claude plugin list 2>/dev/null || true)"
+  if printf '%s\n' "$PLUGIN_LIST" | grep -qE 'kaola-workflow(-gitlab)?@'; then
+    echo "error: kaola-workflow is currently installed via the Claude Code plugin runtime." >&2
+    echo "" >&2
+    echo "Running install.sh on top of a plugin install creates a parallel installation:" >&2
+    echo "manual commands shadow plugin commands, and plugin hooks still fire from" >&2
+    echo "~/.claude/plugins/data/. Remove the plugin install first, then retry:" >&2
+    echo "" >&2
+    echo "  claude plugin uninstall kaola-workflow@kaolabrother-kaola-workflow" >&2
+    echo "  claude plugin uninstall kaola-workflow-gitlab@kaolabrother-kaola-workflow  # if installed" >&2
+    echo "  claude plugin marketplace remove kaolabrother-kaola-workflow" >&2
+    echo "" >&2
+    echo "Then re-run install.sh." >&2
+    exit 1
+  fi
+fi
+
+
 # Remove stale kaola-workflow command files before installing fresh ones.
 # Outdated user-level commands in ~/.claude/commands/ take precedence over
 # everything else and will shadow updated installs if not cleaned up.

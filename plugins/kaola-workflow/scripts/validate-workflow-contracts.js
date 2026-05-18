@@ -201,9 +201,7 @@ assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-merge.j
 assertIncludes('commands/kaola-workflow-phase6.md', 'kaola-workflow-sink-pr.js');
 assertBefore('commands/kaola-workflow-phase6.md', 'commit -m "chore: finalize {project}"', 'kaola-workflow-sink-merge.js');
 
-const pluginJson = JSON.parse(read('.claude-plugin/plugin.json'));
 const packageJson = JSON.parse(read('package.json'));
-assert(packageJson.version === pluginJson.version, 'package.json and Claude plugin version must match');
 assert(Array.isArray(packageJson.files) && packageJson.files.includes('hooks/'), 'package files must include hooks/');
 assert(Array.isArray(packageJson.files) && packageJson.files.includes('scripts/'), 'package files must include scripts/');
 

@@ -75,8 +75,8 @@ Kaola-Workflow has two sibling editions:
 - **GitLab edition**: opt-in. Uses GitLab issues, merge requests, and `glab`.
 
 The workflow commands keep the same names in both editions, so a manual Claude
-Code command install should choose one forge at a time. Marketplace and Codex
-plugin installs expose separate plugin entries for each edition.
+Code command install should choose one forge at a time. install.sh `--forge`
+flag selects which edition to install.
 
 ### Claude Code
 
@@ -117,12 +117,6 @@ Uninstall:
 ./uninstall.sh --forge=all
 ```
 
-Claude marketplace installs use `.claude-plugin/marketplace.json`, which
-contains both plugin entries:
-
-- `kaola-workflow`
-- `kaola-workflow-gitlab`
-
 ### GitLab Prerequisites
 
 Before using the GitLab edition in a target project:
@@ -144,8 +138,10 @@ commands and `CLAUDE.md`.
 - GitHub edition: `plugins/kaola-workflow/`
 - GitLab edition: `plugins/kaola-workflow-gitlab/`
 
-The Codex marketplace file `.agents/plugins/marketplace.json` contains both
-entries: `kaola-workflow` and `kaola-workflow-gitlab`.
+`.agents/plugins/marketplace.json` is the Codex registration manifest. Codex's
+CLI requires this file (its only registration command is `plugin marketplace
+add <path>`) — it contains both `kaola-workflow` and `kaola-workflow-gitlab`
+entries so a single local-path registration exposes either edition.
 
 ### Install On Another Computer
 
