@@ -23,12 +23,22 @@ const codexDir = path.join(repoRoot, 'plugins', 'kaola-workflow', 'scripts');
 //
 //   kaola-workflow-compact-context.js, kaola-workflow-session-env.js (Claude-only) —
 //     these implement Claude Code SessionStart hooks that have no Codex equivalent.
+//     The Codex simulation invokes kaola-workflow-compact-context.js via a repo-root
+//     absolute path (see `plugins/kaola-workflow/scripts/simulate-kaola-workflow-walkthrough.js`),
+//     so no plugin-local copy is needed.
 //
 //   validate-kaola-workflow-contracts.js (Codex-only) — Codex contract validator;
 //     the Claude validator is validate-workflow-contracts.js (in the allowlist below).
 //
 //   install-codex-agent-profiles.js (Codex-only) — installs .codex/agents/ TOML
 //     profiles; not used by the Claude pack.
+//
+// HOOK PARITY NOTE:
+//   `hooks/kaola-workflow-pre-commit.sh` and `plugins/kaola-workflow/hooks/kaola-workflow-pre-commit.sh`
+//   are byte-identical copies of the cross-session staging guard. They are NOT
+//   enforced by this validator; future edits MUST be applied to both copies
+//   manually until a hook-sync check is added. Drift here means cross-runtime
+//   security divergence — keep both files in sync.
 const COMMON_SCRIPTS = [
   'kaola-workflow-claim.js',
   'kaola-workflow-classifier.js',

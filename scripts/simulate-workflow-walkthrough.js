@@ -122,7 +122,8 @@ function assertHookOutput(workdir, expectedCommand, expectedStep) {
 function runRepair(workdir, projectArg = project) {
   return execFileSync(process.execPath, [path.join(root, 'scripts/kaola-workflow-repair-state.js'), projectArg], {
     cwd: workdir,
-    encoding: 'utf8'
+    encoding: 'utf8',
+    env: { ...process.env, KAOLA_SESSION_ID: process.env.KAOLA_SESSION_ID || 'test-session-repair' }
   });
 }
 
@@ -175,7 +176,8 @@ async function main() {
       ].join('\n'));
       const output = execFileSync(process.execPath, [path.join(root, 'scripts/kaola-workflow-repair-state.js')], {
         cwd: stateOnlyRoot,
-        encoding: 'utf8'
+        encoding: 'utf8',
+        env: { ...process.env, KAOLA_SESSION_ID: process.env.KAOLA_SESSION_ID || 'test-session-repair' }
       });
       assert(output.includes('Workflow state repair: existing state valid'), 'repair must recognize active workflow-state before phase files exist');
       assert(output.includes('Workflow project: ' + activeProject), 'repair must route the state-only active project');
@@ -1436,15 +1438,20 @@ exit 0
         // 7D: watch-pr sees CLOSED (no merge) → releaseSession reason=aborted, branch NOT deleted
         const ghShimClosedPath = path.join(epic7Tmp, 'bin7d');
         fs.mkdirSync(ghShimClosedPath, { recursive: true });
+        const ghLog7D = path.join(epic7Tmp, 'gh-calls-7d.log');
         fs.writeFileSync(path.join(ghShimClosedPath, 'gh'), `#!/bin/sh
 if [ "$1" = "pr" ] && [ "$2" = "view" ]; then
   printf '{"state":"CLOSED","mergedAt":null,"url":"https://github.com/test/repo/pull/45","number":45,"closedAt":"2026-05-15T00:00:00Z"}'
   exit 0
 fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
+  echo "$*" >> "$GH_CALL_LOG_7D"
+  exit 0
+fi
 exit 0
 `);
         fs.chmodSync(path.join(ghShimClosedPath, 'gh'), 0o755);
-        const closedEnv = { ...process.env, PATH: ghShimClosedPath + path.delimiter + (process.env.PATH || ''), HOME: epic7Tmp };
+        const closedEnv = { ...process.env, PATH: ghShimClosedPath + path.delimiter + (process.env.PATH || ''), HOME: epic7Tmp, GH_CALL_LOG_7D: ghLog7D };
 
         const projDir7D = path.join(kwDir, 'epic7d');
         fs.mkdirSync(projDir7D, { recursive: true });
@@ -1459,6 +1466,9 @@ exit 0
         execFileSync(process.execPath, [claimScript, 'watch-pr'],
           { cwd: workDir, encoding: 'utf8', env: closedEnv });
         assert(!fs.existsSync(path.join(locksDir, 'epic7d.lock')), '7D: lock file must be removed after CLOSED');
+        const ghLog7DContent = fs.existsSync(ghLog7D) ? fs.readFileSync(ghLog7D, 'utf8') : '';
+        assert(ghLog7DContent.includes('--remove-label'),
+          '7D: gh issue edit --remove-label must be called on CLOSED PR, calls: ' + ghLog7DContent);
         let branchExists7D = false;
         try { execFileSync('git', ['show-ref', '--verify', '--quiet', 'refs/heads/' + branch7D], { cwd: workDir }); branchExists7D = true; } catch (_) {}
         assert(branchExists7D, '7D: local branch must NOT be deleted after CLOSED-without-merge');
@@ -2395,7 +2405,7 @@ exit 0
             cwd: subTmp,
             encoding: 'utf8',
             timeout: 3000,
-            env: { ...process.env, PATH: binDir + path.delimiter + PATH, HOME: subTmp }
+            env: { ...process.env, PATH: binDir + path.delimiter + PATH, HOME: subTmp, KAOLA_KERNEL_SESSION_SKIP: '1' }
           });
 
           assert(r9a3.status === 0, '9A3: ticker late-yield must self-terminate with exit 0, got status=' + r9a3.status + ' signal=' + r9a3.signal + '\nstderr:' + r9a3.stderr);
@@ -6073,6 +6083,426 @@ exit 0
         'Epic Case 18D: "permission denied" must classify as permission_denied');
       assert(cmeFn18d('') === null,
         'Epic Case 18D: empty stderr must return null');
+    }
+
+    // Epic 20A — stale-closed-issue regression
+    // Scenario: sweep must clean up locks for closed GitHub issues even when
+    // the lock is fresh (< 24h) and not remote-stale.
+    // Uses a non-synthetic UUID-style session so isSyntheticTestSession() returns
+    // false, forcing the production path through shouldSweep + isRemoteStale.
+    // Before B4: sweep does nothing (lock not 24h old) → assert fails → RED.
+    // After B4: closedFastPath bypasses both continues → lock cleaned → GREEN.
+    {
+      const epic20aTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic20a-'));
+      try {
+        const workDir20a = path.join(epic20aTmp, 'work');
+        execFileSync('git', ['init', workDir20a], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20a, 'config', 'user.email', 'test@test.com'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20a, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+        // Create initial commit so git operations work
+        fs.writeFileSync(path.join(workDir20a, 'README.md'), 'init\n');
+        execFileSync('git', ['-C', workDir20a, 'add', 'README.md'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20a, 'commit', '-m', 'init'], { encoding: 'utf8' });
+
+        // Set up lock dir
+        const locksDir20a = locksDirFor(workDir20a);
+        fs.mkdirSync(locksDir20a, { recursive: true });
+
+        // Fake worktree path (not git-registered; removeWorktree will skip gracefully)
+        const worktreePath20a = path.join(epic20aTmp, 'fake-worktree');
+        fs.mkdirSync(worktreePath20a, { recursive: true });
+
+        // Non-synthetic UUID-style session so isSyntheticTestSession() returns false
+        const session20a = '12345678-aaaa-bbbb-cccc-202a00000001';
+        const lockPath20a = path.join(locksDir20a, 'issue-46-20a.lock');
+        const lock20a = {
+          project: 'issue-46-20a',
+          session_id: session20a,
+          machine_id: 'test-machine',
+          claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+          last_heartbeat: new Date().toISOString(),
+          issue_number: 46,
+          claim_comment_id: '999',
+          sink: 'merge',
+          pr_url: null,
+          pr_number: null,
+          worktree_path: worktreePath20a
+        };
+        fs.writeFileSync(lockPath20a, JSON.stringify(lock20a, null, 2) + '\n');
+
+        // gh shim: issue 46 is CLOSED; log label/assignee removal calls
+        const ghShim20aDir = path.join(epic20aTmp, 'bin20a');
+        fs.mkdirSync(ghShim20aDir, { recursive: true });
+        const ghLog20a = path.join(epic20aTmp, 'gh-calls.log');
+        fs.writeFileSync(path.join(ghShim20aDir, 'gh'), `#!/bin/sh
+if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
+  printf '{"state":"CLOSED"}'
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
+  echo "$*" >> "$GH_CALL_LOG"
+  exit 0
+fi
+if [ "$1" = "issue" ] && [ "$2" = "comment" ]; then
+  exit 0
+fi
+if [ "$1" = "api" ]; then
+  exit 0
+fi
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"owner":{"login":"test"},"name":"repo"}'
+  exit 0
+fi
+exit 0
+`);
+        fs.chmodSync(path.join(ghShim20aDir, 'gh'), 0o755);
+
+        const env20a = {
+          ...process.env,
+          PATH: ghShim20aDir + path.delimiter + (process.env.PATH || ''),
+          HOME: epic20aTmp,
+          GH_CALL_LOG: ghLog20a
+        };
+        // Remove any offline flag so gh calls happen
+        delete env20a.KAOLA_WORKFLOW_OFFLINE;
+        delete env20a.KAOLA_OFFLINE;
+
+        const claimScript20a = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+        const r20a = execFileSync(process.execPath, [claimScript20a, 'sweep'], {
+          cwd: workDir20a,
+          encoding: 'utf8',
+          env: env20a
+        });
+
+        // Sub-assert: lock file removed
+        assert(!fs.existsSync(lockPath20a),
+          'Epic 20A: sweep must remove lock for closed issue 46 (non-synthetic session, fresh lock)');
+
+        // Sub-assert: gh label/assignee calls made
+        const ghLog20aContent = fs.existsSync(ghLog20a) ? fs.readFileSync(ghLog20a, 'utf8') : '';
+        assert(ghLog20aContent.includes('--remove-label'),
+          'Epic 20A: sweep must call gh issue edit --remove-label for closed issue 46, calls: ' + ghLog20aContent);
+        assert(ghLog20aContent.includes('--remove-assignee'),
+          'Epic 20A: sweep must call gh issue edit --remove-assignee for closed issue 46, calls: ' + ghLog20aContent);
+
+        // Sub-assert for claimExplicitTarget closed guard:
+        // startup with --target-issue 46 (closed) must return user_target_closed
+        let startup20aOut = '';
+        try {
+          startup20aOut = execFileSync(process.execPath, [
+            claimScript20a, 'startup',
+            '--target-issue', '46',
+            '--session', '12345678-aaaa-bbbb-cccc-202a00000002'
+          ], {
+            cwd: workDir20a,
+            encoding: 'utf8',
+            env: env20a
+          });
+        } catch (e) {
+          startup20aOut = e.stdout || '';
+        }
+        let startup20aResult;
+        try { startup20aResult = JSON.parse(startup20aOut.trim()); } catch (_) { startup20aResult = {}; }
+        assert(
+          startup20aResult.verdict === 'user_target_red' || startup20aResult.verdict === 'user_target_closed',
+          'Epic 20A: startup with closed target must yield user_target_red or user_target_closed, got: ' + JSON.stringify(startup20aResult)
+        );
+      } finally {
+        fs.rmSync(epic20aTmp, { recursive: true, force: true });
+      }
+    }
+
+    // Epic 20B — post-completion no-auto-claim refusal
+    // Scenario: after a project is finalized (archived, no lock), pick-next and
+    // startup with no --target-issue must refuse to auto-claim (return no_target /
+    // claim:none). Verifies #44 no-auto-pick invariant holds after finalization.
+    {
+      const epic20bTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic20b-'));
+      try {
+        const workDir20b = path.join(epic20bTmp, 'work');
+        execFileSync('git', ['init', workDir20b], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20b, 'config', 'user.email', 'test@test.com'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20b, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+        fs.writeFileSync(path.join(workDir20b, 'README.md'), 'init\n');
+        execFileSync('git', ['-C', workDir20b, 'add', 'README.md'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20b, 'commit', '-m', 'init'], { encoding: 'utf8' });
+
+        // Simulate a finalized issue: archive dir exists with phase6-summary.md, no lock
+        const archiveDir20b = path.join(workDir20b, 'kaola-workflow', 'archive', 'test-20b');
+        fs.mkdirSync(archiveDir20b, { recursive: true });
+        fs.writeFileSync(path.join(archiveDir20b, 'phase6-summary.md'), '# Phase 6 Summary\nstatus: complete\n');
+
+        const claimScript20b = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+        const env20b = {
+          ...process.env,
+          KAOLA_WORKFLOW_OFFLINE: '1',
+          KAOLA_OFFLINE: '1',
+          KAOLA_KERNEL_SESSION_SKIP: '1',
+          HOME: epic20bTmp
+        };
+
+        // Assert: pick-next with no --target-issue returns verdict:none, reason:no_target
+        let pickNextOut = '';
+        try {
+          pickNextOut = execFileSync(process.execPath, [
+            claimScript20b, 'pick-next',
+            '--session', 'synthetic-20b-no-target',
+            '--runtime', 'claude'
+          ], { cwd: workDir20b, encoding: 'utf8', env: env20b });
+        } catch (e) {
+          pickNextOut = e.stdout || '';
+        }
+        let pickNextResult;
+        try { pickNextResult = JSON.parse(pickNextOut.trim()); } catch (_) { pickNextResult = {}; }
+        assert(
+          pickNextResult.verdict === 'none' && pickNextResult.reason === 'no_target',
+          'Epic 20B: pick-next with no --target-issue must return verdict:none reason:no_target, got: ' + JSON.stringify(pickNextResult)
+        );
+
+        // Assert: startup with no --target-issue returns verdict:no_target, claim:none
+        let startupOut20b = '';
+        try {
+          startupOut20b = execFileSync(process.execPath, [
+            claimScript20b, 'startup',
+            '--session', 'synthetic-20b-startup',
+            '--runtime', 'claude'
+          ], { cwd: workDir20b, encoding: 'utf8', env: env20b });
+        } catch (e) {
+          startupOut20b = e.stdout || '';
+        }
+        let startupResult20b;
+        try { startupResult20b = JSON.parse(startupOut20b.trim()); } catch (_) { startupResult20b = {}; }
+        assert(
+          startupResult20b.verdict === 'no_target',
+          'Epic 20B: startup with no --target-issue must return verdict:no_target, got: ' + JSON.stringify(startupResult20b)
+        );
+        assert(
+          startupResult20b.claim === 'none',
+          'Epic 20B: startup with no --target-issue must return claim:none, got: ' + JSON.stringify(startupResult20b)
+        );
+
+        // Sub-assert: no lock file created
+        const locksDir20b = locksDirFor(workDir20b);
+        const lockFiles20b = fs.existsSync(locksDir20b) ? fs.readdirSync(locksDir20b).filter(f => f.endsWith('.lock')) : [];
+        assert(lockFiles20b.length === 0,
+          'Epic 20B: no lock file must be created when no --target-issue, found: ' + lockFiles20b.join(', '));
+      } finally {
+        fs.rmSync(epic20bTmp, { recursive: true, force: true });
+      }
+    }
+
+    // Epic 20D — second-pass GC archives step:complete with phase6-summary
+    // Scenario: sweep's second pass must archive dirs with step:complete +
+    // phase6-summary.md + no lock. The phase*.md guard must NOT swallow
+    // phase6-summary.md dirs before the step:complete check fires.
+    // Negative case: step:final-validation + phase6-summary.md must NOT be archived.
+    {
+      const epic20dTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic20d-'));
+      try {
+        const workDir20d = path.join(epic20dTmp, 'work');
+        execFileSync('git', ['init', workDir20d], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20d, 'config', 'user.email', 'test@test.com'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20d, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+        fs.writeFileSync(path.join(workDir20d, 'README.md'), 'init\n');
+        execFileSync('git', ['-C', workDir20d, 'add', 'README.md'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20d, 'commit', '-m', 'init'], { encoding: 'utf8' });
+
+        // Create locks dir so cmdSweep doesn't return early at the "dir not found" guard
+        const locksDir20d = locksDirFor(workDir20d);
+        fs.mkdirSync(locksDir20d, { recursive: true });
+
+        // Positive case: foo-complete has step:complete + phase6-summary.md
+        const fooDir = path.join(workDir20d, 'kaola-workflow', 'foo-complete');
+        fs.mkdirSync(fooDir, { recursive: true });
+        fs.writeFileSync(path.join(fooDir, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\n## Project\nname: foo-complete\nstatus: active\n\n## Current Position\nstep: complete\n');
+        fs.writeFileSync(path.join(fooDir, 'phase6-summary.md'), '# Phase 6 Summary\n');
+
+        // Negative case: bar-finalval has step:final-validation + phase6-summary.md (must NOT be archived)
+        const barDir = path.join(workDir20d, 'kaola-workflow', 'bar-finalval');
+        fs.mkdirSync(barDir, { recursive: true });
+        fs.writeFileSync(path.join(barDir, 'workflow-state.md'),
+          '# Kaola-Workflow State\n\n## Project\nname: bar-finalval\nstatus: active\n\n## Current Position\nstep: final-validation\n');
+        fs.writeFileSync(path.join(barDir, 'phase6-summary.md'), '# Phase 6 Summary\n');
+
+        const archiveDir20d = path.join(workDir20d, 'kaola-workflow', 'archive');
+        fs.mkdirSync(archiveDir20d, { recursive: true });
+
+        const claimScript20d = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+        const env20d = {
+          ...process.env,
+          KAOLA_WORKFLOW_OFFLINE: '1',
+          KAOLA_OFFLINE: '1',
+          KAOLA_KERNEL_SESSION_SKIP: '1',
+          HOME: epic20dTmp
+        };
+
+        execFileSync(process.execPath, [claimScript20d, 'sweep'], {
+          cwd: workDir20d,
+          encoding: 'utf8',
+          env: env20d
+        });
+
+        // foo-complete must be archived (moved to archive/)
+        assert(!fs.existsSync(fooDir),
+          'Epic 20D: foo-complete (step:complete + phase6-summary.md) must be removed from kaola-workflow/');
+        const archivedFoo = path.join(archiveDir20d, 'foo-complete');
+        assert(fs.existsSync(archivedFoo),
+          'Epic 20D: foo-complete must appear in kaola-workflow/archive/');
+
+        // bar-finalval must NOT be archived (step:final-validation)
+        assert(fs.existsSync(barDir),
+          'Epic 20D: bar-finalval (step:final-validation) must NOT be archived by second-pass GC');
+      } finally {
+        fs.rmSync(epic20dTmp, { recursive: true, force: true });
+      }
+    }
+
+    // Epic 20E — cmdResume blocks cross-session resume
+    // Scenario: if a lock exists with session A, resume --session B must refuse.
+    // Negative: resume --session A (matching) must succeed.
+    {
+      const epic20eTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic20e-'));
+      try {
+        const workDir20e = path.join(epic20eTmp, 'work');
+        execFileSync('git', ['init', workDir20e], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20e, 'config', 'user.email', 'test@test.com'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20e, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+        fs.writeFileSync(path.join(workDir20e, 'README.md'), 'init\n');
+        execFileSync('git', ['-C', workDir20e, 'add', 'README.md'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20e, 'commit', '-m', 'init'], { encoding: 'utf8' });
+
+        // Create lock owned by sess-owner-20e
+        const locksDir20e = locksDirFor(workDir20e);
+        fs.mkdirSync(locksDir20e, { recursive: true });
+        const lockFile20e = path.join(locksDir20e, 'test-resume-20e.lock');
+        fs.writeFileSync(lockFile20e, JSON.stringify({
+          project: 'test-resume-20e',
+          session_id: 'sess-owner-20e',
+          claimed_at: new Date().toISOString(),
+          expires: new Date(Date.now() + 3600 * 1000).toISOString()
+        }));
+
+        // Create project dir with no phase artifacts
+        const projDir20e = path.join(workDir20e, 'kaola-workflow', 'test-resume-20e');
+        fs.mkdirSync(projDir20e, { recursive: true });
+
+        const claimScript20e = path.join(root, 'scripts', 'kaola-workflow-claim.js');
+        const env20e = {
+          ...process.env,
+          KAOLA_WORKFLOW_OFFLINE: '1',
+          KAOLA_OFFLINE: '1',
+          KAOLA_KERNEL_SESSION_SKIP: '1',
+          HOME: epic20eTmp
+        };
+
+        // Cross-session resume: session OTHER_SID, lock owned by sess-owner-20e → must refuse
+        let crossResumeOut = '';
+        let crossResumeExitCode = 0;
+        try {
+          crossResumeOut = execFileSync(process.execPath, [
+            claimScript20e, 'resume',
+            '--project', 'test-resume-20e',
+            '--session', 'sess-intruder-20e'
+          ], { cwd: workDir20e, encoding: 'utf8', env: env20e });
+        } catch (e) {
+          crossResumeOut = e.stdout || '';
+          crossResumeExitCode = e.status || 1;
+        }
+        let crossResumeResult;
+        try { crossResumeResult = JSON.parse(crossResumeOut.trim()); } catch (_) { crossResumeResult = {}; }
+        assert(crossResumeExitCode !== 0,
+          'Epic 20E: cross-session resume must exit non-zero, got exit 0, output: ' + crossResumeOut);
+        assert(crossResumeResult.resumed === false,
+          'Epic 20E: cross-session resume must return resumed:false, got: ' + JSON.stringify(crossResumeResult));
+        assert(typeof crossResumeResult.reason === 'string' && crossResumeResult.reason.includes('session mismatch'),
+          'Epic 20E: cross-session resume reason must include "session mismatch", got: ' + JSON.stringify(crossResumeResult));
+
+        // Matching-session resume: session sess-owner-20e → must succeed
+        let matchResumeOut = '';
+        try {
+          matchResumeOut = execFileSync(process.execPath, [
+            claimScript20e, 'resume',
+            '--project', 'test-resume-20e',
+            '--session', 'sess-owner-20e'
+          ], { cwd: workDir20e, encoding: 'utf8', env: env20e });
+        } catch (e) {
+          matchResumeOut = e.stdout || '';
+          assert(false, 'Epic 20E: matching-session resume must succeed, got error: ' + (e.message || '') + ', output: ' + matchResumeOut);
+        }
+        let matchResumeResult;
+        try { matchResumeResult = JSON.parse(matchResumeOut.trim()); } catch (_) { matchResumeResult = {}; }
+        assert(matchResumeResult.resumed === true,
+          'Epic 20E: matching-session resume must return resumed:true, got: ' + JSON.stringify(matchResumeResult));
+      } finally {
+        fs.rmSync(epic20eTmp, { recursive: true, force: true });
+      }
+    }
+
+    // Epic 20F — B7a: ownedByCurrentSession returns false when sessionId is empty
+    // Verifies that repair-state.js refuses to touch a project owned by another session
+    // when the caller has no session ID (KAOLA_SESSION_ID='').
+    {
+      const epic20fTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-workflow-epic20f-'));
+      try {
+        const workDir20f = path.join(epic20fTmp, 'work');
+        execFileSync('git', ['init', workDir20f], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20f, 'config', 'user.email', 'test@test.com'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20f, 'config', 'user.name', 'Test'], { encoding: 'utf8' });
+        fs.writeFileSync(path.join(workDir20f, 'README.md'), 'init\n');
+        execFileSync('git', ['-C', workDir20f, 'add', 'README.md'], { encoding: 'utf8' });
+        execFileSync('git', ['-C', workDir20f, 'commit', '-m', 'init'], { encoding: 'utf8' });
+
+        // Create a project owned by a different session with phase artifacts
+        const kwDir20f = path.join(workDir20f, 'kaola-workflow');
+        const projDir20f = path.join(kwDir20f, 'test-b7a-project');
+        fs.mkdirSync(projDir20f, { recursive: true });
+        fs.writeFileSync(path.join(projDir20f, 'phase1-research.md'), '# Phase 1\n\n## Required Agent Compliance\n| Requirement | Status | Evidence | Skip Reason |\n|---|---|---|---|\n| code-explorer | complete | done | |\n');
+        fs.writeFileSync(path.join(projDir20f, 'workflow-state.md'), [
+          '# Kaola-Workflow State',
+          '',
+          '## Project',
+          'name: test-b7a-project',
+          'status: active',
+          'session_id: sess-other-owner',
+          '',
+          '## Current Position',
+          'phase: 1',
+          'phase_name: Research',
+          'step: requirement-parsing',
+          'task: N/A',
+          'next_command: /kaola-workflow-phase1 test-b7a-project',
+          'next_skill: N/A',
+          '',
+          '## Last Updated',
+          new Date().toISOString(),
+          ''
+        ].join('\n'));
+
+        // Run repair with KAOLA_SESSION_ID='' (no session) — must refuse cross-session repair
+        const repairOut20f = execFileSync(
+          process.execPath,
+          [path.join(root, 'scripts/kaola-workflow-repair-state.js'), 'test-b7a-project'],
+          {
+            cwd: workDir20f,
+            encoding: 'utf8',
+            env: { ...process.env, KAOLA_SESSION_ID: '' }
+          }
+        );
+        assert(
+          repairOut20f.includes('skipped') && repairOut20f.includes('owned by another session'),
+          'Epic 20F: repair with empty session must refuse cross-session project, got: ' + repairOut20f
+        );
+        // Verify state file was NOT overwritten
+        const stateAfter20f = fs.readFileSync(path.join(projDir20f, 'workflow-state.md'), 'utf8');
+        assert(
+          stateAfter20f.includes('session_id: sess-other-owner'),
+          'Epic 20F: repair must not overwrite state owned by another session'
+        );
+      } finally {
+        fs.rmSync(epic20fTmp, { recursive: true, force: true });
+      }
     }
 
     console.log('Workflow walkthrough simulation passed');

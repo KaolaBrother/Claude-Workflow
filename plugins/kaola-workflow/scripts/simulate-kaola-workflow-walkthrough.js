@@ -5,6 +5,7 @@ const path = require('path');
 const { execFileSync, spawn, spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const project = 'simulated-feature';
 
 function coordRootFor(dir) {
@@ -103,14 +104,14 @@ function assertFileIncludes(file, needle) {
 }
 
 function assertCommandIncludes(relativePath, needles) {
-  const content = fs.readFileSync(path.join(root, relativePath), 'utf8');
+  const content = fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
   for (const needle of needles) {
     assert(content.includes(needle), `${relativePath} missing ${needle}`);
   }
 }
 
 function assertHookOutput(workdir, expectedCommand, expectedStep) {
-  const output = execFileSync(process.execPath, [path.join(root, 'scripts/kaola-workflow-compact-context.js')], {
+  const output = execFileSync(process.execPath, [path.join(repoRoot, 'scripts/kaola-workflow-compact-context.js')], {
     cwd: workdir,
     encoding: 'utf8'
   });
@@ -366,7 +367,7 @@ async function main() {
       'commands/kaola-workflow-phase6.md'
     ];
     for (const command of phaseCommands) {
-      const content = fs.readFileSync(path.join(root, command), 'utf8');
+      const content = fs.readFileSync(path.join(repoRoot, command), 'utf8');
       assert(content.includes('Resume Detection'), `${command} missing Resume Detection section`);
       assert(content.includes('workflow-state.md'), `${command} missing workflow-state.md reference`);
     }
@@ -2870,8 +2871,8 @@ exit 0
     // Regulators live in prompts; the bash hook is defense-in-depth.
     {
       const guardSources = [
-        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase6.md'),
-        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills',
+        path.join(repoRoot, 'commands', 'kaola-workflow-phase6.md'),
+        path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills',
           'kaola-workflow-finalize', 'SKILL.md'),
       ];
       const required = [
@@ -4177,18 +4178,18 @@ exit 0
     // LOW-3: corpus-grep — every phase shim must contain liveness and session rehydration checks
     {
       const shimPaths = [
-        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase1.md'),
-        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase2.md'),
-        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase3.md'),
-        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase4.md'),
-        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase5.md'),
-        path.join(__dirname, '..', 'commands', 'kaola-workflow-phase6.md'),
-        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-research', 'SKILL.md'),
-        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-execute', 'SKILL.md'),
-        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-ideation', 'SKILL.md'),
-        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-plan', 'SKILL.md'),
-        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-review', 'SKILL.md'),
-        path.join(__dirname, '..', 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md'),
+        path.join(repoRoot, 'commands', 'kaola-workflow-phase1.md'),
+        path.join(repoRoot, 'commands', 'kaola-workflow-phase2.md'),
+        path.join(repoRoot, 'commands', 'kaola-workflow-phase3.md'),
+        path.join(repoRoot, 'commands', 'kaola-workflow-phase4.md'),
+        path.join(repoRoot, 'commands', 'kaola-workflow-phase5.md'),
+        path.join(repoRoot, 'commands', 'kaola-workflow-phase6.md'),
+        path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-research', 'SKILL.md'),
+        path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-execute', 'SKILL.md'),
+        path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-ideation', 'SKILL.md'),
+        path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-plan', 'SKILL.md'),
+        path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-review', 'SKILL.md'),
+        path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md'),
       ];
       const LIVENESS_CANONICAL = 'kill -0 "$(cat "$_TICKER_PID_FILE" 2>/dev/null)" 2>/dev/null';
       for (const shimPath of shimPaths) {
@@ -4214,7 +4215,7 @@ exit 0
         const envFile11 = path.join(tmpRepo11, 'test.env');
         fs.writeFileSync(envFile11, '');
 
-        const sessionEnvScript = path.join(__dirname, 'kaola-workflow-session-env.js');
+        const sessionEnvScript = path.join(repoRoot, 'scripts', 'kaola-workflow-session-env.js');
 
         // Invoke the script with stdin JSON and required env vars
         const result11 = spawnSync('node', [sessionEnvScript], {
@@ -4503,7 +4504,7 @@ exit 0
 
     // 8N-task-review-fix-1: structural test — session-env.js must document 2-hop assumption and stderr warn
     {
-      const sessionEnvContent = fs.readFileSync(path.join(root, 'scripts', 'kaola-workflow-session-env.js'), 'utf8');
+      const sessionEnvContent = fs.readFileSync(path.join(repoRoot, 'scripts', 'kaola-workflow-session-env.js'), 'utf8');
       assert(
         sessionEnvContent.includes('empirically verified') || sessionEnvContent.includes('2-hop'),
         'review-fix-1: session-env.js must document the 2-hop assumption (grep for "empirically verified" or "2-hop")'
@@ -4716,8 +4717,8 @@ exit 0
 
     // Gap1+2 structural assertions: verify phase files contain required patterns
     {
-      const phase6Path = path.join(root, 'commands', 'kaola-workflow-phase6.md');
-      const skillPath = path.join(root, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
+      const phase6Path = path.join(repoRoot, 'commands', 'kaola-workflow-phase6.md');
+      const skillPath = path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
       for (const [label, filePath] of [['phase6.md', phase6Path], ['SKILL.md', skillPath]]) {
         const content = fs.readFileSync(filePath, 'utf8');
         assert(content.includes('ACTIVE_WORKTREE_PATH='), label + ': must contain ACTIVE_WORKTREE_PATH= assignment');
@@ -4875,8 +4876,8 @@ exit 0
 
     // Issue-34-C: structural check — finalize invocation in docs
     {
-      const phase6Path = path.join(root, 'commands', 'kaola-workflow-phase6.md');
-      const skillPath = path.join(root, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
+      const phase6Path = path.join(repoRoot, 'commands', 'kaola-workflow-phase6.md');
+      const skillPath = path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
       for (const [label, filePath] of [['phase6.md', phase6Path], ['SKILL.md', skillPath]]) {
         const content = fs.readFileSync(filePath, 'utf8');
         assert(content.includes('finalize'), label + ' 34-C: must contain "finalize"');
@@ -5301,7 +5302,7 @@ exit 0
 
         // 17S: SKILL.md static assertion — SINK_KIND= line appears before cmdFinalize node call
         {
-          const skillMd17s = path.join(root, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
+          const skillMd17s = path.join(repoRoot, 'plugins', 'kaola-workflow', 'skills', 'kaola-workflow-finalize', 'SKILL.md');
           const skillContent17s = fs.readFileSync(skillMd17s, 'utf8');
           const lines17s = skillContent17s.split('\n');
           const sinkKindIdx = lines17s.findIndex(l => l.includes('SINK_KIND='));

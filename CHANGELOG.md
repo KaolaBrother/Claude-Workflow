@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [3.7.0] — 2026-05-18
+
+### Added — Core Lifecycle: Closed-Issue Cleanup + Step:Complete Archive + Session Ownership Guards (issue #51)
+
+- **Closed-issue fast-path cleanup** (`cmdSweep` first-pass): when GitHub issue is CLOSED, immediately removes `workflow:in-progress` label, assignee (`@me`), and worktree without waiting for 24-hour staleness cutoff. Uses new `isIssueClosed()` helper.
+- **Step:complete archive detection** (`cmdSweep` second-pass): when project has `step: complete` + `phase6-summary.md` present + no active lock file, automatically archives directory with `status: closed`. Enables auto-cleanup of completed workflows that were not finalized via `cmdWorktreeFinalize`.
+- **Closed-issue claim guard** (`claimExplicitTarget`): when agent passes `--target-issue N` to `startup` or `pick-next`, helper now checks `isIssueClosed(N)` and returns `{ status: 'user_target_closed' }` with reasoning. Prevents agents from claiming already-closed GitHub issues.
+- **Session ownership guard** (`cmdResume`): now validates that calling session owns the current project by comparing `args.session` against lock file `session_id`. When `--session <id>` is provided, rejects finalization if lock is owned by a different session (exit code 2).
+- **Worktree finalize label cleanup** (`cmdWorktreeFinalize`): changed `remoteCleanup: false` → `remoteCleanup: true` so `releaseSession` automatically removes GitHub label and assignee when finalizing.
+- **Repair-state ownership fix** (`kaola-workflow-repair-state.js`): `ownedByCurrentSession` now correctly returns `false` for empty or missing session IDs (was `true`), closing implicit cross-session repair hole.
+- **Ticker Codex-safe gate**: ticker now uses OR-of-three bypass condition: `args.runtime === 'codex'` || `CODEX_THREAD_ID` || `KAOLA_KERNEL_SESSION_SKIP === '1'`. Prevents Codex orphaned-ticker exit on startup when no Claude ancestor is present but session is Codex-native.
+
+### Fixed — Plugin Hook Parity (issue #51)
+
+- **New hook file**: `plugins/kaola-workflow/hooks/kaola-workflow-pre-commit.sh` (byte-identical copy of `hooks/kaola-workflow-pre-commit.sh`). Both copies must be kept in sync manually; future release will add automated hook-sync CI check.
+- **Validation note**: `scripts/validate-script-sync.js` now includes HOOK PARITY NOTE documenting the byte-identical-required relationship between the two copies (currently excluded from automatic sync validator; hook-sync check is a follow-up item).
+
+### Security
+
+- **Closed-fast-path defense-in-depth**: `cmdSweep` now validates `isSafeName(lock.project)` and `isSafeName(lock.session_id)` before any destructive operation on closed-issue paths, mirroring existing pattern in `cmdWatchPr`.
+- **Closed-issue check fail-closed**: `isIssueClosed()` returns `false` on OFFLINE mode, parse error, or gh failure, preventing accidental worktree removal or false claim rejection when GitHub is unreachable.
+
+### Tests
+
+- **Epic Case 20A**: closed-issue in-progress gets fast-path cleanup (label removed, assignee removed, worktree deleted).
+- **Epic Case 20B**: post-completion auto-claim refusal (no second claim allowed after phase6-summary.md exists).
+- **Epic Case 20D**: second-pass step:complete detection (completed project archived automatically, partial projects skipped).
+- **Epic Case 20E**: session ownership guard via `cmdResume --session` blocks cross-session finalization.
+- **Epic Case 20F**: repair-state `ownedByCurrentSession` returns false for empty session IDs.
+
 ## [3.6.1] — 2026-05-18
 
 ### Changed — Remove /workflow-next-pr; Drive Sink from Prompt Intent + Merge Fallback (issue #42)

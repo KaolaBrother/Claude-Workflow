@@ -1302,6 +1302,14 @@ function selectFirstClaimable(classifierScript, issues, claimer, sinks) {
 }
 
 function claimExplicitTarget(claimScript, classifierScript, args, targetIssue, coordRoot, root) {
+  if (!OFFLINE && isIssueClosed(targetIssue)) {
+    return {
+      status: 'user_target_closed',
+      issue: targetIssue,
+      project: 'issue-' + targetIssue,
+      reasoning: 'GitHub issue #' + targetIssue + ' is closed; cannot claim a closed issue'
+    };
+  }
   if (issueAlreadyClaimed(coordRoot, root, targetIssue)) {
     return { status: 'target_occupied', issue: targetIssue, project: 'issue-' + targetIssue };
   }
@@ -2052,6 +2060,7 @@ function runTick(tickCtx) {
   if (tickCount === 1 && match.claim_comment_id && Number.isFinite(match.issue_number)) {
     const tbResult = runTiebreakerCheck(match.issue_number, tickCtx.session, match.claim_comment_id);
     if (tbResult !== 'stay' && tbResult.yield) {
+      // remoteCleanup:false intentional — tiebreaker-yield must not clear the winning session's label/assignee
       releaseSession(tickCtx.root, tickCtx.coordRoot, tickCtx.session, 'ticker-late-yield', { remoteCleanup: false });
       try { fs.unlinkSync(tickCtx.pidPath); } catch (_) {}
       process.exit(0);
@@ -2085,7 +2094,10 @@ function cmdTicker() {
   process.on('SIGINT',  gracefulShutdown);
   const tickCtx = { root, coordRoot, session: args.session, pidPath, intervalMs, tickCountRef: { value: 0 } };
   tickCtx.claudePid = walkToClaudePid();  // null if not under Claude
-  if (tickCtx.claudePid === null) {
+  const codexLike = args.runtime === 'codex'
+    || !!process.env.CODEX_THREAD_ID
+    || process.env.KAOLA_KERNEL_SESSION_SKIP === '1';
+  if (tickCtx.claudePid === null && !codexLike) {
     process.stderr.write('ticker: no Claude ancestor at startup; orphaned, exiting\n');
     try { fs.unlinkSync(pidPath); } catch (_) {}
     return;
@@ -2105,6 +2117,16 @@ function isRemoteStale(lock) {
   } catch (_) { return false; }
 }
 
+function isIssueClosed(issueNumber) {
+  if (OFFLINE || issueNumber == null) return false;
+  try {
+    const raw = ghExec(['issue', 'view', String(issueNumber), '--json', 'state']);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    return String(data.state || '').toLowerCase() === 'closed';
+  } catch (_) { return false; }
+}
+
 function cmdSweep() {
   const args = parseArgs(process.argv.slice(3));
   const root = getRoot();
@@ -2121,9 +2143,14 @@ function cmdSweep() {
       lock = JSON.parse(fs.readFileSync(fp, 'utf8'));
     } catch (_) { continue; }
 
+    // Defense-in-depth: reject locks with unsafe fields before any destructive op (mirrors cmdWatchPr:2348-2349).
+    if (lock.project && !isSafeName(lock.project)) continue;
+    if (lock.session_id && !isSafeName(lock.session_id)) continue;
+
     const synthetic = isSyntheticTestSession(lock);
-    if (!synthetic && !shouldSweep(lock)) continue;
-    if (!synthetic && !isRemoteStale(lock)) continue;
+    const closedFastPath = !synthetic && !OFFLINE && lock.issue_number != null && isIssueClosed(lock.issue_number);
+    if (!synthetic && !closedFastPath && !shouldSweep(lock)) continue;
+    if (!synthetic && !closedFastPath && !isRemoteStale(lock)) continue;
 
     if (!OFFLINE && lock.issue_number != null) {
       try {
@@ -2132,7 +2159,10 @@ function cmdSweep() {
       try {
         ghExec(['issue', 'edit', String(lock.issue_number), '--remove-assignee', '@me']);
       } catch (_) {}
-      postReleaseComment(lock.issue_number, lock.session_id, ':released-stale');
+      postReleaseComment(lock.issue_number, lock.session_id, closedFastPath ? ':released-closed-issue' : ':released-stale');
+    }
+    if (closedFastPath) {
+      try { removeWorktree(coordRoot, lock.project, lock); } catch (_) {}
     }
     try { fs.unlinkSync(fp); } catch (_) {}
   }
@@ -2164,13 +2194,23 @@ function cmdSweep() {
     if (entry.name === 'archive' || entry.name.startsWith('.')) continue;
     if (!isSafeName(entry.name)) continue;
     const dirPath = path.join(kwDir, entry.name);
-    // Phase-artifacts-empty guard: skip if any phase*.md exists (real in-flight work)
     let dirFiles = [];
     try { dirFiles = fs.readdirSync(dirPath); } catch (_) { continue; }
-    if (dirFiles.some(f => /^phase\d/.test(f))) continue;
+    // Hoist stateContent read so step:complete check fires before phase*.md guard
     const stateContent = (() => {
       try { return fs.readFileSync(path.join(dirPath, 'workflow-state.md'), 'utf8'); } catch (_) { return ''; }
     })();
+    // NEW: step:complete + phase6-summary.md present + no lock → archive as 'closed'
+    // (phase6-summary.md matches /^phase\d/ so must be checked before that guard)
+    if (field(stateContent, 'step') === 'complete' &&
+        dirFiles.includes('phase6-summary.md') &&
+        !fs.existsSync(lockPath(coordRoot, entry.name)) &&
+        !fs.existsSync(lockPath(root, entry.name))) {
+      try { archiveProjectDir(root, entry.name, 'closed'); } catch (_) {}
+      continue;
+    }
+    // Phase-artifacts-empty guard: skip if any phase*.md exists (real in-flight work)
+    if (dirFiles.some(f => /^phase\d/.test(f))) continue;
     if (field(stateContent, 'status') !== 'active') continue;
     if (fs.existsSync(lockPath(coordRoot, entry.name)) || fs.existsSync(lockPath(root, entry.name))) continue;
     const expiresStr = field(stateContent, 'expires');
@@ -2598,6 +2638,26 @@ function cmdResume() {
 
   const projectDir = path.join(mainWorktree, 'kaola-workflow', project);
 
+  const coordRoot = getCoordRoot();
+  // Ownership guard: only enforce when --session is explicitly provided.
+  // Permissive when no explicit --session (legacy resume) or no lock.
+  // NOTE: Intentionally does NOT call currentSessionId(args, {fallback:false}) —
+  // that would promote KAOLA_SESSION_ID env-var to claim identity, which breaks
+  // test 17D. Callers with KAOLA_SESSION_ID set but no --session flag remain on
+  // the legacy permissive path. Read-only operation; no lock/fs mutations occur here.
+  const explicitSession = args.session || '';
+  if (explicitSession) {
+    const resumeLock = readJsonFile(lockPath(coordRoot, project));
+    if (resumeLock && resumeLock.session_id && resumeLock.session_id !== explicitSession) {
+      process.stdout.write(JSON.stringify({
+        resumed: false,
+        reason: 'session mismatch — project owned by ' + resumeLock.session_id
+      }) + '\n');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   const { currentPhase, nextCommand } = scanPhaseArtifacts(projectDir);
 
   let branch = null;
@@ -2758,7 +2818,7 @@ function cmdWorktreeFinalize() {
     archiveResult = { skipped: 'archive-failed' };
   }
   if (args.session) {
-    releaseSession(root, coordRoot, args.session, 'worktree-finalized', { remoteCleanup: false });
+    releaseSession(root, coordRoot, args.session, 'worktree-finalized');
   }
   const lock = readJsonFile(lockPath(coordRoot, args.project));
   const removalResult = removeWorktree(coordRoot, args.project, lock || { worktree_path: worktreePath });

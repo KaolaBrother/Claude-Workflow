@@ -308,8 +308,8 @@ is detected at test time by `scripts/validate-script-sync.js`.
 
 | Script | Purpose | Phase |
 |--------|---------|-------|
-| `kaola-workflow-repair-state.js` | Reconstruct workflow state from phase artifacts | Init / Resume |
-| `kaola-workflow-claim.js` | Multi-session lease management (claim, release, heartbeat, ticker, sweep, status, patch-branch, watch-pr, **bootstrap** (requires `--target-issue N`), derive-session, finalize, **pick-next, resume, worktree-status, worktree-finalize**); `--runtime claude\|codex` flag on claim and bootstrap | All phases |
+| `kaola-workflow-repair-state.js` | Reconstruct workflow state from phase artifacts (fixes empty session IDs returning true; now returns false) | Init / Resume |
+| `kaola-workflow-claim.js` | Multi-session lease management (claim, release, heartbeat, ticker, sweep, status, patch-branch, watch-pr, **bootstrap** (requires `--target-issue N`), derive-session, finalize, **pick-next, resume, worktree-status, worktree-finalize**); `--runtime claude\|codex` flag on claim and bootstrap; closed-issue cleanup via fast-path in sweep; step:complete + phase6-summary.md archive detection; `cmdResume` ownership guard via `--session` | All phases |
 | `kaola-workflow-sink-merge.js` | Branch-per-issue auto-merge sink — rebase-then-ff-merge sequence | Phase 6 |
 | `kaola-workflow-roadmap.js` | ROADMAP.md regenerator — generate/migrate/validate/init-issue/project-name subcommands; reads `kaola-workflow/.roadmap/issue-{N}.md` per-issue files | Phase 1, Phase 6 |
 | `kaola-workflow-classifier.js` | Parallel-work classifier — classifies open issues as green/yellow/red/blocked before claim; reads lock files, issue file sets, and active remote claim markers | Startup (Step 0) |
@@ -524,7 +524,7 @@ Multiple concurrent Kaola-Workflow sessions can safely coexist when each targets
 - Background ticker (`ticker` subcommand) keeps leases active across machines with 15-min heartbeat intervals
 - Claim race tiebreaker: lowest GitHub comment ID wins; losers yield cleanly and release the lease
 - `bootstrap` requires explicit `--target-issue N`; the agent selects the issue before invoking bootstrap. Auto-scan removed.
-- Remote sweeper (`sweep` subcommand) checks GitHub comment `updated_at` — skips active sessions (< 24h), clears stale ones (≥ 24h); second pass garbage-collects orphaned active directories (no lock file + expired >30 minutes + no phase artifacts) as `status: abandoned`; third pass removes `.abandoned-<ISO>` directories in the `*.kw/` parent dir that are older than 30 minutes
+- Remote sweeper (`sweep` subcommand) checks GitHub comment `updated_at` — skips active sessions (< 24h), clears stale ones (≥ 24h); **first-pass closed-fast-path**: if linked GitHub issue is CLOSED, immediately removes label/assignee/worktree without 24h cutoff; **second pass** garbage-collects orphaned active directories (no lock file + expired >30 minutes + no phase artifacts) as `status: abandoned` AND archives completed workflows (`step: complete` + `phase6-summary.md` present + no lock file); **third pass** removes `.abandoned-<ISO>` directories in the `*.kw/` parent dir that are older than 30 minutes
 - `status` subcommand now includes `'issue closed'` in the drift array when the linked GitHub issue is in CLOSED state
 - Pre-commit hook blocks commits that stage files from a project owned by a different session
 

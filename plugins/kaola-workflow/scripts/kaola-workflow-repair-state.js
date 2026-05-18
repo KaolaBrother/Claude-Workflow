@@ -112,7 +112,7 @@ function projectOwner(workflowDir, project) {
 }
 
 function ownedByCurrentSession(workflowDir, project, sessionId) {
-  if (!sessionId) return true;
+  if (!sessionId) return false;
   const owner = projectOwner(workflowDir, project);
   return !owner || owner === sessionId;
 }
