@@ -6,7 +6,7 @@ const path = require('path');
 const os = require('os');
 const { execFileSync } = require('child_process');
 const forge = require('./kaola-gitea-forge');
-const { getCoordRoot, readActiveFolders, removeWorktree } = require('../../../scripts/kaola-workflow-claim');
+const { getCoordRoot, readActiveFolders, removeWorktree } = require('./kaola-gitea-workflow-claim');
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
