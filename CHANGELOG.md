@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Gitea sink layer** (`plugins/kaola-workflow-gitea/scripts/`): Completes the Phase 6 sink implementation for the Gitea edition (issue #112). Three new/modified scripts:
+  - **`kaola-gitea-workflow-sink-pr.js`**: Creates or finds a Gitea PR for the feature branch, writes `pr_url`, `pr_number`, `full_name`, and `project_html_url` to the workflow state Sink block.
+  - **`kaola-gitea-workflow-sink-merge.js`**: Fetches, rebases, FF-merges, pushes, closes the linked issue, and removes the worktree. Reads `full_name` from state with fallback to `discoverProject()`. Exit codes: 0=merged, 2=FF exhausted, 3=merge-impossible (writes `sink-fallback.json`).
+  - **`checkRepoSquashEnabled(project, opts)`** added to `kaola-gitea-forge.js`: Verifies `allow_squash_merge !== false` before executing a squash merge. Wired into `mergePullRequest` when `options.squash` is set.
+  - **`test-gitea-sinks.js`**: 18-test offline suite covering PR reuse/creation, auto-merge opts, issue close, archive guards, discoverProject fallback, classifyMergeError, and subprocess exit-code contracts.
+
 - **Kaola-Workflow Gitea plugin** (`plugins/kaola-workflow-gitea/`): New fully functional forge-specific plugin for Gitea edition, providing complete Claude Code and Codex integration. Includes:
   - **Forge adapter** (`scripts/kaola-gitea-forge.js`): Gitea-compatible forge operations for issue/PR management, labels, comments, and project discovery via `tea` CLI. Supports `KAOLA_WORKFLOW_OFFLINE=1`. Mirrors the GitLab adapter API surface.
   - **Commands** (`commands/`): 9 markdown command definitions for phases 1–6, fast path, workflow-init, and workflow-next — Gitea-adapted from GitHub/GitLab editions.

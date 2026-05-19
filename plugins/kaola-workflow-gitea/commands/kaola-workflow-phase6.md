@@ -612,7 +612,7 @@ cd "$_MAIN_ROOT" 2>/dev/null || true
 - Exit 3: merge-impossible (branch protection, non-fast-forward, permission denied). Receipt written to `.cache/sink-fallback.json`. Phase 6 pivots to PR creation automatically.
 
 `sink-pr.js` exit codes:
-- Exit 0: branch pushed, PR opened, URL recorded in the `## Sink` block and committed in a metadata follow-up commit. If `mr_auto_merge: true` in config, auto-merge was requested.
+- Exit 0: branch pushed, PR opened, URL recorded in the `## Sink` block and committed in a metadata follow-up commit. If `pr_auto_merge: true` in config, auto-merge was requested.
 - Exit 1: fatal error (push failed, `tea pr create` failed, or metadata commit/push failed). PR URL and manual recovery instructions printed to stderr when PR was already created.
 
 After `sink-pr.js` exits 0, the active folder remains open. It is archived automatically when `watch-pr` detects the PR is MERGED or CLOSED on the next `/workflow-next` startup.

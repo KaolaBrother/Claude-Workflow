@@ -239,9 +239,18 @@ function checkServerVersion(opts) {
   }
 }
 
+function checkRepoSquashEnabled(project, opts) {
+  const raw = teaExec(['api', '/api/v1/repos/' + project.full_name], opts || {});
+  const data = parseJson(raw, {});
+  if (data.allow_squash_merge === false) {
+    throw new Error('Gitea repo does not allow squash merges (allow_squash_merge=false)');
+  }
+}
+
 function mergePullRequest(project, prNumber, opts) {
   const options = opts || {};
   if (options.autoMerge) checkServerVersion(options);
+  if (options.squash) checkRepoSquashEnabled(project, options);
   const mergeBody = {};
   mergeBody.Do = options.squash ? 'squash' : 'merge';
   mergeBody.delete_branch_after_merge = !!options.removeSourceBranch;
@@ -277,6 +286,6 @@ module.exports = {
   discoverProject,
   listIssues, viewIssue, updateIssueLabels, closeIssue,
   createIssueComment, listIssueComments, updateIssueComment,
-  createPullRequest, viewPullRequest, listPullRequests, mergePullRequest,
+  createPullRequest, viewPullRequest, listPullRequests, checkRepoSquashEnabled, mergePullRequest,
   ensureLabel
 };

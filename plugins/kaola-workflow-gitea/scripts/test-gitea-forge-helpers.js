@@ -85,6 +85,10 @@ const execFileSync = runner(calls, {
   'pr view 8 --output json': JSON.stringify({ number: 8, state: 'open' }),
   'pr list --output json': JSON.stringify([{ number: 8, state: 'open' }]),
   'api -X POST /api/v1/repos/group/project/pulls/9/merge -d {"Do":"squash","delete_branch_after_merge":true,"merge_message_field":"abc123"}': '{}',
+  'api /api/v1/repos/group/project': JSON.stringify({
+    full_name: 'group/project',
+    allow_squash_merge: true
+  }),
   'api /api/v1/repos/group/project/labels': JSON.stringify([]),
   'api -X POST /api/v1/repos/group/project/labels -d {"name":"workflow:in-progress","color":"#e11d48","description":""}': JSON.stringify({ id: 1, name: 'workflow:in-progress' })
 });
@@ -121,6 +125,34 @@ forge.mergePullRequest(project, 9, {
   removeSourceBranch: true,
   sha: 'abc123'
 });
+
+// Test 1: checkRepoSquashEnabled directly — allow_squash_merge: true → no throw
+forge.checkRepoSquashEnabled({ full_name: 'group/project' }, { execFileSync,
+  offlineStdout: JSON.stringify({ allow_squash_merge: true }) });
+
+// Test 2: checkRepoSquashEnabled directly — allow_squash_merge: false → throws
+assert.throws(() => {
+  forge.checkRepoSquashEnabled({ full_name: 'group/project' }, { execFileSync: runner([], {
+    'api /api/v1/repos/group/project': JSON.stringify({ allow_squash_merge: false })
+  })});
+}, /allow_squash_merge=false/);
+
+// Test 3: checkRepoSquashEnabled with absent allow_squash_merge → permissive (no throw)
+forge.checkRepoSquashEnabled({ full_name: 'group/project' }, { execFileSync: runner([], {
+  'api /api/v1/repos/group/project': JSON.stringify({ full_name: 'group/project' })
+})});
+
+// Test 4: mergePullRequest with squash:true and allow_squash_merge:false → throws
+assert.throws(() => {
+  forge.mergePullRequest({ full_name: 'group/project' }, 9, {
+    squash: true,
+    execFileSync: runner([], {
+      'api /api/v1/repos/group/project': JSON.stringify({ allow_squash_merge: false }),
+      'api -X POST /api/v1/repos/group/project/pulls/9/merge -d {"Do":"squash","delete_branch_after_merge":false}': '{}'
+    })
+  });
+}, /allow_squash_merge=false/);
+
 // ensureLabel: labels GET returns [], so POST is called
 const newLabel = forge.ensureLabel(project, { name: 'workflow:in-progress', color: '#e11d48' }, { execFileSync });
 assert.strictEqual(newLabel.name, 'workflow:in-progress');
