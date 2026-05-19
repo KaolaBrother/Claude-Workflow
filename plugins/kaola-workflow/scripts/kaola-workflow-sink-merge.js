@@ -68,6 +68,27 @@ function assertCleanWorktree(mainRoot) {
   assert(!status, 'Worktree must be clean before sink-merge checks out the requested branch');
 }
 
+function assertNoLiveWorkflowFolder(mainRoot, project) {
+  const gitPath = 'kaola-workflow/' + project + '/workflow-state.md';
+  let committed = false;
+  try {
+    execFileSync('git', ['-C', mainRoot, 'cat-file', '-e', 'HEAD:' + gitPath],
+      { encoding: 'utf8', stdio: ['ignore', 'ignore', 'ignore'] });
+    committed = true;
+  } catch (_) {
+    committed = false;
+  }
+  if (committed) {
+    throw new Error(
+      'sink-merge refused: kaola-workflow/' + project + '/workflow-state.md still exists on branch HEAD.\n' +
+      'Run finalize before sink-merge, then recommit. Two remediation paths:\n' +
+      '  Path A (worktree available): cd <worktree> && node <claim.js> finalize --project ' + project + ' --keep-worktree\n' +
+      '    then git add kaola-workflow/ && git commit -m "chore: archive ' + project + '" on the feature branch\n' +
+      '  Path B (worktree gone): git rm -r kaola-workflow/' + project + '/ on the feature branch, commit, then re-run sink-merge'
+    );
+  }
+}
+
 // Steps 3–4: rebase onto origin/main and run post-rebase tests.
 function doRebase(args, alreadyUpToDate, mainRoot) {
   // Step 3 — Rebase (inline error message; no external file needed)
@@ -241,6 +262,7 @@ function main() {
 
   assertCleanWorktree(mainRoot);
   execFileSync('git', ['-C', mainRoot, 'checkout', args.branch], { encoding: 'utf8' });
+  assertNoLiveWorkflowFolder(mainRoot, args.project);
 
   // Step 2 — Merge-base skip-check
   // If origin/main doesn't exist (e.g. no remote, or OFFLINE with no cached ref),

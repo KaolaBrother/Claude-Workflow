@@ -6,6 +6,7 @@
 
 - GitLab repair-state no longer advances to Phase 6 when `phase5-review.md` exists but `phase4-progress.md` still has open tasks (parity with GitHub behavior, issue #107)
 - GitLab sink pipelines (merge and fallback) now guard against project archive recreation: `sink-merge` exits 3 if archive dir exists during `postMergeCleanup` receipt write; `cmdSinkFallback` returns `{updated: false, reason: 'project archived'}` when checking live folder (issue #108)
+- GitHub Codex `kaola-workflow-next` SKILL.md freshness-block recovery now correctly extracts `KAOLA_CLAIM` from startup output and guards the release command with `[ "$KAOLA_CLAIM" = "acquired" ] && [ -n "$PICK_NEXT_PROJECT" ]`; previously `$KAOLA_PROJECT` was unset, causing orphaned active workflow folders when startup claimed an issue but a git freshness block prevented completion (issue #109)
 
 ## [3.10.0] — 2026-05-19
 
