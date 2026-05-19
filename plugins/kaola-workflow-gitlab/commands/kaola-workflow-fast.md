@@ -53,18 +53,50 @@ On escalation:
 
 Do not continue fast-path execution after writing the escalation field.
 
-## Step 1 - Plan (Single-Pass)
+## Step 1 - Plan (planner)
 
-Read `phase1-research.md` and `phase2-ideation.md` if they exist. If both are
-absent, derive scope directly from the GitLab issue body.
+Ensure cache dir exists:
 
-Produce a focused implementation plan:
+```bash
+mkdir -p kaola-workflow/{project}/.cache
+```
+
+Update `workflow-state.md`:
+
+```text
+phase: fast
+phase_name: Fast
+step: plan
+workflow_path: fast
+next_command: /kaola-workflow-fast {project}
+main_session_role: orchestrator
+implementation_owner: planner
+inline_emergency_fallback_authorized: no
+```
+
+Invoke the Claude Code agent `planner` with the linked GitLab issue body
+and `phase1-research.md` / `phase2-ideation.md` excerpts if they exist
+(otherwise issue body alone). Ask for:
 
 - files to touch (must be ≤ 2 closely related files for fast path to apply)
 - exact change per file
 - acceptance check command
+- explicit out-of-scope items
 
-If files to touch exceed the fast-path bound, escalate per Mid-Flight Escalation above.
+Write raw output to:
+
+```text
+kaola-workflow/{project}/.cache/planner.md
+```
+
+If the planner reports the change exceeds ≤ 2 files, escalate per Mid-Flight
+Escalation above.
+
+The orchestrator (main session) captures the planner's plan into the
+`fast-summary.md` stub with status `IN_PROGRESS`. The `planner` agent does
+not write files itself (Read/Grep/Glob tools only).
+
+## Step 2 - Execute (tdd-guide)
 
 Update `workflow-state.md`:
 
@@ -74,39 +106,70 @@ phase_name: Fast
 step: execute
 workflow_path: fast
 next_command: /kaola-workflow-fast {project}
+main_session_role: orchestrator
+implementation_owner: tdd-guide
+inline_emergency_fallback_authorized: no
 ```
 
-Write a `fast-summary.md` stub with status `IN_PROGRESS`.
-
-## Step 2 - Execute
-
-Apply the plan changes directly. No Claude Code implementation agent is spawned for
-fast-path; the main session implements inline.
-
-Inline implementation constraints:
+Invoke the Claude Code agent `tdd-guide` with the planner-produced plan
+and explicit constraints:
 
 - no new external package dependencies
 - no changes to public APIs, schemas, or shared infrastructure
-- tests must be updated or added alongside the implementation change
+- write tests first (RED → GREEN → refactor while green)
+- keep edits inside the planner's write set
 
-After implementation, run the acceptance check command from Step 1.
+Write raw output to:
 
-If `test_thrash` threshold is hit (≥ 3 consecutive RED→RED cycles on the same
-test), escalate per Mid-Flight Escalation above.
+```text
+kaola-workflow/{project}/.cache/tdd-guide.md
+```
+
+After the agent returns, the orchestrator runs the acceptance check
+command from Step 1.
+
+If `test_thrash` threshold is hit (≥ 3 consecutive RED→RED cycles on the
+same test), the orchestrator writes the escalation field and updates
+`fast-summary.md` status to `ESCALATED` (the in-flight subagent cannot
+write workflow-state.md itself).
 
 Update `fast-summary.md` status to `REVIEW`.
 
-## Step 3 - Review
+## Step 3 - Review (code-reviewer)
 
-Run a lightweight self-review:
+Update `workflow-state.md`:
+
+```text
+phase: fast
+phase_name: Fast
+step: review
+workflow_path: fast
+next_command: /kaola-workflow-fast {project}
+main_session_role: orchestrator
+implementation_owner: code-reviewer
+inline_emergency_fallback_authorized: no
+```
+
+Invoke the Claude Code agent `code-reviewer` on the modified files from
+Step 2. Ask it to check:
 
 - all acceptance check commands pass
 - no new CRITICAL or HIGH security concerns
 - no debug statements or hardcoded credentials
 - implementation matches the plan from Step 1
 
-If any concern fails the review, escalate per Mid-Flight Escalation above
-unless it qualifies as a Trivial Inline Edit (one-line mechanical fix).
+Write raw output to:
+
+```text
+kaola-workflow/{project}/.cache/code-reviewer.md
+```
+
+If the reviewer returns BLOCK or any CRITICAL/HIGH finding, escalate per
+Mid-Flight Escalation above unless it qualifies as a Trivial Inline Edit
+(one-line mechanical fix). In that exempted case, the orchestrator (not
+code-reviewer, which has Read-only tools) applies the fix, re-runs the
+acceptance check, and records `implementation_owner: orchestrator-trivial-fix`
+in workflow-state.md for that touch.
 
 Update `fast-summary.md` status to `PASSED`.
 
@@ -129,6 +192,13 @@ PASSED | IN_PROGRESS | REVIEW | ESCALATED
 
 ## Review
 [self-review result]
+
+## Required Agent Compliance
+| Requirement | Status | Evidence | Skip Reason |
+|-------------|--------|----------|-------------|
+| planner | invoked | .cache/planner.md | |
+| tdd-guide | invoked | .cache/tdd-guide.md | |
+| code-reviewer | invoked | .cache/code-reviewer.md | |
 
 ## Escalation
 [escalated_to_full: <trigger> or N/A]

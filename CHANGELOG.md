@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+### Added — Agent-Judged Path Intent in Startup (issue #104)
+
+- **`commands/workflow-next.md` Step 0a-1**: New "Path Intent" step before startup transaction. Agent judges fast vs. full workflow based on `KAOLA_PATH` env var, prompt prose triggers, or issue rubric. Precedence: explicit env var > prompt keywords > issue eligibility rubric > default full. Documented triggers include "quick fix", "trivial", "one-line", "rename", "typo" for fast path. Bias toward full mode when in doubt.
+- **`.env.example` KAOLA_PATH documentation**: Already documented (no changes needed).
+- **`commands/workflow-next.md` Required Output block**: Added `Workflow path:` line to status output, reporting `{fast|full — from KAOLA_PATH or Step 0a-1 judgment}`.
+- **GitLab edition parity** (`plugins/kaola-workflow-gitlab/commands/workflow-next.md`): Same Path Intent logic and output block, using `glab issue view` instead of `gh issue view`.
+
+### Changed — Fast-Mode Subagent Delegation (issue #104)
+
+- **`commands/kaola-workflow-fast.md` Steps 1-3**: Rewrote to delegate Plan/Execute/Review to Claude Code subagents (`planner`, `tdd-guide`, `code-reviewer`) instead of inline session work. Each step updates `workflow-state.md` with `implementation_owner` field and stores agent output in `.cache/{agent}.md`. Subagents have Read-only tools; orchestrator applies Trivial Inline Edits and runs acceptance checks.
+- **Step 1 (Plan — planner)**: Agent produces scope/files/changes/check-command; orchestrator writes to `fast-summary.md` with status `IN_PROGRESS`.
+- **Step 2 (Execute — tdd-guide)**: Agent applies changes TDD-style (RED→GREEN→refactor); orchestrator runs acceptance check and escalates on `test_thrash` threshold.
+- **Step 3 (Review — code-reviewer)**: Agent checks acceptance, security, and plan match; orchestrator handles CRITICAL/HIGH findings or escalates (with Trivial Inline Edit exemption).
+- **`fast-summary.md` template**: Added "Required Agent Compliance" table documenting which agents were invoked and where to find evidence.
+- **Workflow state contract**: All fast-mode steps now set `main_session_role: orchestrator`, `inline_emergency_fallback_authorized: no` to enforce clear role boundaries.
+- **SKILL.md mirrors** (`plugins/kaola-workflow/skills/kaola-workflow-fast/SKILL.md`, GitLab `plugins/kaola-workflow-gitlab/skills/kaola-workflow-fast/SKILL.md`): Updated to match command.md changes, emphasizing orchestrator responsibility for side effects and agent output storage.
+
 ### Fixed — sink-merge live-folder guard (issue #105)
 
 - **`assertNoLiveWorkflowFolder` guard in `sink-merge.js`**: `sink-merge` now exits 1 with a remediation message if `kaola-workflow/{project}/workflow-state.md` is still committed in the branch HEAD at merge time. Uses `git cat-file -e HEAD:{path}` to check the committed tree (not just the filesystem). Two remediation paths are printed: Path A (worktree available — run finalize, recommit) and Path B (worktree gone — `git rm -r`, recommit).
