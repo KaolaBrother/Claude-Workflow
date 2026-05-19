@@ -63,16 +63,19 @@ pre-existing bug in forge.js not introduced by this issue. No user decisions req
 Issue #112 can close. Follow-up items can be addressed in subsequent issues.
 
 ## Commit And Push
-pending final Git gate
+feat commit: 6d15b5f (feat(gitea): add sink-pr, sink-merge scripts and sink test suite (#112))
+archive commit: f2a40d7 (chore: archive issue-112)
+docs commit: 6987acf (docs: update README/api/architecture for Gitea sink layer)
+pushed to origin/main
 
 ## GitHub Issue
-KaolaBrother/Kaola-Workflow#112 — pending close after commit
+CLOSED — issue #112 closed (commits 6d15b5f + f2a40d7 + 6987acf)
 
 ## Roadmap
-pending refresh
+ROADMAP.md confirmed up-to-date (generate returned up-to-date)
 
 ## Archive
-pending
+kaola-workflow/archive/issue-112/ (archived by cmdFinalize f2a40d7)
 
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
@@ -81,9 +84,9 @@ pending
 | documentation docking | invoked | .cache/doc-docking.md | |
 | closure advisor gate | N/A | closure scan: only LOW/MEDIUM follow-ups + pre-existing bug, no user decisions required | |
 | final-validation fix executors | N/A | — | no final validation failures |
-| roadmap refresh | pending | | |
-| archive completed folder | pending | | |
-| final commit and push | pending | | |
+| roadmap refresh | invoked | kaola-workflow/ROADMAP.md | |
+| archive completed folder | invoked | kaola-workflow/archive/issue-112/ (f2a40d7) | |
+| final commit and push | invoked | 6d15b5f + 6987acf merged to origin/main | |
 
 ## Status
-READY FOR FINAL GIT GATE
+COMPLETE
