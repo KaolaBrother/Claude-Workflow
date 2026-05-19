@@ -9,6 +9,7 @@ const { spawnSync } = require('child_process');
 const pluginRoot = path.resolve(__dirname, '..');
 const repoRoot = path.resolve(pluginRoot, '..', '..');
 const claimScript = path.join(pluginRoot, 'scripts', 'kaola-workflow-claim.js');
+const installProfilesScript = path.join(pluginRoot, 'scripts', 'install-codex-agent-profiles.js');
 const nextSkill = path.join(pluginRoot, 'skills', 'kaola-workflow-next', 'SKILL.md');
 
 function assert(condition, message) {
@@ -29,6 +30,53 @@ function runClaim(args, cwd) {
 function assertNoLegacyCoordDirs(root) {
   for (const name of ['lo' + 'cks', 'sess' + 'ions', 'tick' + 'ers']) {
     assert(!fs.existsSync(path.join(root, 'kaola-workflow', '.' + name)), 'legacy coordination dir must not exist: .' + name);
+  }
+}
+
+function runInstallProfiles(target) {
+  const result = spawnSync(process.execPath, [installProfilesScript, target], {
+    cwd: repoRoot,
+    encoding: 'utf8'
+  });
+  if (result.error) throw result.error;
+  assert(result.status === 0, 'install profiles failed: ' + result.stderr);
+}
+
+function countOccurrences(content, pattern) {
+  return (content.match(pattern) || []).length;
+}
+
+function testInstallProfilesFeaturesTableHandling() {
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-codex-install-fresh-'));
+  const existing = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-codex-install-existing-'));
+  try {
+    runInstallProfiles(fresh);
+    const freshConfig = fs.readFileSync(path.join(fresh, '.codex', 'config.toml'), 'utf8');
+    assert(freshConfig.includes('[features]'), 'fresh install should include managed [features]');
+    assert(freshConfig.includes('multi_agent = true'), 'fresh install should enable multi_agent');
+    assert(freshConfig.includes('# BEGIN kaola-workflow agents'), 'fresh install should include managed block');
+
+    const existingCodexDir = path.join(existing, '.codex');
+    fs.mkdirSync(existingCodexDir, { recursive: true });
+    const existingConfigPath = path.join(existingCodexDir, 'config.toml');
+    fs.writeFileSync(existingConfigPath, [
+      '[features]',
+      'goals = true',
+      '',
+      '[projects."/tmp/example"]',
+      'trust_level = "trusted"',
+      ''
+    ].join('\n'));
+
+    runInstallProfiles(existing);
+    runInstallProfiles(existing);
+    const updated = fs.readFileSync(existingConfigPath, 'utf8');
+    assert(countOccurrences(updated, /^\[features\]$/gm) === 1, 'existing config must contain exactly one [features] table');
+    assert(updated.includes('goals = true'), 'existing [features] content must be preserved');
+    assert(updated.includes('[agents.code-explorer]'), 'managed agent block should still be installed');
+  } finally {
+    fs.rmSync(fresh, { recursive: true, force: true });
+    fs.rmSync(existing, { recursive: true, force: true });
   }
 }
 
@@ -58,6 +106,8 @@ function main() {
 
     const validator = path.join(repoRoot, 'scripts', 'validate-kaola-workflow-contracts.js');
     assert(fs.existsSync(validator), 'Codex contract validator must exist');
+
+    testInstallProfilesFeaturesTableHandling();
 
     console.log('Kaola-Workflow walkthrough simulation passed');
   } finally {

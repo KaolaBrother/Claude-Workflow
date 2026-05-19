@@ -24,13 +24,47 @@ function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function managedBlock() {
-  const template = read(sourceTemplate).trim();
+function managedBlockPattern(flags = 'm') {
+  return new RegExp(`${escapeRegExp(beginMarker)}[\\s\\S]*?${escapeRegExp(endMarker)}\\n?`, flags);
+}
+
+function stripManagedBlocks(existing) {
+  return existing.replace(managedBlockPattern('gm'), '');
+}
+
+function isTopLevelTable(line, table) {
+  return new RegExp(`^\\s*\\[${escapeRegExp(table)}\\]\\s*(?:#.*)?$`).test(line);
+}
+
+function isAnyTopLevelTable(line) {
+  return /^\s*\[[^\]\n]+\]\s*(?:#.*)?$/.test(line);
+}
+
+function hasTopLevelTable(content, table) {
+  return content.split(/\r?\n/).some(line => isTopLevelTable(line, table));
+}
+
+function removeTopLevelTable(content, table) {
+  const lines = content.split(/\r?\n/);
+  const start = lines.findIndex(line => isTopLevelTable(line, table));
+  if (start === -1) return content;
+
+  let end = start + 1;
+  while (end < lines.length && !isAnyTopLevelTable(lines[end])) end++;
+
+  return [...lines.slice(0, start), ...lines.slice(end)].join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function managedBlock(existing) {
+  const hasExternalFeatures = hasTopLevelTable(stripManagedBlocks(existing), 'features');
+  const template = hasExternalFeatures
+    ? removeTopLevelTable(read(sourceTemplate).trim(), 'features')
+    : read(sourceTemplate).trim();
   return `${beginMarker}\n${template}\n${endMarker}`;
 }
 
 function upsertBlock(existing, block) {
-  const expression = new RegExp(`${escapeRegExp(beginMarker)}[\\s\\S]*?${escapeRegExp(endMarker)}\\n?`, 'm');
+  const expression = managedBlockPattern();
   if (expression.test(existing)) {
     return existing.replace(expression, `${block}\n`);
   }
@@ -61,7 +95,7 @@ function copyAgentProfiles() {
 function updateConfig() {
   fs.mkdirSync(targetCodexDir, { recursive: true });
   const existing = fs.existsSync(targetConfig) ? read(targetConfig) : '';
-  const next = upsertBlock(existing, managedBlock());
+  const next = upsertBlock(existing, managedBlock(existing));
 
   if (next !== existing) {
     fs.writeFileSync(targetConfig, next);

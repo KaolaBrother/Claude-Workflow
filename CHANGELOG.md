@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed — Codex Agent Profile Installer Features Table (issue #102)
+
+- **`install-codex-agent-profiles.js`**: Avoids injecting a duplicate `[features]` table when the target `.codex/config.toml` already defines one. Fresh installs still receive the managed `[features]` stanza; existing configs keep their user-owned features table untouched.
+- **Regression test**: Codex walkthrough simulation now covers fresh installs, existing `[features]` configs, and reinstall idempotency.
+
 ### Documentation — GitLab Sink-Merge Parity + Test Hooks (issue #89)
 
 - **`docs/api.md` Sink API expansion**: Documented `classifyMergeError` function exported from both GitHub and GitLab sink-merge modules; clarified exit codes 2 (FF race) and 3 (merge-impossible) apply to both editions; added failure classification contract.
