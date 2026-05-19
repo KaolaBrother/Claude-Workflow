@@ -446,6 +446,20 @@ function cmdFinalize() {
   const result = archiveProjectDir(root, args.project, 'closed');
   if (!args.keepWorktree) {
     try { removeWorktree(root, args.project, folder); } catch (_) {}
+  } else {
+    // When called from a linked worktree with --keep-worktree, commit the archive
+    // so the feature branch HEAD no longer has the live folder (required by sink-merge guard).
+    let mainRoot2, linkedRoot2;
+    try {
+      mainRoot2 = fs.realpathSync(mainRootFromCoord(getCoordRoot(root)));
+      linkedRoot2 = fs.realpathSync(root);
+    } catch (_) { mainRoot2 = null; }
+    if (mainRoot2 && mainRoot2 !== linkedRoot2) {
+      execFileSync('git', ['-C', root, 'add', '-A', 'kaola-workflow/'],
+        { encoding: 'utf8', stdio: 'inherit' });
+      execFileSync('git', ['-C', root, 'commit', '-m', 'chore: archive ' + args.project],
+        { encoding: 'utf8', stdio: 'inherit' });
+    }
   }
   clearAdvisoryClaim(folder && folder.issue_number, 'finalized');
   output(Object.assign({ status: 'closed' }, result));

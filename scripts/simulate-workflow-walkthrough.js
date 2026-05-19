@@ -1053,6 +1053,16 @@ function testE2EGitHubMergeFullChain() {
     );
     assert(fs.existsSync(wt850), 'linked worktree must survive --keep-worktree finalize');
 
+    // Verify that finalize --keep-worktree committed the archive to the feature branch
+    const liveInTree = spawnSync('git', ['cat-file', '-e', 'HEAD:kaola-workflow/issue-850/workflow-state.md'],
+      { cwd: wt850, encoding: 'utf8' });
+    assert(liveInTree.status !== 0,
+      'live workflow-state.md must NOT be in feature branch HEAD after finalize --keep-worktree');
+    const archiveInTree = spawnSync('git', ['cat-file', '-e', 'HEAD:kaola-workflow/archive/issue-850'],
+      { cwd: wt850, encoding: 'utf8' });
+    assert(archiveInTree.status === 0,
+      'kaola-workflow/archive/issue-850 must exist in feature branch HEAD after finalize --keep-worktree');
+
     // Capture feature HEAD before sink-merge removes the worktree
     const featureHead = spawnSync('git', ['rev-parse', 'workflow/issue-850'],
       { cwd: tmp, encoding: 'utf8' }).stdout.trim();
@@ -1075,8 +1085,139 @@ function testE2EGitHubMergeFullChain() {
     const gitStatus = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'],
       { cwd: tmp, encoding: 'utf8' }).stdout.trim();
     assert(gitStatus === '', 'main worktree must be clean after sink-merge, got: ' + gitStatus);
+    assert(
+      !fs.existsSync(path.join(tmp, 'kaola-workflow', 'issue-850')),
+      'live workflow folder must be absent from main after sink-merge'
+    );
+    assert(
+      fs.existsSync(path.join(tmp, 'kaola-workflow', 'archive', 'issue-850')),
+      'archive folder must be present in main after sink-merge'
+    );
 
     console.log('testE2EGitHubMergeFullChain: PASSED');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    try { fs.rmSync(kwRoot, { recursive: true, force: true }); } catch (_) {}
+  }
+}
+
+function testSinkMergeRefusesLiveFolder() {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kw-refuse-live-')));
+  try {
+    initGitRepo(tmp);
+    spawnSync('git', ['checkout', '-b', 'workflow/issue-910'], { cwd: tmp });
+    fs.mkdirSync(path.join(tmp, 'kaola-workflow', 'issue-910'), { recursive: true });
+    fs.writeFileSync(path.join(tmp, 'kaola-workflow', 'issue-910', 'workflow-state.md'), 'status: active\n');
+    spawnSync('git', ['add', 'kaola-workflow/'], { cwd: tmp });
+    spawnSync('git', ['commit', '-m', 'feat: issue 910'], { cwd: tmp });
+    spawnSync('git', ['checkout', 'main'], { cwd: tmp });
+    const mainBefore = spawnSync('git', ['rev-parse', 'main'], { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    const result = spawnSync(process.execPath, [sinkMergeScript, '--project', 'issue-910', '--branch', 'workflow/issue-910'], {
+      cwd: tmp,
+      env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' },
+      encoding: 'utf8'
+    });
+    assert(result.status !== 0, 'sink-merge must refuse when live folder present, got status: ' + result.status);
+    assert((result.stderr || '').includes('finalize before sink-merge'), 'stderr must include "finalize before sink-merge", got: ' + result.stderr);
+    const mainAfter = spawnSync('git', ['rev-parse', 'main'], { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(mainAfter === mainBefore, 'main SHA must be unchanged after guard fires, before: ' + mainBefore + ' after: ' + mainAfter);
+    console.log('testSinkMergeRefusesLiveFolder: PASSED');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+function testFastE2EMergeFullChain() {
+  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'kw-e2e-fast-')));
+  const kwRoot = tmp + '.kw';
+  try {
+    initGitRepo(tmp);
+    const binDir = path.join(tmp, 'bin');
+    writeGhShimForStartup(binDir);
+
+    // Step 1: startup with KAOLA_PATH=fast
+    const s851 = runClaimOnline(['startup', '--target-issue', '851'], tmp, binDir, { KAOLA_PATH: 'fast' });
+    assert(s851.claim === 'acquired', 'startup 851 should acquire, got: ' + JSON.stringify(s851));
+    const wt851 = s851.worktree_path;
+    assert(fs.existsSync(wt851), 'worktree dir must exist after startup');
+
+    // Step 2: write fast-summary.md to the main repo's active project folder
+    fs.writeFileSync(path.join(tmp, 'kaola-workflow', 'issue-851', 'fast-summary.md'), 'fast summary\n');
+
+    // Step 3: feature commit on linked worktree branch
+    fs.writeFileSync(path.join(wt851, 'feature-851.txt'), 'feature\n');
+    spawnSync('git', ['add', 'feature-851.txt'], { cwd: wt851 });
+    spawnSync('git', ['commit', '-m', 'feat: issue 851'], { cwd: wt851 });
+
+    // Step 4: worktree-finalize (cwd=tmp, reads worktree_path from main active folder)
+    const wfResult = runClaimOnlineLastJson(['worktree-finalize', '--project', 'issue-851'], tmp, binDir);
+    assert(wfResult.finalized === true, 'worktree-finalize should succeed');
+    assert(
+      fs.existsSync(path.join(wt851, 'kaola-workflow', 'issue-851', 'workflow-state.md')),
+      'workflow-state.md must exist in linked worktree after worktree-finalize'
+    );
+
+    // Step 5: finalize --keep-worktree (cwd=wt851, cleans main worktree copy, preserves linked worktree)
+    const finResult = spawnSync(process.execPath, [
+      claimScript, 'finalize', '--project', 'issue-851', '--keep-worktree'
+    ], { cwd: wt851, env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }, encoding: 'utf8' });
+    assert(finResult.status === 0, 'finalize --keep-worktree should exit 0\nstderr: ' + finResult.stderr);
+    assert(
+      fs.existsSync(path.join(wt851, 'kaola-workflow', 'archive', 'issue-851')),
+      'archive must exist in linked worktree after finalize --keep-worktree'
+    );
+    assert(
+      !fs.existsSync(path.join(tmp, 'kaola-workflow', 'issue-851')),
+      'main active folder must be removed after finalize from linked worktree'
+    );
+    assert(fs.existsSync(wt851), 'linked worktree must survive --keep-worktree finalize');
+
+    // Verify that finalize --keep-worktree committed the archive to the feature branch
+    const liveInTree = spawnSync('git', ['cat-file', '-e', 'HEAD:kaola-workflow/issue-851/workflow-state.md'],
+      { cwd: wt851, encoding: 'utf8' });
+    assert(liveInTree.status !== 0,
+      'live workflow-state.md must NOT be in feature branch HEAD after finalize --keep-worktree');
+    const archiveInTree = spawnSync('git', ['cat-file', '-e', 'HEAD:kaola-workflow/archive/issue-851'],
+      { cwd: wt851, encoding: 'utf8' });
+    assert(archiveInTree.status === 0,
+      'kaola-workflow/archive/issue-851 must exist in feature branch HEAD after finalize --keep-worktree');
+
+    // Capture feature HEAD before sink-merge removes the worktree
+    const featureHead = spawnSync('git', ['rev-parse', 'workflow/issue-851'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+
+    // Step 6: sink-merge (cwd=wt851, OFFLINE)
+    const smResult = spawnSync(process.execPath, [
+      sinkMergeScript, '--project', 'issue-851', '--branch', 'workflow/issue-851', '--issue', '851'
+    ], { cwd: wt851, env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }, encoding: 'utf8' });
+    assert(smResult.status === 0,
+      'sink-merge should exit 0\nstdout: ' + smResult.stdout + '\nstderr: ' + smResult.stderr);
+
+    const mainAfter = spawnSync('git', ['rev-parse', 'main'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(mainAfter === featureHead,
+      'main must advance to feature HEAD after sink-merge, got: ' + mainAfter);
+    const branchList = spawnSync('git', ['branch', '--list', 'workflow/issue-851'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(branchList === '', 'workflow/issue-851 branch must be deleted after sink-merge');
+    assert(!fs.existsSync(wt851), 'linked worktree must be removed by sink-merge');
+    const gitStatus = spawnSync('git', ['status', '--porcelain', '--untracked-files=no'],
+      { cwd: tmp, encoding: 'utf8' }).stdout.trim();
+    assert(gitStatus === '', 'main worktree must be clean after sink-merge, got: ' + gitStatus);
+    assert(
+      !fs.existsSync(path.join(tmp, 'kaola-workflow', 'issue-851')),
+      'live workflow folder must be absent from main after sink-merge'
+    );
+    assert(
+      fs.existsSync(path.join(tmp, 'kaola-workflow', 'archive', 'issue-851')),
+      'archive folder must be present in main after sink-merge'
+    );
+    assert(
+      fs.existsSync(path.join(tmp, 'kaola-workflow', 'archive', 'issue-851', 'fast-summary.md')),
+      'fast-summary.md must be preserved in archive after sink-merge'
+    );
+
+    console.log('testFastE2EMergeFullChain: PASSED');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
     try { fs.rmSync(kwRoot, { recursive: true, force: true }); } catch (_) {}
@@ -1289,6 +1430,8 @@ async function main() {
     await testSinkPrLeavesCleanWorktree();
     testReadPriorityConfig();
     testE2EGitHubMergeFullChain();
+    testSinkMergeRefusesLiveFolder();
+    testFastE2EMergeFullChain();
     testE2EGitHubPrFullChain();
     testParallelIssueIndependence();
     console.log('Workflow walkthrough simulation passed');

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed — sink-merge live-folder guard (issue #105)
+
+- **`assertNoLiveWorkflowFolder` guard in `sink-merge.js`**: `sink-merge` now exits 1 with a remediation message if `kaola-workflow/{project}/workflow-state.md` is still committed in the branch HEAD at merge time. Uses `git cat-file -e HEAD:{path}` to check the committed tree (not just the filesystem). Two remediation paths are printed: Path A (worktree available — run finalize, recommit) and Path B (worktree gone — `git rm -r`, recommit).
+- **`cmdFinalize --keep-worktree` commits archive to feature branch**: When finalize is called from a linked worktree with `--keep-worktree`, it now runs `git add -A kaola-workflow/` and `git commit -m "chore: archive {project}"` on the feature branch after archiving. This ensures the branch HEAD has only the archive folder before `sink-merge` runs.
+- **Regression tests**: Added `testSinkMergeRefusesLiveFolder` (negative: guard fires, main SHA unchanged) and `testFastE2EMergeFullChain` (positive E2E: KAOLA_PATH=fast full chain, fast-summary.md preserved in archive). Strengthened `testE2EGitHubMergeFullChain` with post-merge assertions verifying live folder absent and archive present.
+- **AC#4 repair commits**: Archived pre-existing live `kaola-workflow/issue-100/` and `kaola-workflow/issue-101/` folders from closed issues into `kaola-workflow/archive/`.
+
 ### Fixed — GitLab Startup Offline Classifier Parity
 
 - **`classifyIssue()` offline fallback**: GitLab startup now uses the same local `.roadmap/issue-N.md` evidence as the CLI classifier when `KAOLA_WORKFLOW_OFFLINE=1`, so explicit-target startup refuses blocked local roadmap issues instead of silently acquiring them.
