@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed — GitLab KAOLA_PATH=fast Startup State (issue #101)
+
+- **`writeState()` fast-path support**: Added `workflow_path`/`isFast` logic to the GitLab `writeState` function. When `workflow_path: fast`, the function now writes `phase: fast`, `phase_name: Fast`, `workflow_path: fast`, `/kaola-workflow-fast` as `next_command`/`next_skill`, and `fast-summary` as the pending gate — matching the GitHub implementation.
+- **`claimProject()` workflow_path passthrough**: `claimProject` now passes `workflow_path: args.workflowPath || process.env.KAOLA_PATH || 'full'` to `writeState`, so `KAOLA_PATH=fast startup` propagates the fast-path flag correctly.
+- **Fast-startup regression test**: Added test that runs `KAOLA_PATH=fast startup --target-issue N` and asserts the written `workflow-state.md` contains all required fast-path fields.
+
 ### Fixed — GitLab Worktree Path Nesting (issue #100)
 
 - **`worktreePathFor` uses git common-dir**: Added `getCoordRoot`/`mainRootFromCoord` helpers to derive the main repo root via `git rev-parse --git-common-dir`, matching the GitHub implementation. Worktree sibling paths under `<repo>.kw/` are now computed relative to the main repo root regardless of which worktree the command runs from.

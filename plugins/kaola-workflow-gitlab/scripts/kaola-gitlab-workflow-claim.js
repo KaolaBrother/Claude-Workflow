@@ -150,6 +150,8 @@ function discoverProjectSafe() {
 }
 
 function writeState(root, data) {
+  const workflowPath = data.workflow_path || 'full';
+  const isFast = workflowPath === 'fast';
   const lines = [
     '# Kaola-Workflow State',
     '',
@@ -158,18 +160,19 @@ function writeState(root, data) {
     'status: ' + (data.status || 'active'),
     '',
     '## Current Position',
-    'phase: ' + (data.phase || 1),
-    'phase_name: ' + (data.phase_name || 'Research'),
+    'phase: ' + (isFast ? 'fast' : (data.phase || 1)),
+    'phase_name: ' + (isFast ? 'Fast' : (data.phase_name || 'Research')),
+    'workflow_path: ' + workflowPath,
     'step: ' + (data.step || 'start'),
-    'next_command: ' + (data.next_command || ('/kaola-workflow-phase1 ' + data.project)),
-    'next_skill: ' + (data.next_skill || ('kaola-workflow-research ' + data.project)),
+    'next_command: ' + (data.next_command || (isFast ? '/kaola-workflow-fast ' + data.project : '/kaola-workflow-phase1 ' + data.project)),
+    'next_skill: ' + (data.next_skill || (isFast ? 'kaola-workflow-fast ' + data.project : 'kaola-workflow-research ' + data.project)),
     'main_session_role: orchestrator',
     'implementation_owner: N/A',
     'fix_owner: N/A',
     'inline_emergency_fallback_authorized: no',
     '',
     '## Pending Gates',
-    '- phase1-research',
+    isFast ? '- fast-summary' : '- phase1-research',
     '',
     '## Last Evidence',
     'phase_file: N/A',
@@ -281,6 +284,7 @@ function claimProject(root, args) {
     branch,
     sink: args.sink || process.env.KAOLA_SINK || 'merge',
     worktree_path: worktreePath,
+    workflow_path: args.workflowPath || process.env.KAOLA_PATH || 'full',
     status: 'active',
     project_id: projectInfo.project_id,
     path_with_namespace: projectInfo.path_with_namespace,

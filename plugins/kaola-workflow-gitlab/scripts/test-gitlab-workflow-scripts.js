@@ -869,6 +869,30 @@ withForge({
   }
 }
 
+// Issue #101: KAOLA_PATH=fast startup must write fast-path state
+{
+  const root = tempRoot('kw-gl-fast-startup-');
+  try {
+    initGitRepo(root);
+    const result = spawnSync(process.execPath, [claimScript, 'startup', '--runtime', 'test', '--target-issue', '7'], {
+      cwd: root, encoding: 'utf8', env: Object.assign({}, process.env, { KAOLA_PATH: 'fast' })
+    });
+    assert.strictEqual(result.status, 0, 'fast startup must exit 0\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
+    const out = JSON.parse(result.stdout.trim());
+    assert.strictEqual(out.verdict, 'green');
+    assert.strictEqual(out.claim, 'acquired');
+    const stateFile = path.join(root, 'kaola-workflow', out.selected_project || 'issue-7', 'workflow-state.md');
+    const state = fs.readFileSync(stateFile, 'utf8');
+    assert.ok(/^workflow_path: fast$/m.test(state), 'fast startup must write workflow_path: fast');
+    assert.ok(/^phase: fast$/m.test(state), 'fast startup must write phase: fast');
+    assert.ok(/^next_command: \/kaola-workflow-fast /m.test(state), 'fast startup must write /kaola-workflow-fast next_command');
+    assert.ok(/^next_skill: kaola-workflow-fast /m.test(state), 'fast startup must write kaola-workflow-fast next_skill');
+    assert.ok(/^- fast-summary$/m.test(state), 'fast startup must write fast-summary pending gate');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 testGitLabRoadmapInitIssueExclusiveAndUpdate()
   .then(() => {
     console.log('GitLab workflow script tests passed');
