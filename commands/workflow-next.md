@@ -74,6 +74,45 @@ or "PR sink" (case-insensitive), export `KAOLA_SINK=pr` before the startup call.
 The `${KAOLA_SINK:+--sink $KAOLA_SINK}` pass-through in Startup Step 0 propagates it.
 Keyword matching is agent-level prose detection, not a bash conditional.
 
+## Startup Step 0a-1 — Path Intent
+
+Before Step 0b, pick fast or full and export `KAOLA_PATH` if fast.
+The agent owns this judgment; scripts do not auto-pick. Precedence top-down — first match wins.
+
+1. If `KAOLA_PATH` is already exported, honor it.
+   (Rationale: KAOLA_PATH is an explicit shell override; inferred intent
+   from prompt prose should not silently overrule it.)
+2. Else sniff the user's initial prompt (case-insensitive):
+   - fast triggers: "quick fix", "trivial", "one-line", "one line",
+     "rename", "typo", "small change", "fast path", "fast mode"
+   - full triggers: "thorough", "full review", "full path",
+     "carefully", "all phases", "deep dive"
+   Tie or both match → prefer full.
+3. Else fetch the selected issue once:
+   ```bash
+   gh issue view "$KAOLA_TARGET_ISSUE" --json number,title,body,labels
+   ```
+   Judge against the fast-path eligibility contract in the Mid-Flight
+   Escalation section of `commands/kaola-workflow-fast.md`. Export
+   `KAOLA_PATH=fast` ONLY if all hold: ≤ 2 closely related files, no new
+   external deps, no public API/schema/migration change, no
+   security/auth/encryption concern, no `depends-on:#N` label, single area.
+4. If the issue fetch fails for any reason (KAOLA_WORKFLOW_OFFLINE=1,
+   missing CLI, auth failure, network error), default to full.
+5. Default `full`. When in doubt, full.
+
+State the chosen path and one-line reason aloud before Step 0b:
+
+```text
+Path: fast (rubric — scope: 1 file, no risk markers)
+Path: full (rubric — disqualifier: schema migration)
+Path: full (default — rubric ambiguous; prefer safety)
+```
+
+Bias toward full when in doubt. Fast false positives escalate cleanly via the
+Mid-Flight Escalation section of `commands/kaola-workflow-fast.md`; false
+negatives only cost ceremony.
+
 ## Startup Step 0b - Startup Transaction
 
 If `kaola-workflow-claim.js` and `kaola-workflow-classifier.js` are available,
@@ -291,6 +330,7 @@ Current phase: {phase or unknown}
 Current step: {step from workflow-state.md or reconstructed}
 Pending gates: {list or none}
 Branch: {branch from Sink block in workflow-state.md, or TBD if not yet claimed}
+Workflow path: {fast|full — from KAOLA_PATH or Step 0a-1 judgment}
 Parallel decision: {green|yellow|red|blocked|skipped — classifier verdict or "skipped" if offline/unavailable}
 Next command: {next_command}
 ```

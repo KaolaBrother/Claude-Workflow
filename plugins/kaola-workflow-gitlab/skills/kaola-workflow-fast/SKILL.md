@@ -16,32 +16,49 @@ Complete a single-pass Plan+Execute+Review cycle for the named project and
 write a `PASSED` `fast-summary.md` that Phase 6 accepts as a full-workflow
 substitute. Stop if scope exceeds fast-path bounds.
 
+## Step 1 - Plan (planner)
 
+Ensure `kaola-workflow/{project}/.cache/` exists before invoking agents.
 
-Write `fast-summary.md` stub with status `IN_PROGRESS`.
+Update `workflow-state.md` with `step: plan`, `main_session_role: orchestrator`, `implementation_owner: planner`, `inline_emergency_fallback_authorized: no`.
 
-## Step 2 - Execute
+Invoke the Claude Code agent `planner` with the linked GitLab issue body and phase1/phase2 excerpts if they exist. Ask for: files to touch (≤ 2), exact change per file, acceptance check command, out-of-scope items.
 
-Apply changes inline (no Claude Code implementation agent). Constraints:
+Write raw output to `kaola-workflow/{project}/.cache/planner.md`.
+
+If planner reports > 2 files, escalate. The orchestrator captures the returned plan into `fast-summary.md` with status `IN_PROGRESS` (planner has Read-only tools).
+
+## Step 2 - Execute (tdd-guide)
+
+Update `workflow-state.md` with `step: execute`, `main_session_role: orchestrator`, `implementation_owner: tdd-guide`, `inline_emergency_fallback_authorized: no`.
+
+Invoke the Claude Code agent `tdd-guide` with the planner plan and constraints:
 
 - no new external package dependencies
-- no public API, schema, or shared infrastructure changes
-- tests updated or added alongside implementation
+- no changes to public APIs, schemas, or shared infrastructure
+- write tests first (RED → GREEN → refactor while green)
+- keep edits inside the planner's write set
 
-Run acceptance check after implementation. Escalate on `test_thrash` threshold.
+Write raw output to `kaola-workflow/{project}/.cache/tdd-guide.md`.
+
+Orchestrator runs acceptance check after agent returns. Escalate on `test_thrash` threshold.
 
 Update `fast-summary.md` status to `REVIEW`.
 
-## Step 3 - Review
+## Step 3 - Review (code-reviewer)
 
-Self-review checklist:
+Update `workflow-state.md` with `step: review`, `main_session_role: orchestrator`, `implementation_owner: code-reviewer`, `inline_emergency_fallback_authorized: no`.
 
-- acceptance check commands pass
+Invoke the Claude Code agent `code-reviewer` on modified files. Ask it to check:
+
+- all acceptance check commands pass
 - no new CRITICAL or HIGH security concerns
 - no debug statements or hardcoded credentials
-- implementation matches the plan
+- implementation matches the plan from Step 1
 
-On failure (unless Trivial Inline Edit), escalate.
+Write raw output to `kaola-workflow/{project}/.cache/code-reviewer.md`.
+
+On BLOCK or CRITICAL/HIGH finding, escalate unless Trivial Inline Edit. In that exempted case, orchestrator applies the fix and records `implementation_owner: orchestrator-trivial-fix`.
 
 Update `fast-summary.md` status to `PASSED`.
 
@@ -64,6 +81,13 @@ PASSED | IN_PROGRESS | REVIEW | ESCALATED
 
 ## Review
 [self-review result]
+
+## Required Agent Compliance
+| Requirement | Status | Evidence | Skip Reason |
+|-------------|--------|----------|-------------|
+| planner | invoked | .cache/planner.md | |
+| tdd-guide | invoked | .cache/tdd-guide.md | |
+| code-reviewer | invoked | .cache/code-reviewer.md | |
 
 ## Escalation
 [escalated_to_full: <trigger> or N/A]
