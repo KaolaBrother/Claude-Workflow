@@ -89,3 +89,6 @@ Pending — handled by `watch-pr` on the next `/workflow-next` startup after the
 ## Status
 
 READY FOR FINAL GIT GATE
+
+PR URL: https://github.com/KaolaBrother/Kaola-Workflow/pull/106
+PR number: 106
