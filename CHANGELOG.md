@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- GitLab repair-state no longer advances to Phase 6 when `phase5-review.md` exists but `phase4-progress.md` still has open tasks (parity with GitHub behavior, issue #107)
+
 ## [3.10.0] — 2026-05-19
 
 ### Added — Agent-Judged Path Intent in Startup (issue #104)

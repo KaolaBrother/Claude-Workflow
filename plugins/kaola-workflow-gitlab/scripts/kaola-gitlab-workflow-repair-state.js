@@ -292,7 +292,12 @@ function reconstruct(root, workflowDir, project) {
   const projectDir = path.join(workflowDir, project);
   const phase4 = artifact(projectDir, 'phase4-progress.md');
   if (artifact(projectDir, 'phase6-summary.md')) return { complete: true, reason: 'phase6-summary.md exists; workflow is complete' };
-  if (artifact(projectDir, 'phase5-review.md')) return route(root, workflowDir, project, 6, artifact(projectDir, 'phase5-review.md'), undefined, true);
+  if (artifact(projectDir, 'phase5-review.md')) {
+    if (phase4 && !allPhase4TasksComplete(readFile(phase4))) {
+      return { reason: 'phase5-review.md exists but phase4-progress.md still has open tasks' };
+    }
+    return route(root, workflowDir, project, 6, artifact(projectDir, 'phase5-review.md'), undefined, true);
+  }
   if (phase4) {
     const content = readFile(phase4);
     return allPhase4TasksComplete(content)

@@ -918,6 +918,43 @@ withForge({
   }
 }
 
+// Issue #107: reconstruct() must not route to Phase 6 when phase4-progress.md has open tasks
+// Test 1 — Negative guard (the bug fix):
+{
+  const root = tempRoot('kw-gl-issue107-guard-');
+  try {
+    const dir = writeState(root, 'issue107-guard', 107);
+    fs.writeFileSync(path.join(dir, 'phase4-progress.md'),
+      '# Phase 4\n\n## Tasks\n| # | Task | Status |\n|---|------|--------|\n| A | Task A | open |\n');
+    fs.writeFileSync(path.join(dir, 'phase5-review.md'), '# Phase 5\n');
+    const result = repair.reconstruct(root, path.join(root, 'kaola-workflow'), 'issue107-guard');
+    assert(!result.nextCommand, 'guard must not route to Phase 6 when Phase 4 tasks are open');
+    assert(/open tasks/.test(result.reason || ''), 'reason must mention open tasks');
+    repair.repair('issue107-guard', root);
+    const state = fs.readFileSync(path.join(dir, 'workflow-state.md'), 'utf8');
+    assert(!/phase: 6\b/.test(state), 'state file must not advance to phase 6 with open Phase 4 tasks');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// Issue #107: reconstruct() must still route to Phase 6 when all Phase 4 tasks are complete
+// Test 2 — Positive regression (happy path still works):
+{
+  const root = tempRoot('kw-gl-issue107-allow-');
+  try {
+    const dir = writeState(root, 'issue107-allow', 108);
+    fs.writeFileSync(path.join(dir, 'phase4-progress.md'),
+      '# Phase 4\n\n## Tasks\n| # | Task | Status |\n|---|------|--------|\n| A | Task A | complete |\n');
+    fs.writeFileSync(path.join(dir, 'phase5-review.md'), '# Phase 5\n');
+    const result = repair.reconstruct(root, path.join(root, 'kaola-workflow'), 'issue107-allow');
+    assert.strictEqual(result.phase, 6, 'happy path must still route to Phase 6');
+    assert(/kaola-workflow-phase6/.test(result.nextCommand), 'nextCommand must be phase 6');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 testGitLabRoadmapInitIssueExclusiveAndUpdate()
   .then(() => {
     console.log('GitLab workflow script tests passed');
