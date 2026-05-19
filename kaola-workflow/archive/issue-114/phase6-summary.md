@@ -50,16 +50,18 @@ DOCKED — evidence: .cache/doc-docking.md
 Closure scan of all phase artifacts found one deferred item: the MEDIUM `mr_auto_merge` follow-up, explicitly tagged for issue #112. This is a documented forward reference, not an unresolved conflict or user decision. No advisor consultation required. Issue #114 can close.
 
 ## Commit And Push
-pending final Git gate
+feat commit: 1f430e0 (feat(gitea): populate commands, skills, hooks, config, agents, and plugin manifests (#114))
+archive commit: bbd7c05 (chore: archive issue-114)
+pushed to origin/main
 
 ## GitHub Issue
-issue #114 — to be closed after final commit and push
+CLOSED — issue #114 closed with merge commit 1f430e0
 
 ## Roadmap
-pending regeneration
+ROADMAP.md confirmed up-to-date (generate returned up-to-date); no per-issue .roadmap/issue-114.md existed in branch
 
 ## Archive
-pending cmdFinalize (after commit)
+kaola-workflow/archive/issue-114/ (archived by cmdFinalize bbd7c05)
 
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
@@ -68,9 +70,9 @@ pending cmdFinalize (after commit)
 | documentation docking | invoked | .cache/doc-docking.md | |
 | closure advisor gate | N/A | closure scan: one MEDIUM deferred to #112, no user decision required | |
 | final-validation fix executors | N/A | — | no final validation failures |
-| roadmap refresh | pending | kaola-workflow/ROADMAP.md | |
-| archive completed folder | pending | | |
-| final commit and push | ready | git status/diff/upstream check | final gate runs after this file is committed |
+| roadmap refresh | invoked | kaola-workflow/ROADMAP.md | generate confirmed up-to-date |
+| archive completed folder | invoked | kaola-workflow/archive/issue-114/ (bbd7c05) | |
+| final commit and push | invoked | 1f430e0 merged to origin/main | |
 
 ## Status
-READY FOR FINAL GIT GATE
+COMPLETE
