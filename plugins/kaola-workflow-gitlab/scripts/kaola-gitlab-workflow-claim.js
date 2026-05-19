@@ -573,7 +573,8 @@ function cmdSinkFallback() {
   const args = parseArgs(process.argv.slice(3));
   assert(args.project, '--project required');
   assert(isSafeName(args.project), 'unsafe project name');
-  if (!fs.existsSync(projectDir(root, args.project))) {
+  const archivePath = path.join(root, 'kaola-workflow', 'archive', args.project);
+  if (!fs.existsSync(projectDir(root, args.project)) || fs.existsSync(archivePath)) {
     output({ updated: false, project: args.project, reason: 'project archived' });
     return;
   }

@@ -5,6 +5,7 @@
 ### Fixed
 
 - GitLab repair-state no longer advances to Phase 6 when `phase5-review.md` exists but `phase4-progress.md` still has open tasks (parity with GitHub behavior, issue #107)
+- GitLab sink pipelines (merge and fallback) now guard against project archive recreation: `sink-merge` exits 3 if archive dir exists during `postMergeCleanup` receipt write; `cmdSinkFallback` returns `{updated: false, reason: 'project archived'}` when checking live folder (issue #108)
 
 ## [3.10.0] — 2026-05-19
 

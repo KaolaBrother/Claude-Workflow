@@ -17,7 +17,7 @@ The Phase 6 sink is responsible for delivering completed work to the repository 
   - `0`: merge succeeded, branch pushed, issue closed
   - `1`: merge failed (non-recoverable)
   - `2`: fast-forward race condition exhausted after MAX_AUTOMERGE_RETRIES attempts
-  - `3`: merge-impossible error (branch protected, non-fast-forward, permission denied); auto-fallback to PR sink
+  - `3`: merge-impossible error (branch protected, non-fast-forward, permission denied); also returned if project archive dir exists during receipt write (GitLab guard); auto-fallback to PR sink
 - **Failure classification** (`classifyMergeError` function):
   - Exported from both GitHub and GitLab sink-merge modules
   - Classifies push/merge errors into: `permission_denied`, `branch_protected`, `non_fast_forward`, or `null` (unclassifiable)
@@ -104,3 +104,4 @@ The following functions are exported from sink and claim modules for use by test
 
 **`plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-claim.js`:**
 - `getCoordRoot(root)` — Same contract as GitHub edition. Derives the coordination root for shared state storage.
+- `cmdSinkFallback()` — Fallback sink implementation invoked when merge sink fails. Checks both live folder and archive folder before updating state; returns `{updated: false, reason: 'project archived'}` if either path does not exist (live) or archive path exists, preventing recreation of archived projects. Otherwise updates sink state to `mr` and returns `{updated: true, sink: 'mr', reason}`. This is called after merge sink exits 3 during auto-fallback.

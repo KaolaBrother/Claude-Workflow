@@ -43,6 +43,15 @@ function testFallbackGuardsAfterArchive() {
       snapshot[f] = fs.readFileSync(path.join(archiveDest, f), 'utf8');
     }
 
+    // Step 0: sink-merge on archived project — must exit 3, no live dir recreated
+    const sinkScript = path.join(__dirname, 'kaola-gitlab-workflow-sink-merge.js');
+    const smResult = spawnSync(process.execPath,
+      [sinkScript, '--branch', 'workflow/fb-project', '--project', 'fb-project'],
+      { cwd: tmpRoot, encoding: 'utf8', env: { ...process.env, KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE: 'branch_protected', KAOLA_WORKFLOW_OFFLINE: '1' } });
+    assert.strictEqual(smResult.status, 3, 'sink-merge on archived project must exit 3');
+    assert(!fs.existsSync(liveDir), 'sink-merge must not recreate live dir for archived project');
+    assert((smResult.stderr || '').includes('project archived'), 'sink-merge stderr must mention project archived');
+
     // Step 1: cmdSinkFallback — archived project should return updated: false
     const fbResult = spawnSync(process.execPath,
       [claimScript, 'sink-fallback', '--project', 'fb-project'],

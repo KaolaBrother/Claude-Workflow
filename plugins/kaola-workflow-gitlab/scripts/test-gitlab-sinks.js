@@ -291,6 +291,33 @@ withForge({
 }
 
 {
+  // Bug 2b (Part B): sink-fallback with live dir AND archive dir → returns {updated: false, reason: 'project archived'}
+  const root = tempRoot('kw-gl-sflive-archive-');
+  try {
+    const projDir = path.join(root, 'kaola-workflow', 'already-moved');
+    fs.mkdirSync(projDir, { recursive: true });
+    fs.writeFileSync(path.join(projDir, 'workflow-state.md'),
+      'sink: merge\nbranch: workflow/already-moved\nlast_result: phase6_complete\n');
+    const archiveDir = path.join(root, 'kaola-workflow', 'archive', 'already-moved');
+    fs.mkdirSync(archiveDir, { recursive: true });
+    const result = spawnSync(process.execPath, [claimScript, 'sink-fallback', '--project', 'already-moved'], {
+      cwd: root,
+      encoding: 'utf8',
+      env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' }
+    });
+    assert.strictEqual(result.status, 0, 'sink-fallback should exit 0 when both live and archive dirs exist');
+    const parsed = JSON.parse(result.stdout);
+    assert.strictEqual(parsed.updated, false, 'updated should be false');
+    assert.strictEqual(parsed.reason, 'project archived', 'reason should be project archived');
+    const stateContent = fs.readFileSync(path.join(projDir, 'workflow-state.md'), 'utf8');
+    assert(stateContent.includes('sink: merge'), 'workflow-state.md must not be modified when archive guard fires');
+    console.log('sink-fallback live+archive guard test passed');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+{
   // Bug 2: sink-fallback with active dir present → returns {updated: true, sink: 'mr'}
   const root = tempRoot('kw-gl-sflive-');
   try {
@@ -428,6 +455,27 @@ withForge({
   const cwdContents = fs.readFileSync(cwdFile, 'utf8').trim();
   assert(cwdContents.length > 0, 'success-path test: KAOLA_WORKFLOW_DEBUG_CWD file is empty');
   console.log('success-path subprocess test passed');
+}
+
+{
+  // Block 5: exit-3 with archived project — no live dir, no receipt written
+  const sinkScript = path.join(__dirname, 'kaola-gitlab-workflow-sink-merge.js');
+  const { root, branch } = setupRealRepo('exit3-archived-test', 'test-exit3-archived');
+  const liveDir = path.join(root, 'kaola-workflow', 'test-exit3-archived');
+  const archiveDir = path.join(root, 'kaola-workflow', 'archive', 'test-exit3-archived');
+  fs.mkdirSync(path.join(root, 'kaola-workflow', 'archive'), { recursive: true });
+  fs.renameSync(liveDir, archiveDir);
+  const result = spawnSync(process.execPath, [sinkScript, '--branch', branch, '--project', 'test-exit3-archived'], {
+    cwd: root,
+    env: { ...process.env, KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE: 'branch_protected', KAOLA_WORKFLOW_OFFLINE: '1' },
+    encoding: 'utf8'
+  });
+  assert(result.status === 3, `exit-3-archived test: expected exit 3, got ${result.status}. stderr: ${result.stderr}`);
+  assert(!fs.existsSync(liveDir), 'exit-3-archived test: live dir must not be recreated');
+  assert(!fs.existsSync(path.join(liveDir, '.cache', 'sink-fallback.json')), 'exit-3-archived test: receipt must not be at live path');
+  assert(!fs.existsSync(path.join(archiveDir, '.cache', 'sink-fallback.json')), 'exit-3-archived test: receipt must not be at archive path');
+  assert((result.stderr || '').includes('project archived'), 'exit-3-archived test: stderr must mention project archived');
+  console.log('exit-3-archived subprocess test passed');
 }
 
 console.log('GitLab sink tests passed');

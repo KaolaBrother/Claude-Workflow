@@ -189,7 +189,15 @@ function postMergeCleanup(args, mainRoot) {
     try {
       execFileSync('git', ['-C', mainRoot, 'reset', '--hard', 'origin/main'], { encoding: 'utf8' });
     } catch (_) {}
-    const receiptPath = path.join(mainRoot, 'kaola-workflow', args.project, '.cache', 'sink-fallback.json');
+    // AND (same rationale as runDirectMerge early-exit): atomic rename means both dirs
+    // cannot co-exist; defense-in-depth guard for the post-merge cleanup receipt write.
+    const liveProjectDir = path.join(mainRoot, 'kaola-workflow', args.project);
+    const archiveProjectDir = path.join(mainRoot, 'kaola-workflow', 'archive', args.project);
+    if (!fs.existsSync(liveProjectDir) && fs.existsSync(archiveProjectDir)) {
+      process.stderr.write('sink-merge: project archived (' + args.project + '), skipping receipt write\n');
+      return { exitCode: 3 };
+    }
+    const receiptPath = path.join(liveProjectDir, '.cache', 'sink-fallback.json');
     fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
     fs.writeFileSync(receiptPath, JSON.stringify({
       project: args.project,
@@ -235,6 +243,16 @@ function runDirectMerge(args, opts) {
 
   // New pipeline
   const mainRoot = mainRootFromCoord(getCoordRoot(root));
+
+  // Early-exit: if project is already archived, return exit 3 without touching git.
+  // AND (not OR): live dir present means project is not yet archived; archiveProjectDir
+  // uses fs.renameSync so both dirs co-existing is an impossible/transient state.
+  const _liveDir = path.join(mainRoot, 'kaola-workflow', args.project);
+  const _archiveDir = path.join(mainRoot, 'kaola-workflow', 'archive', args.project);
+  if (!fs.existsSync(_liveDir) && fs.existsSync(_archiveDir)) {
+    process.stderr.write('sink-merge: project archived (' + args.project + '), skipping merge\n');
+    return { exitCode: 3 };
+  }
 
   // Step 0 — Register exit hook FIRST, then chdir + removeWorktree
   process.on('exit', () => {
