@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Gitea forge adapter** (`plugins/kaola-workflow-gitea/scripts/kaola-gitea-forge.js`): New greenfield plugin providing Gitea-compatible forge operations including issue/PR management, labels, comments, and project discovery via `tea` CLI. Supports `KAOLA_WORKFLOW_OFFLINE=1` for offline operation. Mirrors the GitLab adapter API surface (issue #111).
+
 ### Fixed
 
 - GitLab repair-state no longer advances to Phase 6 when `phase5-review.md` exists but `phase4-progress.md` still has open tasks (parity with GitHub behavior, issue #107)

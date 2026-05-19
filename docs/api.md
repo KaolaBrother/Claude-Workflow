@@ -105,3 +105,28 @@ The following functions are exported from sink and claim modules for use by test
 **`plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-claim.js`:**
 - `getCoordRoot(root)` — Same contract as GitHub edition. Derives the coordination root for shared state storage.
 - `cmdSinkFallback()` — Fallback sink implementation invoked when merge sink fails. Checks both live folder and archive folder before updating state; returns `{updated: false, reason: 'project archived'}` if either path does not exist (live) or archive path exists, preventing recreation of archived projects. Otherwise updates sink state to `mr` and returns `{updated: true, sink: 'mr', reason}`. This is called after merge sink exits 3 during auto-fallback.
+
+### Gitea Edition
+
+**`plugins/kaola-workflow-gitea/scripts/kaola-gitea-forge.js`:**
+- `teaExec(args, opts)` — Execute `tea` CLI commands with version validation (tea >= 0.9.2). Supports `KAOLA_WORKFLOW_OFFLINE=1` for offline testing and optional `execFileSync` injection for test runners.
+- `labelsOf(raw)` — Extract label names from mixed label objects (strings or objects with `.name` or `.title` properties).
+- `uniqueLabels(raw)` — Return deduplicated label names.
+- `preserveWorkflowLabels(currentLabels, nextLabels)` — Ensure workflow labels (`workflow:in-progress`, `workflow:queued`) are preserved when updating issue labels.
+- `normalizeState(raw)` — Normalize issue/PR state strings to `open`, `closed`, or `merged`.
+- `normalizeProject(raw)` — Normalize Gitea project objects to canonical form: `{owner, name, full_name, html_url}`.
+- `normalizeIssue(raw)` — Normalize Gitea issue objects to canonical form: `{number, issue_iid, id, title, body, state, labels, updated_at, url}`.
+- `normalizePullRequest(raw)` — Normalize Gitea PR objects to canonical form: `{number, pr_number, id, title, state, pr_url, source_branch, target_branch}`.
+- `discoverProject(opts)` — Discover current project via `tea repo view` or git remote fallback.
+- `listIssues(opts)` — List all issues (default limit 100, supports state filter).
+- `viewIssue(issueNum, opts)` — Fetch a single issue by number.
+- `updateIssueLabels(project, issueNum, opts)` — Add or remove labels from an issue.
+- `closeIssue(issueNum, opts)` — Close an issue by number.
+- `createIssueComment(project, issueNum, body, opts)` — Create a comment on an issue.
+- `listIssueComments(project, issueNum, opts)` — List all comments on an issue.
+- `updateIssueComment(project, issueNum, commentId, body, opts)` — Update an issue comment.
+- `createPullRequest(opts)` — Create a pull request with optional source/target branch, title, and description.
+- `viewPullRequest(prNumber, opts)` — Fetch a single PR by number.
+- `listPullRequests(opts)` — List all pull requests.
+- `mergePullRequest(project, prNumber, opts)` — Merge a PR with optional squash and branch removal.
+- `ensureLabel(project, labelDef, opts)` — Create a label if it does not exist; return existing label if found.

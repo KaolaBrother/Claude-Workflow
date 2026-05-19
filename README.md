@@ -128,6 +128,9 @@ Both editions share the same command names, so a manual Claude Code install
 picks one forge at a time. Use the `--forge` flag on `install.sh` to select
 the edition.
 
+**Gitea support:** A Gitea forge adapter plugin is available under `plugins/kaola-workflow-gitea/`
+for users who prefer Gitea as their Git platform. See the plugin's documentation for setup and usage.
+
 ### Claude Code
 
 Claude Code installs use `install.sh` only. Do not install Kaola-Workflow through
