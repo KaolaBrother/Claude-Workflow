@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [3.10.0] — 2026-05-19
+
 ### Added — Agent-Judged Path Intent in Startup (issue #104)
 
 - **`commands/workflow-next.md` Step 0a-1**: New "Path Intent" step before startup transaction. Agent judges fast vs. full workflow based on `KAOLA_PATH` env var, prompt prose triggers, or issue rubric. Precedence: explicit env var > prompt keywords > issue eligibility rubric > default full. Documented triggers include "quick fix", "trivial", "one-line", "rename", "typo" for fast path. Bias toward full mode when in doubt.
