@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed — GitLab Startup Offline Classifier Parity
+
+- **`classifyIssue()` offline fallback**: GitLab startup now uses the same local `.roadmap/issue-N.md` evidence as the CLI classifier when `KAOLA_WORKFLOW_OFFLINE=1`, so explicit-target startup refuses blocked local roadmap issues instead of silently acquiring them.
+- **Regression test**: Added coverage that `startup --target-issue N` exits with `user_target_blocked` and creates no active folder when the local GitLab roadmap marks the target as blocked by another issue.
+
 ### Fixed — GitLab KAOLA_PATH=fast Startup State (issue #101)
 
 - **`writeState()` fast-path support**: Added `workflow_path`/`isFast` logic to the GitLab `writeState` function. When `workflow_path: fast`, the function now writes `phase: fast`, `phase_name: Fast`, `workflow_path: fast`, `/kaola-workflow-fast` as `next_command`/`next_skill`, and `fast-summary` as the pending gate — matching the GitHub implementation.

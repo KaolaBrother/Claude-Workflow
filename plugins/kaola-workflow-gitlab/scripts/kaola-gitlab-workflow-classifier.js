@@ -123,6 +123,23 @@ function checkDependsOn(depIid) {
   return null;
 }
 
+function localRoadmapIssue(issueIid, repoRoot) {
+  const roadmapFile = path.join(repoRoot, 'kaola-workflow', '.roadmap', 'issue-' + issueIid + '.md');
+  const labels = [];
+  let body = '';
+  if (fs.existsSync(roadmapFile)) {
+    const content = fs.readFileSync(roadmapFile, 'utf8');
+    const nextStep = field(content, 'next_step');
+    if (/blocked by #\d+/i.test(nextStep)) {
+      const match = nextStep.match(/#(\d+)/);
+      if (match) labels.push({ name: 'depends-on:#' + match[1] });
+    }
+    for (const area of parseAreaLabelsFromText(content)) labels.push({ name: 'area:' + area });
+    body = content;
+  }
+  return { issue_iid: issueIid, labels, body };
+}
+
 function issueHasWorkflowInProgressLabel(labels) {
   return (labels || []).some(function(label) {
     return labelName(label) === forge.CLAIM_LABEL;
@@ -228,6 +245,10 @@ function classifyIssue(issueIid, root) {
     return { verdict: 'owned', reasoning: 'active local folder already exists' };
   }
 
+  if (OFFLINE) {
+    return classify(localRoadmapIssue(issueIid, repoRoot), activeFolders);
+  }
+
   let issue;
   try {
     issue = forge.viewIssue(issueIid);
@@ -265,20 +286,7 @@ function cmdClassify() {
   }
 
   if (OFFLINE) {
-    const roadmapFile = path.join(repoRoot, 'kaola-workflow', '.roadmap', 'issue-' + args.issue + '.md');
-    let labels = [];
-    let body = '';
-    if (fs.existsSync(roadmapFile)) {
-      const content = fs.readFileSync(roadmapFile, 'utf8');
-      const nextStep = field(content, 'next_step');
-      if (/blocked by #\d+/i.test(nextStep)) {
-        const m = nextStep.match(/#(\d+)/);
-        if (m) labels = [{ name: 'depends-on:#' + m[1] }];
-      }
-      for (const area of parseAreaLabelsFromText(content)) labels.push({ name: 'area:' + area });
-      body = content;
-    }
-    const result = classify({ issue_iid: args.issue, labels: labels, body: body }, activeFolders);
+    const result = classify(localRoadmapIssue(args.issue, repoRoot), activeFolders);
     process.stdout.write(JSON.stringify(result) + '\n');
     return;
   }

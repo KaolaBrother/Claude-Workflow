@@ -574,6 +574,31 @@ withForge({
   }
 }
 
+{
+  const tempHome = tempRoot('kw-gl-offline-startup-block-');
+  const root = tempRoot('kw-gl-offline-startup-block-root-');
+  try {
+    const roadmapDir = path.join(root, 'kaola-workflow', '.roadmap');
+    fs.mkdirSync(roadmapDir, { recursive: true });
+    fs.writeFileSync(path.join(roadmapDir, 'issue-59.md'),
+      'issue: #59\ntitle: Offline startup fixture\nstatus: open\nnext_step: blocked by #3\n');
+    const result = spawnSync(process.execPath, [claimScript, 'startup', '--runtime', 'test', '--target-issue', '59'], {
+      cwd: root, encoding: 'utf8',
+      env: Object.assign({}, process.env, { KAOLA_WORKFLOW_OFFLINE: '1', HOME: tempHome, USERPROFILE: tempHome })
+    });
+    assert.strictEqual(result.status, 1, 'offline blocked startup must exit 1');
+    const out = JSON.parse(result.stdout.trim());
+    assert.strictEqual(out.verdict, 'user_target_blocked');
+    assert.strictEqual(out.claim, 'none');
+    assert(/depends-on:#3/.test(out.reasoning));
+    assert(!fs.existsSync(path.join(root, 'kaola-workflow', 'issue-59')),
+      'offline blocked startup must not create an active folder');
+  } finally {
+    fs.rmSync(tempHome, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 // --- Task B: Gap 4 — stateLooksValid ---
 {
   const root = tempRoot('kw-gl-slv-');
