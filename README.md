@@ -129,7 +129,9 @@ picks one forge at a time. Use the `--forge` flag on `install.sh` to select
 the edition.
 
 **Gitea support:** A Gitea forge adapter plugin is available under `plugins/kaola-workflow-gitea/`
-for users who prefer Gitea as their Git platform. See the plugin's documentation for setup and usage.
+for users who prefer Gitea as their Git platform. The Gitea edition includes a complete sink layer
+(merge and PR) for Phase 6, with squash-merge gating support. See the plugin's documentation for
+setup and usage.
 
 ### Claude Code
 

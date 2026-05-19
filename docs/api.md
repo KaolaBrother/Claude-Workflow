@@ -129,4 +129,19 @@ The following functions are exported from sink and claim modules for use by test
 - `viewPullRequest(prNumber, opts)` — Fetch a single PR by number.
 - `listPullRequests(opts)` — List all pull requests.
 - `mergePullRequest(project, prNumber, opts)` — Merge a PR with optional squash and branch removal.
+- `checkRepoSquashEnabled(project, opts)` — Validate that the Gitea repository supports squash merges before attempting a squash merge. Throws an error if squash is not enabled.
 - `ensureLabel(project, labelDef, opts)` — Create a label if it does not exist; return existing label if found.
+
+**`plugins/kaola-workflow-gitea/scripts/kaola-gitea-workflow-sink-pr.js`:**
+- `ensurePullRequest(args, opts)` — Create or reuse a pull request. Returns `{pr, project}` with PR metadata (url, number, state, source_branch) and project info (full_name, html_url). Automatically updates `workflow-state.md` Sink block with pr_url, pr_number, full_name, and project_html_url.
+- **Exit codes**:
+  - `0`: PR created/reused successfully, metadata recorded in workflow-state.md and phase6-summary.md
+
+**`plugins/kaola-workflow-gitea/scripts/kaola-gitea-workflow-sink-merge.js`:**
+- `ensureMergeReady(args, opts)` — Validate final merge conditions and execute the merge pipeline. Returns merge result with exit code.
+- `readProjectInfo(root, project)` — Read project full_name and html_url from workflow-state.md, with fallback to `discoverProject()` from git remote.
+- `finalValidationPassed(root, project)` — Check if phase6-summary.md contains passing final validation evidence.
+- **Exit codes**:
+  - `0`: merge succeeded, branch pushed, issue closed, worktree cleaned
+  - `2`: fast-forward race condition exhausted after MAX_AUTOMERGE_RETRIES attempts
+  - `3`: merge-impossible error (branch protected, non-fast-forward, permission denied); auto-fallback to PR sink
