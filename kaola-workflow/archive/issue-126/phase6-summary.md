@@ -31,16 +31,17 @@ Deferred from phase2-ideation.md Out of Scope: lines 442, 457, 533, 585+, 674 (G
 None needed — no deferred items block closure of issue #126. The explicitly deferred lines are out of scope by design, not partial work.
 
 ## Commit And Push
-ready — final Git gate runs after this file is committed
+DONE — implementation commit bf61330; archive commit 98a71fb; pushed to origin/main (b2ba1c0..bf61330)
+Final validation: npm test (all 4 forge editions) PASSED inside sink-merge
 
 ## GitHub Issue
-open → to be closed after commit+push
+closed — KaolaBrother/Kaola-Workflow#126
 
 ## Roadmap
-to be updated
+updated — kaola-workflow/.roadmap/issue-126.md removed; ROADMAP.md regenerated
 
 ## Archive
-pending
+kaola-workflow/archive/issue-126/
 
 ## Required Agent Compliance
 
@@ -50,9 +51,9 @@ pending
 | documentation docking | invoked | .cache/doc-docking.md | |
 | closure advisor gate | N/A | | no deferred items, no conflicts, no partial work — scan clean |
 | final-validation fix executors | N/A | | no final validation failures |
-| roadmap refresh | pending | | |
-| archive completed folder | pending | | |
-| final commit and push | ready | git diff reviewed; all 8 sites confirmed | final gate runs after this file |
+| roadmap refresh | invoked | kaola-workflow/ROADMAP.md | |
+| archive completed folder | complete | kaola-workflow/archive/issue-126/ | |
+| final commit and push | complete | bf61330 pushed to origin/main | |
 
 ## Status
-READY FOR FINAL GIT GATE
+COMPLETE
