@@ -336,24 +336,17 @@ function testClassifierClosedIssueResidueIgnored() {
     fs.mkdirSync(binDir, { recursive: true });
     const ghShim = path.join(binDir, 'gh');
     fs.writeFileSync(ghShim, [
-      '#!/bin/sh',
-      'ARGS="$@"',
-      'case "$ARGS" in',
-      '  *"issue view 80"*)',
-      '    echo \'{"state":"closed"}\' ;;',
-      '  *"issue view 81"*)',
-      '    echo \'{"number":81,"title":"unrelated","body":"commands/something.md","labels":[],"state":"open"}\' ;;',
-      '  *"repo view"*)',
-      '    echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
-      '  *)',
-      '    echo \'[]\' ;;',
-      'esac',
-      ''
+      '#!/usr/bin/env node',
+      "const a = process.argv.slice(2).join(' ');",
+      "if (a.includes('issue view 80')) { process.stdout.write('{\"state\":\"closed\"}\\n'); }",
+      "else if (a.includes('issue view 81')) { process.stdout.write('{\"number\":81,\"title\":\"unrelated\",\"body\":\"commands/something.md\",\"labels\":[],\"state\":\"open\"}\\n'); }",
+      "else if (a.includes('repo view')) { process.stdout.write('{\"owner\":{\"login\":\"test\"},\"name\":\"repo\"}\\n'); }",
+      "else { process.stdout.write('[\\n'); }"
     ].join('\n'));
     fs.chmodSync(ghShim, 0o755);
     const result = spawnSync(process.execPath, [classifierScript, 'classify', '--issue', '81'], {
       cwd: tmp, encoding: 'utf8',
-      env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '0', PATH: binDir + path.delimiter + (process.env.PATH || '') }
+      env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '0', PATH: binDir + path.delimiter + path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '') }
     });
     assert(result.status === 0, 'classifier exit 0 expected, got ' + result.status + '\nstderr: ' + result.stderr);
     const parsed = JSON.parse(result.stdout.trim());
@@ -381,15 +374,12 @@ function writeGhShimForStartup(binDir) {
   fs.mkdirSync(binDir, { recursive: true });
   const ghShim = path.join(binDir, 'gh');
   fs.writeFileSync(ghShim, [
-    '#!/bin/sh',
-    'ARGS="$@"',
-    'case "$ARGS" in',
-    '  *"repo view"*) echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
-    '  *"issue view"*) echo \'{"number":0,"title":"fixture","body":"README.md","labels":[],"state":"open"}\' ;;',
-    '  *"api"*) echo \'[]\' ;;',
-    '  *) echo "" ;;',
-    'esac',
-    ''
+    '#!/usr/bin/env node',
+    "const a = process.argv.slice(2).join(' ');",
+    "if (a.includes('repo view')) { process.stdout.write('{\"owner\":{\"login\":\"test\"},\"name\":\"repo\"}\\n'); }",
+    "else if (a.includes('issue view')) { process.stdout.write('{\"number\":0,\"title\":\"fixture\",\"body\":\"README.md\",\"labels\":[],\"state\":\"open\"}\\n'); }",
+    "else if (a.includes('api')) { process.stdout.write('[\\n'); }",
+    "else { process.stdout.write('\\n'); }"
   ].join('\n'));
   fs.chmodSync(ghShim, 0o755);
 }
@@ -411,7 +401,7 @@ function runClaimOnline(args, cwd, binDir, extraEnv) {
       ...process.env,
       ...(extraEnv || {}),
       KAOLA_WORKFLOW_OFFLINE: '0',
-      PATH: binDir + path.delimiter + (process.env.PATH || '')
+      PATH: binDir + path.delimiter + path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '')
     }
   });
   assert(result.status === 0, 'online claim should exit 0, got ' + result.status + '\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
@@ -429,7 +419,7 @@ function runClaimOnlineLastJson(args, cwd, binDir, extraEnv) {
       ...process.env,
       ...(extraEnv || {}),
       KAOLA_WORKFLOW_OFFLINE: '0',
-      PATH: binDir + path.delimiter + (process.env.PATH || '')
+      PATH: binDir + path.delimiter + path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '')
     }
   });
   assert(result.status === 0, 'online claim should exit 0, got ' + result.status + '\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
@@ -480,21 +470,18 @@ function testClassifierCurrentClaimMarkerBlocks() {
     fs.mkdirSync(binDir, { recursive: true });
     const ghShim = path.join(binDir, 'gh');
     fs.writeFileSync(ghShim, [
-      '#!/bin/sh',
-      'ARGS="$@"',
-      'case "$ARGS" in',
-      '  *"repo view"*) echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
-      '  *"issue view 504"*) echo \'{"number":504,"title":"claimed","body":"README.md","labels":[],"state":"open"}\' ;;',
-      '  *"api repos/test/repo/issues/504/comments"*) echo \'[{"body":"<!-- kw:claim project=issue-504 -->","updated_at":"2099-01-01T00:00:00Z"}]\' ;;',
-      '  *) echo \'[]\' ;;',
-      'esac',
-      ''
+      '#!/usr/bin/env node',
+      "const a = process.argv.slice(2).join(' ');",
+      "if (a.includes('repo view')) { process.stdout.write('{\"owner\":{\"login\":\"test\"},\"name\":\"repo\"}\\n'); }",
+      "else if (a.includes('issue view 504')) { process.stdout.write('{\"number\":504,\"title\":\"claimed\",\"body\":\"README.md\",\"labels\":[],\"state\":\"open\"}\\n'); }",
+      "else if (a.includes('api repos/test/repo/issues/504/comments')) { process.stdout.write('[{\"body\":\"<!-- kw:claim project=issue-504 -->\",\"updated_at\":\"2099-01-01T00:00:00Z\"}]\\n'); }",
+      "else { process.stdout.write('[\\n'); }"
     ].join('\n'));
     fs.chmodSync(ghShim, 0o755);
     const result = spawnSync(process.execPath, [classifierScript, 'classify', '--issue', '504'], {
       cwd: tmp,
       encoding: 'utf8',
-      env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '0', PATH: binDir + path.delimiter + (process.env.PATH || '') }
+      env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '0', PATH: binDir + path.delimiter + path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '') }
     });
     assert(result.status === 0, 'classifier should exit 0 for current claim marker');
     const parsed = JSON.parse(result.stdout.trim());
@@ -512,15 +499,12 @@ function testWatchPrArchivesClosedIssuePrFolder() {
     const binDir = path.join(tmp, 'bin');
     fs.mkdirSync(binDir, { recursive: true });
     fs.writeFileSync(path.join(binDir, 'gh'), [
-      '#!/bin/sh',
-      'ARGS="$@"',
-      'case "$ARGS" in',
-      '  *"issue view 200"*) echo \'{"state":"closed"}\' ;;',
-      '  *"pr view"*) echo \'{"state":"MERGED","number":1}\' ;;',
-      '  *"repo view"*) echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
-      '  *) echo \'[]\' ;;',
-      'esac',
-      ''
+      '#!/usr/bin/env node',
+      "const a = process.argv.slice(2).join(' ');",
+      "if (a.includes('issue view 200')) { process.stdout.write('{\"state\":\"closed\"}\\n'); }",
+      "else if (a.includes('pr view')) { process.stdout.write('{\"state\":\"MERGED\",\"number\":1}\\n'); }",
+      "else if (a.includes('repo view')) { process.stdout.write('{\"owner\":{\"login\":\"test\"},\"name\":\"repo\"}\\n'); }",
+      "else { process.stdout.write('[\\n'); }"
     ].join('\n'));
     fs.chmodSync(path.join(binDir, 'gh'), 0o755);
     const projDir = path.join(tmp, 'kaola-workflow', 'watch-pr-test');
@@ -907,14 +891,11 @@ function testStatusShowsClosedIssueDrift() {
     const binDir = path.join(tmp, 'bin');
     fs.mkdirSync(binDir, { recursive: true });
     fs.writeFileSync(path.join(binDir, 'gh'), [
-      '#!/bin/sh',
-      'ARGS="$@"',
-      'case "$ARGS" in',
-      '  *"issue view 100"*) echo \'{"state":"open"}\' ;;',
-      '  *"issue view 200"*) echo \'{"state":"closed"}\' ;;',
-      '  *) echo \'[]\' ;;',
-      'esac',
-      ''
+      '#!/usr/bin/env node',
+      "const a = process.argv.slice(2).join(' ');",
+      "if (a.includes('issue view 100')) { process.stdout.write('{\"state\":\"open\"}\\n'); }",
+      "else if (a.includes('issue view 200')) { process.stdout.write('{\"state\":\"closed\"}\\n'); }",
+      "else { process.stdout.write('[\\n'); }"
     ].join('\n'));
     fs.chmodSync(path.join(binDir, 'gh'), 0o755);
     const online = runClaimOnline(['status'], tmp, binDir);
@@ -1233,16 +1214,13 @@ function testE2EGitHubPrFullChain() {
     // Custom gh shim: handles startup calls + watch-pr pr view
     fs.mkdirSync(binDir, { recursive: true });
     fs.writeFileSync(path.join(binDir, 'gh'), [
-      '#!/bin/sh',
-      'ARGS="$@"',
-      'case "$ARGS" in',
-      '  *"repo view"*) echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
-      '  *"issue view"*) echo \'{"number":860,"title":"pr-chain-fixture","body":"README.md","labels":[],"state":"open"}\' ;;',
-      '  *"pr view"*) echo \'{"state":"MERGED","number":1}\' ;;',
-      '  *"api"*) echo \'[]\' ;;',
-      '  *) echo "" ;;',
-      'esac',
-      ''
+      '#!/usr/bin/env node',
+      "const a = process.argv.slice(2).join(' ');",
+      "if (a.includes('repo view')) { process.stdout.write('{\"owner\":{\"login\":\"test\"},\"name\":\"repo\"}\\n'); }",
+      "else if (a.includes('issue view')) { process.stdout.write('{\"number\":860,\"title\":\"pr-chain-fixture\",\"body\":\"README.md\",\"labels\":[],\"state\":\"open\"}\\n'); }",
+      "else if (a.includes('pr view')) { process.stdout.write('{\"state\":\"MERGED\",\"number\":1}\\n'); }",
+      "else if (a.includes('api')) { process.stdout.write('[\\n'); }",
+      "else { process.stdout.write('\\n'); }"
     ].join('\n'));
     fs.chmodSync(path.join(binDir, 'gh'), 0o755);
 
@@ -1315,16 +1293,13 @@ function testParallelIssueIndependence() {
     // conservative-red path that blocks the second startup when both are in phase <= 2.
     fs.mkdirSync(binDir, { recursive: true });
     fs.writeFileSync(path.join(binDir, 'gh'), [
-      '#!/bin/sh',
-      'ARGS="$@"',
-      'case "$ARGS" in',
-      '  *"repo view"*) echo \'{"owner":{"login":"test"},"name":"repo"}\' ;;',
-      '  *"issue view 870"*) echo \'{"number":870,"title":"feature-870","body":"scripts/feature-870.js","labels":[],"state":"open"}\' ;;',
-      '  *"issue view 871"*) echo \'{"number":871,"title":"feature-871","body":"scripts/feature-871.js","labels":[],"state":"open"}\' ;;',
-      '  *"api"*) echo \'[]\' ;;',
-      '  *) echo "" ;;',
-      'esac',
-      ''
+      '#!/usr/bin/env node',
+      "const a = process.argv.slice(2).join(' ');",
+      "if (a.includes('repo view')) { process.stdout.write('{\"owner\":{\"login\":\"test\"},\"name\":\"repo\"}\\n'); }",
+      "else if (a.includes('issue view 870')) { process.stdout.write('{\"number\":870,\"title\":\"feature-870\",\"body\":\"scripts/feature-870.js\",\"labels\":[],\"state\":\"open\"}\\n'); }",
+      "else if (a.includes('issue view 871')) { process.stdout.write('{\"number\":871,\"title\":\"feature-871\",\"body\":\"scripts/feature-871.js\",\"labels\":[],\"state\":\"open\"}\\n'); }",
+      "else if (a.includes('api')) { process.stdout.write('[\\n'); }",
+      "else { process.stdout.write('\\n'); }"
     ].join('\n'));
     fs.chmodSync(path.join(binDir, 'gh'), 0o755);
 
