@@ -4,6 +4,8 @@
 
 ### Added
 
+- **GitLab and Gitea parity tests included in `npm test`** (issue #124): `npm test` now chains all four forge editions (`claude`, `codex`, `gitlab`, `gitea`). The contract guard in `scripts/validate-kaola-workflow-contracts.js` is upgraded from a string-presence check to a structural `parseJson` loop that asserts each edition appears in `pkg.scripts.test`, preventing silent omission in future edits.
+
 - **Gitea forge edition** (`kaola-workflow-gitea`): Full functional parity with the GitHub edition. Install with `./install.sh --forge=gitea`. Requires `tea` CLI ≥ 0.9.2 and Gitea server ≥ 1.17. Forgejo ≥ 1.18 is expected to work via shared API surface but is not explicitly tested. Set `GITEA_SERVER_URL` and `GITEA_TOKEN` environment variables before first use.
 
 - **Gitea sink layer** (`plugins/kaola-workflow-gitea/scripts/`): Completes the Phase 6 sink implementation for the Gitea edition (issue #112). Three new/modified scripts:

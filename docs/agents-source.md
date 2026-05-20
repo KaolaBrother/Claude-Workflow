@@ -37,5 +37,4 @@ have to install Everything Claude Code (ECC) separately.
    ```bash
    node scripts/validate-vendored-agents.js
    npm test
-   npm run test:kaola-workflow:gitlab
    ```
