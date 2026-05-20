@@ -2,6 +2,7 @@
 'use strict';
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync, spawnSync } = require('child_process');
 const forge = require('./kaola-gitea-forge');
@@ -44,6 +45,17 @@ function parseArgs(argv) {
     if (key === '--sha' && argv[i + 1]) { args.sha = argv[++i]; continue; }
   }
   return args;
+}
+
+function readConfig() {
+  const configPath = path.join(os.homedir(), '.config', 'kaola-workflow', 'config.json');
+  let raw = '{}';
+  try { raw = fs.readFileSync(configPath, 'utf8'); } catch (_) {}
+  let config;
+  try { config = JSON.parse(raw); } catch (_) { config = {}; }
+  if (typeof config !== 'object' || config === null) config = {};
+  const defaults = { pr_auto_merge: false };
+  return Object.assign({}, defaults, config);
 }
 
 function sinkBlock(content) {
@@ -198,10 +210,22 @@ function mergePullRequest(pr, project, args) {
   });
 }
 
+function maybeAutoMergeFromConfig(pr, project, configOverride) {
+  const config = configOverride !== undefined ? configOverride : readConfig();
+  if (config.pr_auto_merge === true) {
+    try {
+      mergePullRequest(pr, project, { autoMerge: true, squash: true, removeSourceBranch: true });
+    } catch (mergeErr) {
+      process.stderr.write('Warning: pr auto-merge failed: ' + mergeErr.message + '\n');
+    }
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const { pr, project } = ensurePullRequest(args);
   if (args.merge && !OFFLINE) mergePullRequest(pr, project, args);
+  else if (!OFFLINE) maybeAutoMergeFromConfig(pr, project);
   process.stdout.write('PR URL: ' + (pr.pr_url || pr.web_url) + '\nPR Number: ' + pr.pr_number + '\n');
 }
 
@@ -213,6 +237,7 @@ module.exports = {
   appendSummary,
   ensurePullRequest,
   findPullRequestForBranch,
+  maybeAutoMergeFromConfig,
   mergePullRequest,
   routePullRequestState,
   updateStateSinkBlock

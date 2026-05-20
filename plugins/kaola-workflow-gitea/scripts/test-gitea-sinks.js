@@ -522,4 +522,51 @@ const sinkScript = path.join(__dirname, 'kaola-gitea-workflow-sink-merge.js');
   console.log('live-folder guard subprocess test passed');
 }
 
+// maybeAutoMergeFromConfig tests
+{
+  let forgeArgs = null;
+  withForge({ mergePullRequest: (...args) => { forgeArgs = args; } }, () => {
+    sinkPr.maybeAutoMergeFromConfig({ pr_number: 1 }, 'group/project', { pr_auto_merge: true });
+  });
+  assert(forgeArgs !== null, 'auto-merge: mergePullRequest called when pr_auto_merge true');
+  assert(forgeArgs[0] === 'group/project', 'auto-merge: project arg correct');
+  assert(forgeArgs[1] === 1, 'auto-merge: prNumber arg correct');
+  assert(forgeArgs[2].autoMerge === true, 'auto-merge: autoMerge option true');
+  assert(forgeArgs[2].squash === true, 'auto-merge: squash option true');
+  assert(forgeArgs[2].removeSourceBranch === true, 'auto-merge: removeSourceBranch option true');
+  console.log('auto-merge config-true trigger test passed');
+}
+
+{
+  let mergeCalled = false;
+  withForge({ mergePullRequest: () => { mergeCalled = true; } }, () => {
+    sinkPr.maybeAutoMergeFromConfig({ pr_number: 1 }, 'group/project', { pr_auto_merge: false });
+  });
+  assert(mergeCalled === false, 'auto-merge: mergePullRequest NOT called when pr_auto_merge false');
+  console.log('auto-merge config-false skip test passed');
+}
+
+{
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-cfg-'));
+  const cfgDir = path.join(tmpHome, '.config', 'kaola-workflow');
+  fs.mkdirSync(cfgDir, { recursive: true });
+  fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ pr_auto_merge: true }));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
+  try {
+    let forgeArgs = null;
+    withForge({ mergePullRequest: (...args) => { forgeArgs = args; } }, () => {
+      sinkPr.maybeAutoMergeFromConfig({ pr_number: 1 }, 'group/project');
+    });
+    assert(forgeArgs !== null, 'auto-merge HOME-stub: mergePullRequest called via real config file');
+    assert(forgeArgs[2].autoMerge === true, 'auto-merge HOME-stub: autoMerge option true');
+    assert(forgeArgs[2].squash === true, 'auto-merge HOME-stub: squash option true');
+    assert(forgeArgs[2].removeSourceBranch === true, 'auto-merge HOME-stub: removeSourceBranch option true');
+    console.log('auto-merge HOME-stub config file test passed');
+  } finally {
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true });
+  }
+}
+
 console.log('Gitea sink tests passed');

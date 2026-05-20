@@ -555,5 +555,51 @@ withForge({
   console.log('live-folder guard subprocess test passed');
 }
 
+// maybeAutoMergeFromConfig tests
+{
+  let forgeArgs = null;
+  withForge({ mergeMergeRequest: (...args) => { forgeArgs = args; } }, () => {
+    sinkMr.maybeAutoMergeFromConfig({ mr_iid: 1 }, { mr_auto_merge: true });
+  });
+  assert(forgeArgs !== null, 'auto-merge: mergeMergeRequest called when mr_auto_merge true');
+  assert(forgeArgs[0] === 1, 'auto-merge: mrIid arg correct');
+  assert(forgeArgs[1].autoMerge === true, 'auto-merge: autoMerge option true');
+  assert(forgeArgs[1].squash === true, 'auto-merge: squash option true');
+  assert(forgeArgs[1].removeSourceBranch === true, 'auto-merge: removeSourceBranch option true');
+  console.log('auto-merge config-true trigger test passed');
+}
+
+{
+  let mergeCalled = false;
+  withForge({ mergeMergeRequest: () => { mergeCalled = true; } }, () => {
+    sinkMr.maybeAutoMergeFromConfig({ mr_iid: 1 }, { mr_auto_merge: false });
+  });
+  assert(mergeCalled === false, 'auto-merge: mergeMergeRequest NOT called when mr_auto_merge false');
+  console.log('auto-merge config-false skip test passed');
+}
+
+{
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'kaola-mrcfg-'));
+  const cfgDir = path.join(tmpHome, '.config', 'kaola-workflow');
+  fs.mkdirSync(cfgDir, { recursive: true });
+  fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ mr_auto_merge: true }));
+  const origHome = process.env.HOME;
+  process.env.HOME = tmpHome;
+  try {
+    let forgeArgs = null;
+    withForge({ mergeMergeRequest: (...args) => { forgeArgs = args; } }, () => {
+      sinkMr.maybeAutoMergeFromConfig({ mr_iid: 1 });
+    });
+    assert(forgeArgs !== null, 'auto-merge HOME-stub: mergeMergeRequest called via real config file');
+    assert(forgeArgs[1].autoMerge === true, 'auto-merge HOME-stub: autoMerge option true');
+    assert(forgeArgs[1].squash === true, 'auto-merge HOME-stub: squash option true');
+    assert(forgeArgs[1].removeSourceBranch === true, 'auto-merge HOME-stub: removeSourceBranch option true');
+    console.log('auto-merge HOME-stub config file test passed');
+  } finally {
+    process.env.HOME = origHome;
+    fs.rmSync(tmpHome, { recursive: true });
+  }
+}
+
 console.log('GitLab sink tests passed');
 
