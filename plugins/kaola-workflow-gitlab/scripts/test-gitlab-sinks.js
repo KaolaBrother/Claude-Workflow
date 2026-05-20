@@ -48,6 +48,25 @@ function setupRealRepo(name, project) {
   return { root, branch };
 }
 
+function setupRepoWithLiveFolderOnBranch(name, project) {
+  const { root, branch } = setupRealRepo(name, project);
+  const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' });
+  // setupRealRepo leaves kaola-workflow/ as untracked on main. Commit it so
+  // the feature-branch checkout doesn't conflict with those untracked paths.
+  git('add', 'kaola-workflow/');
+  git('commit', '-m', 'add workflow files to main');
+  // Now commit only workflow-state.md (live content) on the feature branch.
+  git('checkout', branch);
+  const dir = path.join(root, 'kaola-workflow', project);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'workflow-state.md'), '# Kaola-Workflow State\nstatus: active\n');
+  git('add', path.join('kaola-workflow', project, 'workflow-state.md'));
+  git('commit', '-m', 'accidentally committed live folder');
+  git('checkout', 'main');
+  // main still has phase6-summary.md committed, so finalValidationPassed() passes.
+  return { root, branch };
+}
+
 function writeWorkflow(root, project, issueIid, summary) {
   const dir = path.join(root, 'kaola-workflow', project);
   fs.mkdirSync(dir, { recursive: true });
@@ -519,6 +538,21 @@ withForge({
     `offline-mr test: expected metadata commit in git log, got: ${log}`);
 
   console.log('offline-mr subprocess test passed');
+}
+
+// assertNoLiveWorkflowFolder guard — exits 1 with 'sink-merge refused:'
+{
+  const sinkScript = path.join(__dirname, 'kaola-gitlab-workflow-sink-merge.js');
+  const { root, branch } = setupRepoWithLiveFolderOnBranch('live-folder-gl-test', 'test-gl-live-folder');
+  const result = spawnSync(process.execPath, [sinkScript, '--project', 'test-gl-live-folder', '--branch', branch, '--root', root], {
+    cwd: root,
+    env: { ...process.env, KAOLA_WORKFLOW_OFFLINE: '1' },
+    encoding: 'utf8'
+  });
+  assert(result.status === 1, `live-folder guard test: expected exit 1, got ${result.status}. stderr: ${result.stderr}`);
+  assert((result.stderr || '').includes('sink-merge refused:'),
+    `live-folder guard test: expected 'sink-merge refused:' in stderr, got: ${result.stderr}`);
+  console.log('live-folder guard subprocess test passed');
 }
 
 console.log('GitLab sink tests passed');
