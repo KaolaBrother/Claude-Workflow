@@ -2,13 +2,13 @@
 
 ## Project
 name: issue-131
-status: active
+status: closed
 
 ## Current Position
 phase: 4
 phase_name: Execute
 workflow_path: full
-step: delegate-task
+step: complete
 next_command: /kaola-workflow-phase4 issue-131
 main_session_role: orchestrator
 implementation_owner: tdd-guide
