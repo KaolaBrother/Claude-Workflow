@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **`install-codex-agent-profiles.js` added to GitLab and Gitea forge plugins; GitLab `plugin_root` bug fixed** (issue #133): Both `plugins/kaola-workflow-gitlab/scripts/` and `plugins/kaola-workflow-gitea/scripts/` now ship a byte-identical copy of `install-codex-agent-profiles.js` with `__dirname`-based plugin root resolution, making each forge self-contained. Fixed the two affected lines in `plugins/kaola-workflow-gitlab/skills/kaola-workflow-init/SKILL.md` where `plugin_root` and the `find` path both pointed to `plugins/kaola-workflow` (the GitHub plugin) instead of `plugins/kaola-workflow-gitlab`. Validator guards with negative-lookahead regex added to both forge contract validators. Regression tests added to `test-gitlab-workflow-scripts.js` and `test-gitea-workflow-scripts.js`.
+
 - **GitLab and Gitea `finalize --keep-worktree` now commits archive rename** (issue #132): Both `kaola-gitlab-workflow-claim.js` and `kaola-gitea-workflow-claim.js` `cmdFinalize` now include the `else` block (matching the GitHub baseline) that, when `--keep-worktree` is set and running inside a linked worktree, stages and commits the `kaola-workflow/archive/{project}/` rename so the feature branch HEAD reflects the archived state. Regression tests added to `test-gitlab-sinks.js` and `test-gitea-sinks.js`.
 
 - **`bootstrap` alias added to GitLab and Gitea claim scripts** (issue #130): Both `kaola-gitlab-workflow-claim.js` and `kaola-gitea-workflow-claim.js` now accept `bootstrap` as an alias for `startup`, matching the GitHub baseline. Validator guards added to both forge contract validators to prevent future alias drift.
