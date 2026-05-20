@@ -113,9 +113,9 @@ find docs -maxdepth 3 -type f 2>/dev/null | sort
 5. Install or refresh the managed Codex agent role profiles:
 
 ```bash
-plugin_root="plugins/kaola-workflow"
+plugin_root="plugins/kaola-workflow-gitlab"
 if [ ! -f "$plugin_root/scripts/install-codex-agent-profiles.js" ]; then
-  script_path="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow/*/scripts/install-codex-agent-profiles.js' -print -quit 2>/dev/null)"
+  script_path="$(find "$HOME/.codex/plugins/cache" -path '*/kaola-workflow-gitlab/*/scripts/install-codex-agent-profiles.js' -print -quit 2>/dev/null)"
   plugin_root="$(dirname "$(dirname "$script_path")")"
 fi
 test -f "$plugin_root/scripts/install-codex-agent-profiles.js"

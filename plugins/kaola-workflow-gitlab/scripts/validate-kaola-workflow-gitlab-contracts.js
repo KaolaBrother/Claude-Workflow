@@ -129,7 +129,8 @@ const scriptFiles = [
   'kaola-gitlab-workflow-sink-merge.js',
   'kaola-gitlab-workflow-sink-mr.js',
   'simulate-gitlab-workflow-walkthrough.js',
-  'simulate-gitlab-codex-workflow-walkthrough.js'
+  'simulate-gitlab-codex-workflow-walkthrough.js',
+  'install-codex-agent-profiles.js'
 ];
 for (const script of scriptFiles) assert(exists(pluginRoot + '/scripts/' + script), script + ' missing');
 
@@ -275,6 +276,16 @@ assertPolicyBlocked('tool-unavailable', [
 const gitlabInitSkill = `${gitlabSkillsBase}/kaola-workflow-init/SKILL.md`;
 assertNotIncludes(gitlabInitSkill, 'Do not create or edit CLAUDE.md');
 assertIncludes(gitlabInitSkill, '> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**');
+assertIncludes(gitlabInitSkill, 'plugin_root="plugins/kaola-workflow-gitlab"');
+assert(
+  !/plugin_root="plugins\/kaola-workflow"(?!-)/.test(read(gitlabInitSkill)),
+  gitlabInitSkill + ' must not contain bare plugin_root="plugins/kaola-workflow" (without -gitlab suffix)'
+);
+assertIncludes(gitlabInitSkill, "*/kaola-workflow-gitlab/*/scripts/install-codex-agent-profiles.js");
+assert(
+  !/\*\/kaola-workflow\/\*\/scripts\/install-codex-agent-profiles\.js/.test(read(gitlabInitSkill)),
+  gitlabInitSkill + ' must not contain bare */kaola-workflow/* find path (without -gitlab suffix)'
+);
 assertConcept(gitlabInitSkill, 'GitLab init durable state contract', [
   'kaola-workflow/.roadmap/issue-*.md',
   'do not purge',

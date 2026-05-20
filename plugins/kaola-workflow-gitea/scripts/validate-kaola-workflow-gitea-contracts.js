@@ -128,7 +128,8 @@ const scriptFiles = [
   'kaola-gitea-workflow-sink-merge.js',
   'kaola-gitea-workflow-sink-pr.js',
   'simulate-gitea-workflow-walkthrough.js',
-  'simulate-gitea-codex-workflow-walkthrough.js'
+  'simulate-gitea-codex-workflow-walkthrough.js',
+  'install-codex-agent-profiles.js'
 ];
 for (const script of scriptFiles) assert(exists(pluginRoot + '/scripts/' + script), script + ' missing');
 
@@ -280,6 +281,16 @@ assertPolicyBlocked('tool-unavailable', [
 const giteaInitSkill = `${giteaSkillsBase}/kaola-workflow-init/SKILL.md`;
 assertNotIncludes(giteaInitSkill, 'Do not create or edit CLAUDE.md');
 assertIncludes(giteaInitSkill, '> **MANDATORY — READ CLAUDE.md BEFORE ANY ACTION THIS SESSION.**');
+assertIncludes(giteaInitSkill, 'plugin_root="plugins/kaola-workflow-gitea"');
+assert(
+  !/plugin_root="plugins\/kaola-workflow"(?!-)/.test(read(giteaInitSkill)),
+  giteaInitSkill + ' must not contain bare plugin_root="plugins/kaola-workflow" (without -gitea suffix)'
+);
+assertIncludes(giteaInitSkill, "*/kaola-workflow-gitea/*/scripts/install-codex-agent-profiles.js");
+assert(
+  !/\*\/kaola-workflow\/\*\/scripts\/install-codex-agent-profiles\.js/.test(read(giteaInitSkill)),
+  giteaInitSkill + ' must not contain bare */kaola-workflow/* find path (without -gitea suffix)'
+);
 assertConcept(giteaInitSkill, 'Gitea init durable state contract', [
   'kaola-workflow/.roadmap/issue-*.md',
   'do not purge',

@@ -955,6 +955,62 @@ withForge({
   }
 }
 
+const gitlabPluginRoot = path.resolve(__dirname, '..');
+const installProfilesScript = path.join(gitlabPluginRoot, 'scripts', 'install-codex-agent-profiles.js');
+
+function runInstallProfiles(target) {
+  const result = spawnSync(process.execPath, [installProfilesScript, target], {
+    cwd: gitlabPluginRoot,
+    encoding: 'utf8'
+  });
+  if (result.error) throw result.error;
+  assert.ok(result.status === 0, 'install profiles failed: ' + result.stderr);
+}
+
+function countOccurrences(content, pattern) {
+  return (content.match(pattern) || []).length;
+}
+
+function testInstallProfilesFeaturesTableHandling() {
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-gl-codex-install-fresh-'));
+  const existing = fs.mkdtempSync(path.join(os.tmpdir(), 'kw-gl-codex-install-existing-'));
+  try {
+    runInstallProfiles(fresh);
+    const freshConfig = fs.readFileSync(path.join(fresh, '.codex', 'config.toml'), 'utf8');
+    assert.ok(freshConfig.includes('[features]'), 'fresh install should include managed [features]');
+    assert.ok(freshConfig.includes('multi_agent = true'), 'fresh install should enable multi_agent');
+    assert.ok(freshConfig.includes('# BEGIN kaola-workflow agents'), 'fresh install should include managed block');
+    assert.strictEqual(
+      fs.readdirSync(path.join(fresh, '.codex', 'agents', 'kaola-workflow')).length,
+      9,
+      'should install 9 agent TOML files'
+    );
+
+    const existingCodexDir = path.join(existing, '.codex');
+    fs.mkdirSync(existingCodexDir, { recursive: true });
+    const existingConfigPath = path.join(existingCodexDir, 'config.toml');
+    fs.writeFileSync(existingConfigPath, [
+      '[features]', 'goals = true', '', '[projects."/tmp/example"]', 'trust_level = "trusted"', ''
+    ].join('\n'));
+
+    runInstallProfiles(existing);
+    runInstallProfiles(existing);
+    const updated = fs.readFileSync(existingConfigPath, 'utf8');
+    assert.strictEqual(
+      countOccurrences(updated, /^\[features\]$/gm),
+      1,
+      'existing config must contain exactly one [features] table'
+    );
+    assert.ok(updated.includes('goals = true'), 'existing [features] content must be preserved');
+    assert.ok(updated.includes('[agents.code-explorer]'), 'managed agent block should still be installed');
+  } finally {
+    fs.rmSync(fresh, { recursive: true, force: true });
+    fs.rmSync(existing, { recursive: true, force: true });
+  }
+}
+
+testInstallProfilesFeaturesTableHandling();
+
 testGitLabRoadmapInitIssueExclusiveAndUpdate()
   .then(() => {
     console.log('GitLab workflow script tests passed');
