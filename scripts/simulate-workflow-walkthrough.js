@@ -397,6 +397,7 @@ function runClaimOnline(args, cwd, binDir, extraEnv) {
   const result = spawnSync(process.execPath, [claimScript, ...args], {
     cwd,
     encoding: 'utf8',
+    timeout: 60000,
     env: {
       ...process.env,
       ...(extraEnv || {}),
@@ -404,6 +405,7 @@ function runClaimOnline(args, cwd, binDir, extraEnv) {
       PATH: binDir + path.delimiter + path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '')
     }
   });
+  assert(!result.signal, 'online claim timed out or was killed: ' + result.signal + '\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
   assert(result.status === 0, 'online claim should exit 0, got ' + result.status + '\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
   return JSON.parse(result.stdout);
 }
@@ -415,6 +417,7 @@ function runClaimOnlineLastJson(args, cwd, binDir, extraEnv) {
   const result = spawnSync(process.execPath, [claimScript, ...args], {
     cwd,
     encoding: 'utf8',
+    timeout: 60000,
     env: {
       ...process.env,
       ...(extraEnv || {}),
@@ -422,6 +425,7 @@ function runClaimOnlineLastJson(args, cwd, binDir, extraEnv) {
       PATH: binDir + path.delimiter + path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '')
     }
   });
+  assert(!result.signal, 'online claim timed out or was killed: ' + result.signal + '\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
   assert(result.status === 0, 'online claim should exit 0, got ' + result.status + '\nstdout: ' + result.stdout + '\nstderr: ' + result.stderr);
   const lastLine = result.stdout.trim().split('\n').filter(l => l.trim().startsWith('{')).pop();
   assert(lastLine, 'expected a JSON object line in stdout, got: ' + result.stdout);

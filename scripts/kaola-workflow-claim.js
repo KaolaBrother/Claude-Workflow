@@ -282,7 +282,8 @@ function classifyIssue(root, issueNumber) {
     const raw = execFileSync(process.execPath, [classifier, 'classify', '--issue', String(issueNumber), '--json'], {
       cwd: root,
       encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 30000
     }).trim();
     return raw ? JSON.parse(raw) : { verdict: 'green', reasoning: 'classifier empty' };
   } catch (e) {
