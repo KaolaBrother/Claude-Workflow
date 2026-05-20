@@ -29,6 +29,8 @@
 
 ### Fixed
 
+- Add clean-worktree guard before branch checkout in GitLab and Gitea `runDirectMerge` pipelines, matching the GitHub baseline; dirty tracked files now trigger an explicit `'Worktree must be clean before direct merge sink runs'` error instead of an opaque `git checkout` failure (KaolaBrother/Kaola-Workflow#128)
+
 - Remove `workflow:in-progress` label when linked issue is closed via sink-merge (GitHub, GitLab, Gitea) (#127)
 
 - **Gitea parity sweep across README, workflow-state-contract, and api docs** (issue #126): Updated README.md, docs/workflow-state-contract.md, and docs/api.md to include Gitea alongside GitHub and GitLab everywhere. Corrected stale Codex manifest versions for `kaola-workflow` and `kaola-workflow-gitlab` from `1.4.1` to `1.5.0`. Added missing Gitea install path, env var scope notes, hooks re-run flag, and forge-neutral wording in the workflow state contract.
