@@ -120,6 +120,7 @@ function closeLinkedIssue(root, project, issueIid, opts) {
   const projectInfo = options.projectInfo || readProjectInfo(root, project);
   const comment = forge.createIssueComment(projectInfo, issueIid, 'Merged via Gitea direct merge sink after final validation passed.', options);
   const closed = forge.closeIssue(issueIid, options);
+  try { forge.updateIssueLabels(projectInfo, issueIid, { remove: [forge.CLAIM_LABEL] }); } catch (_) {}
   return { comment_id: comment && comment.id, issue: closed };
 }
 
@@ -234,6 +235,7 @@ function postMergeCleanup(args, mainRoot) {
     const root = mainRoot;
     try { forge.createIssueComment(readProjectInfo(root, args.project), args.issue, 'Merged via Gitea direct merge sink.', {}); } catch (_) {}
     try { forge.closeIssue(args.issue); } catch (_) {}
+    try { forge.updateIssueLabels(readProjectInfo(root, args.project), args.issue, { remove: [forge.CLAIM_LABEL] }); } catch (_) {}
   }
   // Step 9 — Delete branch
   try { execFileSync('git', ['-C', mainRoot, 'branch', '-d', '--', args.branch], { encoding: 'utf8' }); } catch (_) {}

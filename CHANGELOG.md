@@ -29,6 +29,8 @@
 
 ### Fixed
 
+- Remove `workflow:in-progress` label when linked issue is closed via sink-merge (GitHub, GitLab, Gitea) (#127)
+
 - **Gitea parity sweep across README, workflow-state-contract, and api docs** (issue #126): Updated README.md, docs/workflow-state-contract.md, and docs/api.md to include Gitea alongside GitHub and GitLab everywhere. Corrected stale Codex manifest versions for `kaola-workflow` and `kaola-workflow-gitlab` from `1.4.1` to `1.5.0`. Added missing Gitea install path, env var scope notes, hooks re-run flag, and forge-neutral wording in the workflow state contract.
 
 - **Config-driven auto-merge parity for Gitea and GitLab sinks** (`plugins/kaola-workflow-gitea/scripts/kaola-gitea-workflow-sink-pr.js`, `plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-sink-mr.js`): Both sinks now read `~/.config/kaola-workflow/config.json` and activate auto-merge when `pr_auto_merge: true` (Gitea) or `mr_auto_merge: true` (GitLab) is set, matching the documented behavior and the GitHub baseline. The `--merge` CLI flag takes priority over config; both paths are skipped in offline mode. Dispatch (phase6.md, SKILL.md) is unchanged. (issue #122)

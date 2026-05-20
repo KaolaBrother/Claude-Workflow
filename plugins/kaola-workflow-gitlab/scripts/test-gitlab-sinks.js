@@ -185,6 +185,7 @@ assert.strictEqual(sinkMr.routeMergeRequestState({ state: 'merged' }), 'merged')
   assert.throws(() => sinkMerge.closeLinkedIssue(root, 'gate-project', 70), /Final validation evidence/);
 }
 
+let updateIssueCalled = null;
 withForge({
   createIssueNote(project, issueIid, body) {
     assert.strictEqual(project.project_id, 77);
@@ -195,6 +196,10 @@ withForge({
   closeIssue(issueIid) {
     assert.strictEqual(issueIid, 71);
     return { issue_iid: 71, state: 'closed' };
+  },
+  updateIssue(issueIid, opts) {
+    updateIssueCalled = { issueIid, opts };
+    return null;
   }
 }, () => {
   const root = tempRoot('kw-gl-merge-close-');
@@ -209,6 +214,13 @@ withForge({
   });
   assert.strictEqual(result.merged, true);
   assert.strictEqual(result.close.note_id, 9001);
+  assert.ok(updateIssueCalled, 'forge.updateIssue should have been called');
+  assert.strictEqual(updateIssueCalled.issueIid, 71);
+  assert.ok(
+    Array.isArray(updateIssueCalled.opts.unlabels) &&
+    updateIssueCalled.opts.unlabels.includes(forge.CLAIM_LABEL),
+    'updateIssue opts.unlabels must include forge.CLAIM_LABEL'
+  );
 });
 
 {

@@ -195,6 +195,7 @@ assert.strictEqual(sinkPr.routePullRequestState({ state: 'merged' }), 'merged');
 }
 
 // Test 6: runDirectMerge skipGit → close issue (returns {merged:true, close:{comment_id}})
+let updateIssueLabelsCalled = null;
 withForge({
   createIssueComment(project, issueNum, body) {
     assert.strictEqual(project.full_name, 'group/project');
@@ -205,6 +206,10 @@ withForge({
   closeIssue(issueIid) {
     assert.strictEqual(issueIid, 71);
     return { number: 71, state: 'closed' };
+  },
+  updateIssueLabels(project, issueNum, opts) {
+    updateIssueLabelsCalled = { project, issueNum, opts };
+    return {};
   }
 }, () => {
   const root = tempRoot('kw-gt-merge-close-');
@@ -219,6 +224,13 @@ withForge({
   });
   assert.strictEqual(result.merged, true);
   assert.strictEqual(result.close.comment_id, 9001);
+  assert.ok(updateIssueLabelsCalled, 'forge.updateIssueLabels should have been called');
+  assert.strictEqual(updateIssueLabelsCalled.issueNum, 71);
+  assert.ok(
+    Array.isArray(updateIssueLabelsCalled.opts.remove) &&
+    updateIssueLabelsCalled.opts.remove.includes(forge.CLAIM_LABEL),
+    'updateIssueLabels opts.remove must include forge.CLAIM_LABEL'
+  );
 });
 
 // Test 7: finalValidationPassed reads from archive fallback

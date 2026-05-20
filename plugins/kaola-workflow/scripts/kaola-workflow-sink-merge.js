@@ -203,6 +203,7 @@ function postMergeCleanup(args, mainRoot) {
   if (!OFFLINE && args.issue != null) {
     try { ghExec(['issue', 'close', String(args.issue), '--comment', 'Merged via sink-merge.']); }
     catch (_) {}
+    try { ghExec(['issue', 'edit', String(args.issue), '--remove-label', 'workflow:in-progress']); } catch (_) {}
   }
   // Step 9 — Delete branch (worktree was removed in step 0)
   try { execFileSync('git', ['-C', mainRoot, 'branch', '-d', '--', args.branch], { encoding: 'utf8' }); } catch (_) {}
