@@ -91,6 +91,8 @@ assert(pluginJson.skills === './skills/', 'GitLab Codex plugin must expose ./ski
 
 const claudePluginJson = parseJson(pluginRoot + '/.claude-plugin/plugin.json');
 assert(String(claudePluginJson.name || '').includes('gitlab'), 'GitLab Claude plugin name must identify GitLab');
+assert(claudePluginJson.version === require(path.join(root, 'package.json')).version,
+  'GitLab Claude plugin version must match package.json');
 
 const marketplace = parseJson('.agents/plugins/marketplace.json');
 assert(marketplace.plugins.some(plugin =>
