@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **macOS `npm test` hang eliminated** (issue #129): All 7 temporary `gh` shell shims in `scripts/simulate-workflow-walkthrough.js` converted from `#!/bin/sh` scripts to `#!/usr/bin/env node` Node.js scripts. On macOS, direct execution of a shell script via shebang from a Node.js child process could hang indefinitely; Node.js shims are not affected. Also prepends `path.dirname(process.execPath)` to the PATH in 4 `spawnSync` call sites (`runClaimOnline`, `runClaimOnlineLastJson`, and 2 inline calls) so `node` is discoverable by the new shebang on all platforms.
+
 ### Added
 
 - **GitLab Claude plugin version contract** (issue #125): `plugins/kaola-workflow-gitlab/.claude-plugin/plugin.json` version bumped from `3.8.1` to `3.10.0` to match root `package.json`. Added `claudePluginJson.version` assertion in `validate-kaola-workflow-gitlab-contracts.js` mirroring the Gitea edition guard; validator now fails fast on version drift.
