@@ -8,7 +8,7 @@ MANAGED_AGENT_MARKER="kaola-workflow-managed-agent: true"
 REQUIRED_AGENTS=("code-explorer" "docs-lookup" "planner" "code-architect" "tdd-guide" "build-error-resolver" "code-reviewer" "security-reviewer" "doc-updater")
 
 usage() {
-  echo "Usage: ./uninstall.sh [--forge=github|gitlab|all]"
+  echo "Usage: ./uninstall.sh [--forge=github|gitlab|gitea|all]"
 }
 
 while [[ "$#" -gt 0 ]]; do
@@ -19,7 +19,7 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --forge)
       if [[ -z "${2:-}" ]]; then
-        echo "--forge requires github, gitlab, or all" >&2
+        echo "--forge requires github, gitlab, gitea, or all" >&2
         usage >&2
         exit 2
       fi
@@ -39,7 +39,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 case "$FORGE" in
-  github|gitlab|all) ;;
+  github|gitlab|gitea|all) ;;
   *)
     echo "Unknown forge: $FORGE" >&2
     usage >&2
@@ -109,6 +109,10 @@ fi
 
 if [[ "$FORGE" = "gitlab" || "$FORGE" = "all" ]]; then
   remove_dir "$HOME/.claude/kaola-workflow-gitlab"
+fi
+
+if [[ "$FORGE" = "gitea" || "$FORGE" = "all" ]]; then
+  remove_dir "$HOME/.claude/kaola-workflow-gitea"
 fi
 
 # Strip Kaola-Workflow-managed hook entries from ~/.claude/settings.json. Uses

@@ -185,6 +185,7 @@ Uninstall:
 ```bash
 ./uninstall.sh --forge=github
 ./uninstall.sh --forge=gitlab
+./uninstall.sh --forge=gitea
 ./uninstall.sh --forge=all
 ```
 

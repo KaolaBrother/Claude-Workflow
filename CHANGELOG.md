@@ -21,6 +21,8 @@
   - **Config** (`config/agents.toml`): Codex agent registry for managed installation.
   - **Plugin manifests** (`.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`): Claude Code and Codex registration with version tracking (issue #114).
 
+- **Gitea uninstall support**: `uninstall.sh` now accepts `--forge=gitea` to remove the `~/.claude/kaola-workflow-gitea` directory. Usage string, argument validation, and error messages updated to list `gitea` alongside `github`, `gitlab`, and `all`.
+
 ### Fixed
 
 - GitLab repair-state no longer advances to Phase 6 when `phase5-review.md` exists but `phase4-progress.md` still has open tasks (parity with GitHub behavior, issue #107)

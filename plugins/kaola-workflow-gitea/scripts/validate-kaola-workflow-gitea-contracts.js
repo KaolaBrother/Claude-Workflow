@@ -147,6 +147,12 @@ for (const script of installSupportScripts) {
   assert(installScript.includes(script), 'install.sh must install Gitea support script: ' + script);
 }
 
+const uninstallScript = read('uninstall.sh');
+assert(uninstallScript.includes('github|gitlab|gitea|all'), 'uninstall.sh must accept --forge=gitea in case validation');
+assert(uninstallScript.includes('"$FORGE" = "gitea"'), 'uninstall.sh must branch on gitea forge selection');
+assert(uninstallScript.includes('kaola-workflow-gitea'), 'uninstall.sh must remove the Gitea install directory');
+assert(/Usage:.*gitea/.test(uninstallScript), 'uninstall.sh usage string must list gitea');
+
 assert(
   read(pluginRoot + '/commands/kaola-workflow-phase6.md').includes('mr|pr)'),
   'Gitea Phase 6 command must dispatch canonical pr sink (mr|pr) case)'
