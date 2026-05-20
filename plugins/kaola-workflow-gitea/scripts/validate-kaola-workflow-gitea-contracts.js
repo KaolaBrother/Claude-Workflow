@@ -127,7 +127,8 @@ const scriptFiles = [
   'kaola-gitea-workflow-roadmap.js',
   'kaola-gitea-workflow-sink-merge.js',
   'kaola-gitea-workflow-sink-pr.js',
-  'simulate-gitea-workflow-walkthrough.js'
+  'simulate-gitea-workflow-walkthrough.js',
+  'simulate-gitea-codex-workflow-walkthrough.js'
 ];
 for (const script of scriptFiles) assert(exists(pluginRoot + '/scripts/' + script), script + ' missing');
 
