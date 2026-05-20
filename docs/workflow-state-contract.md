@@ -6,7 +6,7 @@ here for the full contract.
 
 ## Durable Sources
 
-- GitHub issues are the canonical backlog and closure source when online.
+- Forge issues (GitHub, GitLab, or Gitea) are the canonical backlog and closure source when online.
 - `kaola-workflow/.roadmap/issue-*.md` files are the durable local source for
   active roadmap rows. Do not purge the directory; closing an issue removes only
   that issue source file before regenerating the mirror.

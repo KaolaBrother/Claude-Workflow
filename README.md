@@ -355,8 +355,9 @@ Current official release versions:
 
 - Claude Code command install, GitHub edition: `3.10.0`
 - Claude Code command install, GitLab edition: `3.10.0`
-- Codex `kaola-workflow` plugin manifest: `1.4.1`
-- Codex `kaola-workflow-gitlab` plugin manifest: `1.4.1`
+- Claude Code command install, Gitea edition: `3.10.0`
+- Codex `kaola-workflow` plugin manifest: `1.5.0`
+- Codex `kaola-workflow-gitlab` plugin manifest: `1.5.0`
 - Codex `kaola-workflow-gitea` plugin manifest: `1.5.0`
 
 The root `package.json` version is the official repository and Claude Code
@@ -422,8 +423,9 @@ Fast path executes Plan, Implement, and Review in a single pass, writing `fast-s
 ## Automation scripts
 
 The workflow includes automation scripts installed by `install.sh` to
-`~/.claude/kaola-workflow/scripts/` for the GitHub edition or
-`~/.claude/kaola-workflow-gitlab/scripts/` for the GitLab edition. Commands
+`~/.claude/kaola-workflow/scripts/` for the GitHub edition,
+`~/.claude/kaola-workflow-gitlab/scripts/` for the GitLab edition, or
+`~/.claude/kaola-workflow-gitea/scripts/` for the Gitea edition. Commands
 prefer the installed support directory and fall back to the repo checkout
 when developing locally. Drift between `scripts/` and
 `plugins/kaola-workflow/scripts/` is detected at test time by
@@ -462,10 +464,10 @@ The detailed durable-state map lives in `docs/workflow-state-contract.md`. Keep 
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `KAOLA_WORKFLOW_OFFLINE` | `0` | Skip GitHub/GitLab calls for local tests or air-gapped usage |
+| `KAOLA_WORKFLOW_OFFLINE` | `0` | Skip GitHub/GitLab/Gitea calls for local tests or air-gapped usage |
 | `KAOLA_WORKFLOW_DEBUG_CWD` | (unset) | DEV/TEST ONLY — when set, `sink-merge.js` writes its final cwd to this file |
-| `KAOLA_WORKFLOW_FORCE_FF_FAIL` | (unset) | DEV/TEST ONLY — fail first N fast-forward merge attempts (GitHub and GitLab) |
-| `KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE` | (unset) | DEV/TEST ONLY — force merge-impossible error in sink-merge fallback tests (GitHub and GitLab) |
+| `KAOLA_WORKFLOW_FORCE_FF_FAIL` | (unset) | DEV/TEST ONLY — fail first N fast-forward merge attempts (GitHub, GitLab, and Gitea) |
+| `KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE` | (unset) | DEV/TEST ONLY — force merge-impossible error in sink-merge fallback tests (GitHub, GitLab, and Gitea) |
 | `KAOLA_PATH` | (unset) | Set to `fast` to request fast-path workflow execution; defaults to the full six-phase flow |
 
 **Active-folder subcommands:**
@@ -625,7 +627,7 @@ evidence path.
   `~/.claude/kaola-workflow/hooks/` or
   `~/.claude/kaola-workflow/scripts/`.
 - If hooks are missing, re-run `./install.sh --forge=github` (or
-  `--forge=gitlab`). Do not edit `~/.claude/settings.json` directly —
+  `--forge=gitlab` or `--forge=gitea`). Do not edit `~/.claude/settings.json` directly —
   re-running the installer is the supported path.
 - Fallback when `python3` is unavailable or `--no-settings-merge` was
   passed: `install.sh` prints a manual hint and the source of truth is

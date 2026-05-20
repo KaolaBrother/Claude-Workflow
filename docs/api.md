@@ -4,7 +4,7 @@ Document public APIs, endpoints, schemas, events, and integration contracts.
 
 ## Sink API
 
-The Phase 6 sink is responsible for delivering completed work to the repository and updating GitHub/GitLab metadata.
+The Phase 6 sink is responsible for delivering completed work to the repository and updating GitHub, GitLab, or Gitea metadata.
 
 ### Merge Sink
 
@@ -48,9 +48,9 @@ The following environment variables are **test-only hooks** used by the test sui
 
 ### Sink-Merge Test Hooks
 
-- **`KAOLA_WORKFLOW_FORCE_FF_FAIL=N`** — Fail the first N fast-forward merge attempts in `ffMergeLoop`. Used to test FF race-condition retry logic. Applies to both GitHub and GitLab editions.
-- **`KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE=token`** — Force a merge-impossible error in `postMergeCleanup` by throwing a synthetic error. The token becomes the classification result returned by `classifyMergeError`. Used to test auto-fallback-to-PR behavior. Applies to both GitHub and GitLab editions.
-- **`KAOLA_WORKFLOW_DEBUG_CWD=path`** — When set, sink-merge writes the final `process.cwd()` to the specified file on exit. Used by test suite to verify CWD restoration after worktree removal. Applies to both editions.
+- **`KAOLA_WORKFLOW_FORCE_FF_FAIL=N`** — Fail the first N fast-forward merge attempts in `ffMergeLoop`. Used to test FF race-condition retry logic. Applies to GitHub, GitLab, and Gitea editions.
+- **`KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE=token`** — Force a merge-impossible error in `postMergeCleanup` by throwing a synthetic error. The token becomes the classification result returned by `classifyMergeError`. Used to test auto-fallback-to-PR behavior. Applies to GitHub, GitLab, and Gitea editions.
+- **`KAOLA_WORKFLOW_DEBUG_CWD=path`** — When set, sink-merge writes the final `process.cwd()` to the specified file on exit. Used by test suite to verify CWD restoration after worktree removal. Applies to all three editions.
 
 ### Offline and Derivation Test Hooks
 
