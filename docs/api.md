@@ -8,21 +8,27 @@ The Phase 6 sink is responsible for delivering completed work to the repository 
 
 ### Merge Sink
 
-- **Script**: `kaola-workflow-sink-merge.js` (GitHub) / `kaola-gitlab-workflow-sink-merge.js` (GitLab)
+- **Script**: `kaola-workflow-sink-merge.js` (GitHub) / `kaola-gitlab-workflow-sink-merge.js` (GitLab) / `kaola-gitea-workflow-sink-merge.js` (Gitea)
 - **Invocation**: Called from Phase 6 Step 9 when `sink: merge` is configured
 - **Contract**: Atomic fetch, rebase onto `origin/main`, fast-forward merge with race-condition retry (MAX_AUTOMERGE_RETRIES=3), branch deletion, and issue closure
   - GitHub: uses `gh` CLI
   - GitLab: uses `glab` CLI and GitLab forge API
+  - Gitea: uses `tea` CLI
+- **Live workflow-state guard** (`assertNoLiveWorkflowFolder`):
+  - All three editions (GitHub, GitLab, Gitea) refuse to merge a branch whose HEAD still contains `kaola-workflow/{project}/workflow-state.md`
+  - Uses `git cat-file -e HEAD:{path}` to inspect committed tree state (not just filesystem)
+  - Exits 1 with detailed remediation instructions when live folder detected
+  - Guards against accidentally merging incomplete workflows that skip finalization
 - **Exit codes**:
   - `0`: merge succeeded, branch pushed, issue closed
-  - `1`: merge failed (non-recoverable)
+  - `1`: merge failed (non-recoverable; includes live workflow-state guard failures)
   - `2`: fast-forward race condition exhausted after MAX_AUTOMERGE_RETRIES attempts
-  - `3`: merge-impossible error (branch protected, non-fast-forward, permission denied); also returned if project archive dir exists during receipt write (GitLab guard); auto-fallback to PR sink
+  - `3`: merge-impossible error (branch protected, non-fast-forward, permission denied); also returned if project archive dir exists during receipt write (GitLab/Gitea guard); auto-fallback to PR sink
 - **Failure classification** (`classifyMergeError` function):
-  - Exported from both GitHub and GitLab sink-merge modules
+  - Exported from all three sink-merge modules (GitHub, GitLab, Gitea)
   - Classifies push/merge errors into: `permission_denied`, `branch_protected`, `non_fast_forward`, or `null` (unclassifiable)
-  - GitLab additionally supports forced merge-impossible state via `KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE` env var (test hook)
-- **Offline support**: `KAOLA_WORKFLOW_OFFLINE=1` skips all network calls (applies to both editions)
+  - GitLab and Gitea additionally support forced merge-impossible state via `KAOLA_WORKFLOW_FORCE_MERGE_IMPOSSIBLE` env var (test hook)
+- **Offline support**: `KAOLA_WORKFLOW_OFFLINE=1` skips all network calls (applies to all three editions)
 
 ### PR Sink
 

@@ -25,6 +25,7 @@
 
 ### Fixed
 
+- Port `assertNoLiveWorkflowFolder` guard to Gitea and GitLab direct-merge sinks; both sinks now refuse to merge a branch whose HEAD still contains the live workflow-state.md (issue #120)
 - **Gitea and GitLab PR/MR sink offline parity** (`plugins/kaola-workflow-gitea/scripts/kaola-gitea-workflow-sink-pr.js`, `plugins/kaola-workflow-gitlab/scripts/kaola-gitlab-workflow-sink-mr.js`): Both sinks now honor `KAOLA_WORKFLOW_OFFLINE=1`. In offline mode, each sink writes `OFFLINE_PLACEHOLDER` values to `workflow-state.md` and `phase6-summary.md`, creates a local metadata commit, and skips git push and forge API calls. The `--merge` flag is also a no-op when offline. Matches existing behavior in `kaola-workflow-sink-pr.js` (GitHub) (issue #119).
 - GitLab repair-state no longer advances to Phase 6 when `phase5-review.md` exists but `phase4-progress.md` still has open tasks (parity with GitHub behavior, issue #107)
 - GitLab sink pipelines (merge and fallback) now guard against project archive recreation: `sink-merge` exits 3 if archive dir exists during `postMergeCleanup` receipt write; `cmdSinkFallback` returns `{updated: false, reason: 'project archived'}` when checking live folder (issue #108)
