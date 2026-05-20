@@ -36,7 +36,7 @@ None. Phase 5 found zero findings. Closure scan: no deferred items, no partial i
 None needed — no deferred items, no advisory escalation required.
 
 ## Commit And Push
-Pending final Git gate; final hash reported after push.
+Done. Implementation commit: `49b6f41` (feat(gitlab): bump plugin version to 3.10.0 and add version contract guard (issue #125)). Archive commit: `a0578e0`. Pushed to `origin/main`.
 
 ## GitHub Issue
 Closed — KaolaBrother/Kaola-Workflow#125 (comment posted with validation evidence)
@@ -45,7 +45,7 @@ Closed — KaolaBrother/Kaola-Workflow#125 (comment posted with validation evide
 Updated — `kaola-workflow/.roadmap/issue-125.md` deleted; `kaola-workflow/ROADMAP.md` regenerated
 
 ## Archive
-Pending (Step 8b)
+kaola-workflow/archive/issue-125/
 
 ## Required Agent Compliance
 | Requirement | Status | Evidence | Skip Reason |
@@ -55,8 +55,8 @@ Pending (Step 8b)
 | closure advisor gate | N/A | closure scan in phase6-summary.md | no deferred items, conflicts, or user-decision items found |
 | final-validation fix executors | N/A | | final validation passed on first run |
 | roadmap refresh | invoked | kaola-workflow/ROADMAP.md | |
-| archive completed folder | pending | | |
-| final commit and push | ready | git status/git diff/upstream check | final gate runs after this file is committed |
+| archive completed folder | complete | kaola-workflow/archive/issue-125/ | |
+| final commit and push | complete | 49b6f41 pushed to origin/main | |
 
 ## Status
 READY FOR FINAL GIT GATE
