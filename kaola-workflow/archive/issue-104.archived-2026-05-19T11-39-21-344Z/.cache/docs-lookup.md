@@ -1,0 +1,1 @@
+docs-lookup: N/A — internal tooling change; no external library, framework, or API behavior involved. The subagent invocation pattern and all conventions are sourced from existing in-repo phase commands.
