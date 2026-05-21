@@ -20,6 +20,8 @@
 
 ### Added
 
+- **Agent profile system: `--profile=higher` flag for `install.sh`** (issue #140): `install.sh` now accepts `--profile=common|higher` (default `common`). The `higher` profile installs `code-architect`, `code-reviewer`, and `security-reviewer` on Opus instead of Sonnet. Switching profiles in either direction re-installs the correct agent variants.
+
 - **GitLab Claude plugin version contract** (issue #125): `plugins/kaola-workflow-gitlab/.claude-plugin/plugin.json` version bumped from `3.8.1` to `3.10.0` to match root `package.json`. Added `claudePluginJson.version` assertion in `validate-kaola-workflow-gitlab-contracts.js` mirroring the Gitea edition guard; validator now fails fast on version drift.
 
 - **GitLab and Gitea parity tests included in `npm test`** (issue #124): `npm test` now chains all four forge editions (`claude`, `codex`, `gitlab`, `gitea`). The contract guard in `scripts/validate-kaola-workflow-contracts.js` is upgraded from a string-presence check to a structural `parseJson` loop that asserts each edition appears in `pkg.scripts.test`, preventing silent omission in future edits.

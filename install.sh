@@ -40,9 +40,10 @@ REQUIRED_AGENTS=("code-explorer" "docs-lookup" "planner" "code-architect" "tdd-g
 YES=0
 FORGE=github
 MERGE_SETTINGS=1
+PROFILE=common
 
 usage() {
-  echo "Usage: ./install.sh [--yes] [--forge=github|gitlab|gitea] [--no-settings-merge]"
+  echo "Usage: ./install.sh [--yes] [--forge=github|gitlab|gitea] [--no-settings-merge] [--profile=common|higher]"
 }
 
 while [[ "$#" -gt 0 ]]; do
@@ -72,6 +73,19 @@ while [[ "$#" -gt 0 ]]; do
       usage
       exit 0
       ;;
+    --profile=*)
+      PROFILE="${1#--profile=}"
+      shift
+      ;;
+    --profile)
+      if [[ -z "${2:-}" ]]; then
+        echo "--profile requires common or higher" >&2
+        usage >&2
+        exit 2
+      fi
+      PROFILE="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown argument: $1" >&2
       usage >&2
@@ -79,6 +93,15 @@ while [[ "$#" -gt 0 ]]; do
       ;;
   esac
 done
+
+case "$PROFILE" in
+  common|higher) ;;
+  *)
+    echo "Unknown profile: $PROFILE (must be common or higher)" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
 
 case "$FORGE" in
   github)
@@ -239,6 +262,9 @@ install_agent_files() {
   for agent in "${REQUIRED_AGENTS[@]}"; do
     local file_name="$agent.md"
     local source_file="$SOURCE_AGENTS_DIR/$file_name"
+    if [[ "$PROFILE" == "higher" && -f "$SOURCE_AGENTS_DIR/profiles/higher/$file_name" ]]; then
+      source_file="$SOURCE_AGENTS_DIR/profiles/higher/$file_name"
+    fi
     local dest="$AGENTS_DIR/$file_name"
 
     if [[ ! -f "$source_file" ]]; then

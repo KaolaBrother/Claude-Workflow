@@ -99,17 +99,17 @@ repository. The agent prompts are derived from Everything Claude Code (ECC) and
 vendored under the MIT License; see [docs/agents-source.md](docs/agents-source.md)
 for the pinned upstream commit, attribution, and refresh procedure.
 
-| Agent | Phase | Model |
-|-------|-------|-------|
-| `code-explorer` | 1 — Research/Discovery (code facts) | Sonnet |
-| `docs-lookup` | 1 — Research/Discovery (external docs, when needed) | Sonnet |
-| `planner` | 2 — Ideation | Opus |
-| `code-architect` | 3 — Plan | Sonnet |
-| `tdd-guide` | 4 — Execute (per-task TDD executor) | Sonnet |
-| `build-error-resolver` | 4–6 — Validation repair when needed | Sonnet |
-| `code-reviewer` | 5 — Review | Sonnet |
-| `security-reviewer` | 5 — Review (conditional) | Sonnet |
-| `doc-updater` | 6 — Finalize | Haiku |
+| Agent | Phase | Model | Higher profile |
+|-------|-------|-------|----------------|
+| `code-explorer` | 1 — Research/Discovery (code facts) | Sonnet | |
+| `docs-lookup` | 1 — Research/Discovery (external docs, when needed) | Sonnet | |
+| `planner` | 2 — Ideation | Opus | |
+| `code-architect` | 3 — Plan | Sonnet | yes |
+| `tdd-guide` | 4 — Execute (per-task TDD executor) | Sonnet | |
+| `build-error-resolver` | 4–6 — Validation repair when needed | Sonnet | |
+| `code-reviewer` | 5 — Review | Sonnet | yes |
+| `security-reviewer` | 5 — Review (conditional) | Sonnet | yes |
+| `doc-updater` | 6 — Finalize | Haiku | |
 
 The Opus advisor gates in Phases 2, 3, and conditional Phase 5 require
 `"advisorModel": "opus"` in `~/.claude/settings.json` or an equivalent Claude
@@ -171,6 +171,24 @@ cd Kaola-Workflow
 ./install.sh --forge=gitlab  # GitLab edition
 # or
 ./install.sh --forge=gitea   # Gitea edition
+```
+
+#### Agent profiles
+
+Pass `--profile=higher` to install `code-architect`, `code-reviewer`, and
+`security-reviewer` on Opus instead of Sonnet (roughly 3× cost for those three
+agents; deeper threat modeling and architecture analysis). All other agents are
+unaffected. Omit the flag (or pass `--profile=common`) for default Sonnet assignments.
+
+```bash
+./install.sh --profile=higher             # GitHub edition, Opus overrides
+./install.sh --forge=gitlab --profile=higher
+```
+
+To revert to Sonnet, re-run without the flag:
+
+```bash
+./install.sh                              # resets overridden agents to Sonnet
 ```
 
 Then in Claude Code:
