@@ -43,5 +43,9 @@
         "id": "kaola-workflow:phantom-advisor"
       }
     ]
+  },
+  "subagentStatusLine": {
+    "type": "command",
+    "command": "node \"$CLAUDE_PLUGIN_ROOT/scripts/kaola-workflow-subagent-statusline.js\""
   }
 }

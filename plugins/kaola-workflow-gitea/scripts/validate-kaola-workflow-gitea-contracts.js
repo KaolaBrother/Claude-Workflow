@@ -108,6 +108,8 @@ const agentFiles = listFiles(pluginRoot + '/agents', file => file.endsWith('.tom
 assert(commandFiles.length === 9, 'expected 9 Gitea command files, got ' + commandFiles.length);
 assert(skillFiles.length === 9, 'expected 9 Gitea skill files, got ' + skillFiles.length);
 assert(exists(pluginRoot + '/hooks/hooks.json'), 'Gitea hooks.json missing');
+assertIncludes(pluginRoot + '/hooks/hooks.json', 'subagentStatusLine');
+assertIncludes(pluginRoot + '/hooks/hooks.json', 'kaola-workflow-subagent-statusline.js');
 assert(hookFiles.some(file => file.endsWith('kaola-workflow-pre-commit.sh')), 'Gitea pre-commit hook missing');
 assert(hookFiles.some(file => file.endsWith('kaola-workflow-phantom-advisor.sh')), 'Gitea advisor hook missing');
 assert(agentFiles.length === 9, 'expected 9 Gitea agent profiles, got ' + agentFiles.length);
@@ -127,6 +129,7 @@ const scriptFiles = [
   'kaola-gitea-workflow-roadmap.js',
   'kaola-gitea-workflow-sink-merge.js',
   'kaola-gitea-workflow-sink-pr.js',
+  'kaola-workflow-subagent-statusline.js',
   'simulate-gitea-workflow-walkthrough.js',
   'simulate-gitea-codex-workflow-walkthrough.js',
   'install-codex-agent-profiles.js'
@@ -143,7 +146,8 @@ const installSupportScripts = [
   'kaola-gitea-workflow-repair-state.js',
   'kaola-gitea-workflow-roadmap.js',
   'kaola-gitea-workflow-sink-merge.js',
-  'kaola-gitea-workflow-sink-pr.js'
+  'kaola-gitea-workflow-sink-pr.js',
+  'kaola-workflow-subagent-statusline.js'
 ];
 for (const script of installSupportScripts) {
   assert(installScript.includes(script), 'install.sh must install Gitea support script: ' + script);

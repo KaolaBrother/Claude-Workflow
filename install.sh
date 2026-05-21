@@ -118,6 +118,7 @@ case "$FORGE" in
       kaola-workflow-sink-pr.js
       kaola-workflow-roadmap.js
       kaola-workflow-classifier.js
+      kaola-workflow-subagent-statusline.js
     )
     SUPPORT_HOOK_NAMES=(
       kaola-workflow-pre-commit.sh
@@ -139,6 +140,7 @@ case "$FORGE" in
       kaola-gitlab-workflow-roadmap.js
       kaola-gitlab-workflow-sink-merge.js
       kaola-gitlab-workflow-sink-mr.js
+      kaola-workflow-subagent-statusline.js
     )
     SUPPORT_HOOK_NAMES=(
       kaola-workflow-pre-commit.sh
@@ -160,6 +162,7 @@ case "$FORGE" in
       kaola-gitea-workflow-roadmap.js
       kaola-gitea-workflow-sink-merge.js
       kaola-gitea-workflow-sink-pr.js
+      kaola-workflow-subagent-statusline.js
     )
     SUPPORT_HOOK_NAMES=(
       kaola-workflow-pre-commit.sh
@@ -415,10 +418,12 @@ import json, os, sys, time
 settings_path, hooks_src, backup_dir = sys.argv[1], sys.argv[2], sys.argv[3]
 
 with open(hooks_src) as f:
-    incoming = json.load(f).get("hooks", {})
+    incoming_settings = json.load(f)
+incoming = incoming_settings.get("hooks", {})
 if not isinstance(incoming, dict) or not incoming:
     print("No hooks block found in source; skipping settings merge.", file=sys.stderr)
     sys.exit(0)
+incoming_subagent_statusline = incoming_settings.get("subagentStatusLine")
 
 if os.path.exists(settings_path):
     try:
@@ -450,6 +455,12 @@ def is_managed(entry):
                 return True
     return False
 
+def is_managed_subagent_statusline(entry):
+    if not isinstance(entry, dict):
+        return False
+    cmd = entry.get("command", "")
+    return isinstance(cmd, str) and "kaola-workflow-subagent-statusline.js" in cmd
+
 hooks = settings.setdefault("hooks", {})
 if not isinstance(hooks, dict):
     print("warning: settings.json 'hooks' field is not an object; skipping auto-merge.", file=sys.stderr)
@@ -465,10 +476,17 @@ for event, new_entries in incoming.items():
     cleaned.extend(new_entries)
     hooks[event] = cleaned
 
+if isinstance(incoming_subagent_statusline, dict):
+    existing_statusline = settings.get("subagentStatusLine")
+    if existing_statusline is None or is_managed_subagent_statusline(existing_statusline):
+        settings["subagentStatusLine"] = incoming_subagent_statusline
+    else:
+        print("Preserved existing user-owned subagentStatusLine; Kaola helper installed but not enabled.", file=sys.stderr)
+
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2)
     f.write("\n")
-print(f"Merged Kaola-Workflow hooks into: {settings_path}")
+print(f"Merged Kaola-Workflow settings into: {settings_path}")
 PY
       SETTINGS_MERGE_RESULT=merged
     else
@@ -541,20 +559,20 @@ if [[ -f "$SUPPORT_HOOKS_DIR/hooks.json" ]]; then
   case "$SETTINGS_MERGE_RESULT" in
     merged)
       echo "Kaola-Workflow hooks (compaction resume, pre-commit, phantom-advisor)"
-      echo "are now enabled in ~/.claude/settings.json."
+      echo "and subagent status line are now enabled in ~/.claude/settings.json."
       ;;
     skipped)
-      echo "Auto-merge skipped (--no-settings-merge). To enable the hooks, merge the"
+      echo "Auto-merge skipped (--no-settings-merge). To enable hooks and subagent status line, merge the"
       echo "block into your ~/.claude/settings.json by hand. Quick view:"
       echo "  cat $SUPPORT_HOOKS_DIR/hooks.json"
       ;;
     no_python)
-      echo "python3 was not found, so the hooks were not auto-merged. To enable them,"
+      echo "python3 was not found, so settings were not auto-merged. To enable them,"
       echo "install python3 and re-run install.sh, or merge the block by hand:"
       echo "  cat $SUPPORT_HOOKS_DIR/hooks.json"
       ;;
     failed)
-      echo "Auto-merge failed (see warning above). The hooks were not added to"
+      echo "Auto-merge failed (see warning above). The settings were not added to"
       echo "~/.claude/settings.json. Fix the issue and re-run, or merge by hand:"
       echo "  cat $SUPPORT_HOOKS_DIR/hooks.json"
       ;;

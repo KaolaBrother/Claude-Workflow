@@ -109,6 +109,8 @@ const agentFiles = listFiles(pluginRoot + '/agents', file => file.endsWith('.tom
 assert(commandFiles.length === 9, 'expected 9 GitLab command files');
 assert(skillFiles.length === 9, 'expected 9 GitLab skill files');
 assert(exists(pluginRoot + '/hooks/hooks.json'), 'GitLab hooks.json missing');
+assertIncludes(pluginRoot + '/hooks/hooks.json', 'subagentStatusLine');
+assertIncludes(pluginRoot + '/hooks/hooks.json', 'kaola-workflow-subagent-statusline.js');
 assert(hookFiles.some(file => file.endsWith('kaola-workflow-pre-commit.sh')), 'GitLab pre-commit hook missing');
 assert(hookFiles.some(file => file.endsWith('kaola-workflow-phantom-advisor.sh')), 'GitLab advisor hook missing');
 assert(agentFiles.length === 9, 'expected 9 GitLab agent profiles');
@@ -128,6 +130,7 @@ const scriptFiles = [
   'kaola-gitlab-workflow-roadmap.js',
   'kaola-gitlab-workflow-sink-merge.js',
   'kaola-gitlab-workflow-sink-mr.js',
+  'kaola-workflow-subagent-statusline.js',
   'simulate-gitlab-workflow-walkthrough.js',
   'simulate-gitlab-codex-workflow-walkthrough.js',
   'install-codex-agent-profiles.js'
@@ -144,7 +147,8 @@ const installSupportScripts = [
   'kaola-gitlab-workflow-repair-state.js',
   'kaola-gitlab-workflow-roadmap.js',
   'kaola-gitlab-workflow-sink-merge.js',
-  'kaola-gitlab-workflow-sink-mr.js'
+  'kaola-gitlab-workflow-sink-mr.js',
+  'kaola-workflow-subagent-statusline.js'
 ];
 for (const script of installSupportScripts) {
   assert(installScript.includes(script), 'install.sh must install GitLab support script: ' + script);

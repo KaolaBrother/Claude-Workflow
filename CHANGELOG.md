@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Claude Code subagent status line auto-install** (issue #141): `install.sh` now installs `kaola-workflow-subagent-statusline.js` and auto-merges a managed `subagentStatusLine` into `~/.claude/settings.json`, so the Claude Code agent panel can show each Kaola subagent with status, expected model family, and token count. Existing user-owned `subagentStatusLine` settings are preserved.
+
 - **`validate-remote` subcommand for roadmap script** (issue #136): `node scripts/kaola-workflow-roadmap.js validate-remote` checks each `.roadmap/issue-N.md` with `status: open` against GitHub and reports any that are already closed. Exits 1 on drift; prints `skipped: offline` when `KAOLA_WORKFLOW_OFFLINE=1`.
 
 ### Fixed

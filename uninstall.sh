@@ -115,10 +115,10 @@ if [[ "$FORGE" = "gitea" || "$FORGE" = "all" ]]; then
   remove_dir "$HOME/.claude/kaola-workflow-gitea"
 fi
 
-# Strip Kaola-Workflow-managed hook entries from ~/.claude/settings.json. Uses
-# the same identification rules as install.sh (id prefix "kaola-workflow:" or
-# inner-hook command path containing "kaola-workflow") so we only touch entries
-# we own.
+# Strip Kaola-Workflow-managed hook and subagent status line entries from
+# ~/.claude/settings.json. Uses the same identification rules as install.sh
+# (id prefix "kaola-workflow:" or command path containing "kaola-workflow") so
+# we only touch entries we own.
 SETTINGS_FILE="$HOME/.claude/settings.json"
 if [[ -f "$SETTINGS_FILE" ]] && command -v python3 >/dev/null 2>&1; then
   SETTINGS_BACKUP_DIR="$HOME/.claude/backups"
@@ -131,10 +131,6 @@ try:
         settings = json.load(f)
 except json.JSONDecodeError:
     print(f"warning: {settings_path} is not valid JSON; leaving hooks in place.", file=sys.stderr)
-    sys.exit(0)
-
-hooks = settings.get("hooks")
-if not isinstance(hooks, dict):
     sys.exit(0)
 
 def is_managed(entry):
@@ -150,20 +146,32 @@ def is_managed(entry):
                 return True
     return False
 
-changed = False
-for event, entries in list(hooks.items()):
-    if not isinstance(entries, list):
-        continue
-    cleaned = [e for e in entries if not is_managed(e)]
-    if len(cleaned) != len(entries):
-        changed = True
-        if cleaned:
-            hooks[event] = cleaned
-        else:
-            del hooks[event]
+def is_managed_subagent_statusline(entry):
+    if not isinstance(entry, dict):
+        return False
+    cmd = entry.get("command", "")
+    return isinstance(cmd, str) and "kaola-workflow-subagent-statusline.js" in cmd
 
-if not hooks:
-    settings.pop("hooks", None)
+changed = False
+hooks = settings.get("hooks")
+if isinstance(hooks, dict):
+    for event, entries in list(hooks.items()):
+        if not isinstance(entries, list):
+            continue
+        cleaned = [e for e in entries if not is_managed(e)]
+        if len(cleaned) != len(entries):
+            changed = True
+            if cleaned:
+                hooks[event] = cleaned
+            else:
+                del hooks[event]
+
+    if not hooks:
+        settings.pop("hooks", None)
+
+if is_managed_subagent_statusline(settings.get("subagentStatusLine")):
+    settings.pop("subagentStatusLine", None)
+    changed = True
 
 if changed:
     os.makedirs(backup_dir, exist_ok=True)
@@ -174,7 +182,7 @@ if changed:
     with open(settings_path, "w") as f:
         json.dump(settings, f, indent=2)
         f.write("\n")
-    print(f"Removed Kaola-Workflow hook entries from {settings_path}")
+    print(f"Removed Kaola-Workflow settings entries from {settings_path}")
     print(f"Backup: {backup_path}", file=sys.stderr)
 PY
     :
