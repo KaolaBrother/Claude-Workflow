@@ -2,21 +2,7 @@
 
 ## [Unreleased]
 
-### Fixed
-
-- **`npm test` / walkthrough hang eliminated for GitHub Claude shim path** (issue #135): `runClaimOnline` and `runClaimOnlineLastJson` in `scripts/simulate-workflow-walkthrough.js` now pass `timeout: 60000` to `spawnSync`, converting a potential infinite hang into a clear SIGTERM failure. `classifyIssue` in `scripts/kaola-workflow-claim.js` now passes `timeout: 30000` to its `execFileSync` call so a hung `gh` subprocess cannot block startup indefinitely in production either.
-
-- **GitLab `watch-mr` now short-circuits in offline mode** (issue #134): Added `OFFLINE` constant (`process.env.KAOLA_WORKFLOW_OFFLINE === '1'`) to `kaola-gitlab-workflow-claim.js` and added the same offline short-circuit guard to `cmdWatchMr` present in the GitHub and Gitea baselines. `watch-mr` now returns `{"watched":0,"offline":true}` without calling any forge APIs when offline. Regression test added to `test-gitlab-sinks.js` and contract validator guard added to `validate-kaola-workflow-gitlab-contracts.js`.
-
-- **`install-codex-agent-profiles.js` added to GitLab and Gitea forge plugins; GitLab `plugin_root` bug fixed** (issue #133): Both `plugins/kaola-workflow-gitlab/scripts/` and `plugins/kaola-workflow-gitea/scripts/` now ship a byte-identical copy of `install-codex-agent-profiles.js` with `__dirname`-based plugin root resolution, making each forge self-contained. Fixed the two affected lines in `plugins/kaola-workflow-gitlab/skills/kaola-workflow-init/SKILL.md` where `plugin_root` and the `find` path both pointed to `plugins/kaola-workflow` (the GitHub plugin) instead of `plugins/kaola-workflow-gitlab`. Validator guards with negative-lookahead regex added to both forge contract validators. Regression tests added to `test-gitlab-workflow-scripts.js` and `test-gitea-workflow-scripts.js`.
-
-- **GitLab and Gitea `finalize --keep-worktree` now commits archive rename** (issue #132): Both `kaola-gitlab-workflow-claim.js` and `kaola-gitea-workflow-claim.js` `cmdFinalize` now include the `else` block (matching the GitHub baseline) that, when `--keep-worktree` is set and running inside a linked worktree, stages and commits the `kaola-workflow/archive/{project}/` rename so the feature branch HEAD reflects the archived state. Regression tests added to `test-gitlab-sinks.js` and `test-gitea-sinks.js`.
-
-- **`bootstrap` alias added to GitLab and Gitea claim scripts** (issue #130): Both `kaola-gitlab-workflow-claim.js` and `kaola-gitea-workflow-claim.js` now accept `bootstrap` as an alias for `startup`, matching the GitHub baseline. Validator guards added to both forge contract validators to prevent future alias drift.
-
-- **GitLab claim script `watch-mr` listed in usage string** (issue #131): Added `watch-mr` to the usage assertion in `kaola-gitlab-workflow-claim.js` so CLI help/error output matches the implemented subcommands. Added a `assertIncludes` contract validator guard to prevent future drift between implemented subcommands and the usage string.
-
-- **macOS `npm test` hang eliminated** (issue #129): All 7 temporary `gh` shell shims in `scripts/simulate-workflow-walkthrough.js` converted from `#!/bin/sh` scripts to `#!/usr/bin/env node` Node.js scripts. On macOS, direct execution of a shell script via shebang from a Node.js child process could hang indefinitely; Node.js shims are not affected. Also prepends `path.dirname(process.execPath)` to the PATH in 4 `spawnSync` call sites (`runClaimOnline`, `runClaimOnlineLastJson`, and 2 inline calls) so `node` is discoverable by the new shebang on all platforms.
+## [3.11.0] — 2026-05-21
 
 ### Added
 
@@ -46,6 +32,20 @@
 - **Gitea uninstall support**: `uninstall.sh` now accepts `--forge=gitea` to remove the `~/.claude/kaola-workflow-gitea` directory. Usage string, argument validation, and error messages updated to list `gitea` alongside `github`, `gitlab`, and `all`.
 
 ### Fixed
+
+- **`npm test` / walkthrough hang eliminated for GitHub Claude shim path** (issue #135): `runClaimOnline` and `runClaimOnlineLastJson` in `scripts/simulate-workflow-walkthrough.js` now pass `timeout: 60000` to `spawnSync`, converting a potential infinite hang into a clear SIGTERM failure. `classifyIssue` in `scripts/kaola-workflow-claim.js` now passes `timeout: 30000` to its `execFileSync` call so a hung `gh` subprocess cannot block startup indefinitely in production either.
+
+- **GitLab `watch-mr` now short-circuits in offline mode** (issue #134): Added `OFFLINE` constant (`process.env.KAOLA_WORKFLOW_OFFLINE === '1'`) to `kaola-gitlab-workflow-claim.js` and added the same offline short-circuit guard to `cmdWatchMr` present in the GitHub and Gitea baselines. `watch-mr` now returns `{"watched":0,"offline":true}` without calling any forge APIs when offline. Regression test added to `test-gitlab-sinks.js` and contract validator guard added to `validate-kaola-workflow-gitlab-contracts.js`.
+
+- **`install-codex-agent-profiles.js` added to GitLab and Gitea forge plugins; GitLab `plugin_root` bug fixed** (issue #133): Both `plugins/kaola-workflow-gitlab/scripts/` and `plugins/kaola-workflow-gitea/scripts/` now ship a byte-identical copy of `install-codex-agent-profiles.js` with `__dirname`-based plugin root resolution, making each forge self-contained. Fixed the two affected lines in `plugins/kaola-workflow-gitlab/skills/kaola-workflow-init/SKILL.md` where `plugin_root` and the `find` path both pointed to `plugins/kaola-workflow` (the GitHub plugin) instead of `plugins/kaola-workflow-gitlab`. Validator guards with negative-lookahead regex added to both forge contract validators. Regression tests added to `test-gitlab-workflow-scripts.js` and `test-gitea-workflow-scripts.js`.
+
+- **GitLab and Gitea `finalize --keep-worktree` now commits archive rename** (issue #132): Both `kaola-gitlab-workflow-claim.js` and `kaola-gitea-workflow-claim.js` `cmdFinalize` now include the `else` block (matching the GitHub baseline) that, when `--keep-worktree` is set and running inside a linked worktree, stages and commits the `kaola-workflow/archive/{project}/` rename so the feature branch HEAD reflects the archived state. Regression tests added to `test-gitlab-sinks.js` and `test-gitea-sinks.js`.
+
+- **`bootstrap` alias added to GitLab and Gitea claim scripts** (issue #130): Both `kaola-gitlab-workflow-claim.js` and `kaola-gitea-workflow-claim.js` now accept `bootstrap` as an alias for `startup`, matching the GitHub baseline. Validator guards added to both forge contract validators to prevent future alias drift.
+
+- **GitLab claim script `watch-mr` listed in usage string** (issue #131): Added `watch-mr` to the usage assertion in `kaola-gitlab-workflow-claim.js` so CLI help/error output matches the implemented subcommands. Added a `assertIncludes` contract validator guard to prevent future drift between implemented subcommands and the usage string.
+
+- **macOS `npm test` hang eliminated** (issue #129): All 7 temporary `gh` shell shims in `scripts/simulate-workflow-walkthrough.js` converted from `#!/bin/sh` scripts to `#!/usr/bin/env node` Node.js scripts. On macOS, direct execution of a shell script via shebang from a Node.js child process could hang indefinitely; Node.js shims are not affected. Also prepends `path.dirname(process.execPath)` to the PATH in 4 `spawnSync` call sites (`runClaimOnline`, `runClaimOnlineLastJson`, and 2 inline calls) so `node` is discoverable by the new shebang on all platforms.
 
 - Add clean-worktree guard before branch checkout in GitLab and Gitea `runDirectMerge` pipelines, matching the GitHub baseline; dirty tracked files now trigger an explicit `'Worktree must be clean before direct merge sink runs'` error instead of an opaque `git checkout` failure (KaolaBrother/Kaola-Workflow#128)
 
