@@ -7,7 +7,7 @@ This file mirrors active unfinished work. GitHub issues are the source of truth 
 
 | Issue | Title | Status | Workflow Project | Next Step |
 |-------|-------|--------|------------------|-----------|
-| #133 | Fix GitLab/Gitea Codex init agent profile installer drift | open | issue-133 | ready |
+| none | No active work | — | — | — |
 
 ## Rules
 
